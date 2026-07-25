@@ -1,0 +1,54 @@
+package com.example.demo.module.video.controller;
+
+import com.example.demo.common.api.ApiResponse;
+import com.example.demo.common.api.PageResult;
+import com.example.demo.module.video.dto.VideoReviewRequest;
+import com.example.demo.module.video.service.VideoService;
+import com.example.demo.module.video.vo.AdminVideoReviewVO;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@Validated
+@RequestMapping("/api/admin/videos")
+public class AdminVideoController {
+
+    private final VideoService videoService;
+
+    public AdminVideoController(VideoService videoService) {
+        this.videoService = videoService;
+    }
+
+    @GetMapping("/pending")
+    public ApiResponse<PageResult<AdminVideoReviewVO>> pendingList(
+            @RequestParam(defaultValue = "1")
+            @Min(value = 1, message = "页码不能小于 1")
+            long page,
+
+            @RequestParam(defaultValue = "10")
+            @Min(value = 1, message = "每页数量不能小于 1")
+            @Max(value = 50, message = "每页数量不能超过 50")
+            long size
+    ) {
+        return ApiResponse.success(
+                videoService.listPendingReviewVideos(page, size)
+        );
+    }
+
+    @PostMapping("/{id}/review")
+    public ApiResponse<Void> review(
+            @PathVariable
+            @Min(value = 1, message = "视频 ID 必须大于 0")
+            Long id,
+
+            @Valid
+            @RequestBody VideoReviewRequest request
+    ) {
+        videoService.reviewVideo(id, request.getAction());
+
+        return ApiResponse.success(null);
+    }
+}
