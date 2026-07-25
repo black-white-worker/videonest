@@ -9,5 +9,5 @@ public class JwtProperties {
 
     private String secret;
 
-    private long expireHours;
+    private long expireMinutes = 1440;
 }

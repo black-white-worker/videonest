@@ -10,4 +10,7 @@ public class VideoCreateVO {
     private Long videoId;
 
     private String status;
+
+    private String rejectReason;
+
 }

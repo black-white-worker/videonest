@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.module.video.mapper.VideoMapper">
+
+    <select id="selectPublishedPage"
+            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+
+        SELECT
+        v.id,
+        v.title,
+        v.description,
+        v.cover_url AS coverUrl,
+        v.duration,
+        v.view_count AS viewCount,
+        v.like_count AS likeCount,
+        v.favorite_count AS favoriteCount,
+        v.publish_time AS publishTime,
+        v.author_id AS authorId,
+        u.nickname AS authorNickname,
+        v.category_id AS categoryId,
+        c.name AS categoryName
+        FROM video v
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
+        WHERE v.status = 'PUBLISHED'
+
+        <if test="categoryId != null">
+            AND v.category_id = #{categoryId}
+        </if>
+
+        ORDER BY v.publish_time DESC, v.id DESC
+    </select>
+
+    <update id="increaseViewCount">
+        UPDATE video
+        SET view_count = view_count + 1
+        WHERE id = #{videoId}
+        AND status = 'PUBLISHED'
+    </update>
+
+    <select id="selectPublishedDetailById"
+            resultType="com.example.demo.module.video.vo.VideoDetailVO">
+
+        SELECT
+        v.id,
+        v.title,
+        v.description,
+        v.cover_url AS coverUrl,
+        v.video_url AS videoUrl,
+        v.duration,
+        v.view_count AS viewCount,
+        v.like_count AS likeCount,
+        v.favorite_count AS favoriteCount,
+        v.publish_time AS publishTime,
+
+        v.author_id AS authorId,
+        u.username AS authorUsername,
+        u.nickname AS authorNickname,
+
+        v.category_id AS categoryId,
+        c.name AS categoryName
+
+        FROM video v
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
+
+        WHERE v.id = #{videoId}
+        AND v.status = 'PUBLISHED'
+    </select>
+
+
+    <insert id="insertCreatorVideo"
+            useGeneratedKeys="true"
+            keyProperty="id">
+
+        INSERT INTO video (
+        author_id,
+        category_id,
+        title,
+        description,
+        cover_url,
+        video_url,
+        duration,
+        status,
+        view_count,
+        like_count,
+        favorite_count
+        ) VALUES (
+        #{authorId},
+        #{categoryId},
+        #{title},
+        #{description},
+        #{coverUrl},
+        #{videoUrl},
+        #{duration},
+        #{status},
+        #{viewCount},
+        #{likeCount},
+        #{favoriteCount}
+        )
+    </insert>
+
+    <select id="selectPendingReviewPage"
+            resultType="com.example.demo.module.video.vo.AdminVideoReviewVO">
+
+        SELECT
+        v.id,
+        v.title,
+        v.description,
+        v.cover_url AS coverUrl,
+        v.video_url AS videoUrl,
+        v.duration,
+        v.status,
+        v.reject_reason AS rejectReason,
+        v.create_time AS createTime,
+        v.cover_url AS coverObjectName,
+        v.video_url AS videoObjectName,
+
+        u.id AS authorId,
+        u.username AS authorUsername,
+        u.nickname AS authorNickname,
+
+        c.id AS categoryId,
+        c.name AS categoryName
+
+        FROM video v
+        LEFT JOIN sys_user u ON v.author_id = u.id
+        LEFT JOIN video_category c ON v.category_id = c.id
+
+        WHERE v.status = 'PENDING'
+
+        ORDER BY v.create_time ASC
+    </select>
+
+    <update id="reviewVideo">
+        UPDATE video
+        SET
+        status = #{status},
+
+        reject_reason = #{rejectReason},
+
+        publish_time = CASE
+        WHEN #{status} = 'PUBLISHED' THEN NOW()
+        ELSE NULL
+        END,
+
+        update_time = NOW()
+
+        WHERE id = #{videoId}
+        AND status = 'PENDING'
+    </update>
+
+    <select id="selectCreatorVideoPage"
+            resultType="com.example.demo.module.video.vo.CreatorVideoListVO">
+
+        SELECT
+        v.id,
+        v.title,
+        v.description,
+        v.cover_url AS coverUrl,
+        v.video_url AS videoUrl,
+        v.cover_url AS coverObjectName,
+        v.video_url AS videoObjectName,
+        v.duration,
+        v.status,
+        v.reject_reason AS rejectReason,
+        v.publish_time AS publishTime,
+        v.create_time AS createTime,
+        v.view_count AS viewCount,
+        v.like_count AS likeCount,
+        v.favorite_count AS favoriteCount,
+
+        v.category_id AS categoryId,
+        c.name AS categoryName
+
+        FROM video v
+        LEFT JOIN video_category c ON v.category_id = c.id
+
+        WHERE v.author_id = #{authorId}
+
+        ORDER BY v.create_time DESC, v.id DESC
+    </select>
+
+    <update id="updateVideoById">
+        UPDATE video
+        SET
+        category_id = #{categoryId},
+        title = #{title},
+        description = #{description},
+        cover_url = #{coverUrl},
+        video_url = #{videoUrl},
+        duration = #{duration},
+        update_time = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <delete id="deleteVideoById">
+        DELETE FROM video
+        WHERE id = #{videoId}
+    </delete>
+
+</mapper>

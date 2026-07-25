@@ -3,14 +3,12 @@ package com.example.demo.module.video.controller;
 import com.example.demo.common.api.ApiResponse;
 import com.example.demo.common.api.PageResult;
 import com.example.demo.module.video.service.VideoService;
+import com.example.demo.module.video.vo.VideoDetailVO;
 import com.example.demo.module.video.vo.VideoListItemVO;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @Validated
@@ -40,4 +38,18 @@ public class VideoController {
                 videoService.listPublishedVideos(categoryId, page, size)
         );
     }
+
+
+    @GetMapping("/{id}")
+    public ApiResponse<VideoDetailVO> detail(
+            @PathVariable
+            @Min(value = 1, message = "视频 ID 必须大于 0")
+            Long id
+    ) {
+        return ApiResponse.success(
+                videoService.getPublishedVideoDetail(id)
+        );
+    }
+
+
 }

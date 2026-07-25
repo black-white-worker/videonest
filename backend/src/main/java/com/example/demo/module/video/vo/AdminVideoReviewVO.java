@@ -32,4 +32,8 @@ public class AdminVideoReviewVO {
     private Long categoryId;
 
     private String categoryName;
+
+    private String rejectReason;
+
+
 }

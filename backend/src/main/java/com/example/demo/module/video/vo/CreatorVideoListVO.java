@@ -36,4 +36,8 @@ public class CreatorVideoListVO {
     private Long categoryId;
 
     private String categoryName;
+
+    private String coverObjectName;
+
+    private String videoObjectName;
 }

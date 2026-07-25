@@ -1,4 +1,4 @@
-package com.example.demo.infrastructure.oss;
+package com.example.demo.infrastructure.oss.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;

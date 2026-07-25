@@ -41,4 +41,7 @@ public class Video {
     private LocalDateTime createTime;
 
     private LocalDateTime updateTime;
+
+    private String rejectReason;
+
 }

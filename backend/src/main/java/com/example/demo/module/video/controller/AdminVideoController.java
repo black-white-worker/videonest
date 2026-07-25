@@ -10,6 +10,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import com.example.demo.module.video.dto.VideoUpdateRequest;
 
 @RestController
 @Validated
@@ -47,8 +48,30 @@ public class AdminVideoController {
             @Valid
             @RequestBody VideoReviewRequest request
     ) {
-        videoService.reviewVideo(id, request.getAction());
+        videoService.reviewVideo(
+                id,
+                request.getAction(),
+                request.getRejectReason()
+        );
 
         return ApiResponse.success(null);
     }
+
+    @PutMapping("/{id}")
+    public ApiResponse<Void> updateVideo(
+            @PathVariable @Min(value = 1, message = "视频 ID 不合法") Long id,
+            @Valid @RequestBody VideoUpdateRequest request
+    ) {
+        videoService.updateAdminVideo(id, request);
+        return ApiResponse.success(null);
+    }
+
+    @DeleteMapping("/{id}")
+    public ApiResponse<Void> deleteVideo(
+            @PathVariable @Min(value = 1, message = "视频 ID 不合法") Long id
+    ) {
+        videoService.deleteAdminVideo(id);
+        return ApiResponse.success(null);
+    }
+
 }

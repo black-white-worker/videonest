@@ -2,11 +2,11 @@ package com.example.demo.security;
 
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
@@ -15,17 +15,25 @@ import java.util.Date;
 public class JwtTokenProvider {
 
     private final JwtProperties jwtProperties;
+
     private final SecretKey secretKey;
 
     public JwtTokenProvider(JwtProperties jwtProperties) {
         this.jwtProperties = jwtProperties;
-        byte[] keyBytes = Decoders.BASE64.decode(jwtProperties.getSecret());
+
+        byte[] keyBytes = jwtProperties.getSecret()
+                .getBytes(StandardCharsets.UTF_8);
+
         this.secretKey = Keys.hmacShaKeyFor(keyBytes);
     }
 
     public String createToken(SysUserTokenInfo user) {
         Instant now = Instant.now();
-        Instant expiryTime = now.plus(jwtProperties.getExpireHours(), ChronoUnit.HOURS);
+
+        Instant expiryTime = now.plus(
+                jwtProperties.getExpireMinutes(),
+                ChronoUnit.MINUTES
+        );
 
         return Jwts.builder()
                 .subject(user.username())
@@ -45,6 +53,10 @@ public class JwtTokenProvider {
                 .getPayload();
     }
 
-    public record SysUserTokenInfo(Long userId, String username, String role) {
+    public record SysUserTokenInfo(
+            Long userId,
+            String username,
+            String role
+    ) {
     }
 }
