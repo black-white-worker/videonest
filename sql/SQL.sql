@@ -88,3 +88,56 @@ CREATE TABLE IF NOT EXISTS video (
   ALTER TABLE video
   ADD COLUMN reject_reason VARCHAR(500) NULL COMMENT '审核驳回原因'
   AFTER status;
+
+CREATE TABLE video_like (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    video_id BIGINT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_video_like (user_id, video_id),
+    KEY idx_video_id (video_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE video_favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    video_id BIGINT NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_user_video_favorite (user_id, video_id),
+    KEY idx_video_id (video_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE video_comment (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    video_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '0代表一级评论',
+    content VARCHAR(500) NOT NULL,
+    status TINYINT NOT NULL DEFAULT 1 COMMENT '1正常，0已删除',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    KEY idx_video_created (video_id, created_at),
+    KEY idx_parent_id (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE user_follow (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    follower_id BIGINT NOT NULL COMMENT '发起关注的用户 ID',
+    followee_id BIGINT NOT NULL COMMENT '被关注的用户 ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_follower_followee (follower_id, followee_id),
+    KEY idx_followee_created (followee_id, created_at),
+    KEY idx_follower_created (follower_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户关注关系表';
+
+USE videonest;
+
+CREATE TABLE user_follow (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    follower_id BIGINT NOT NULL COMMENT '发起关注的用户 ID',
+    followee_id BIGINT NOT NULL COMMENT '被关注的用户 ID',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_follower_followee (follower_id, followee_id),
+    KEY idx_followee_created (followee_id, created_at),
+    KEY idx_follower_created (follower_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户关注关系表';

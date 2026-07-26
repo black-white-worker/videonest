@@ -183,6 +183,9 @@ onMounted(() => {
 
         <div class="header-actions">
           <span>管理员审核</span>
+          <el-button @click="router.push('/admin/comments')">
+            评论管理
+          </el-button>
           <el-button @click="router.push('/')">
             返回首页
           </el-button>

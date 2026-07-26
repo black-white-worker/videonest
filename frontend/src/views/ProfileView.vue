@@ -16,6 +16,12 @@ import {
   type CreatorVideo
 } from '../api/creator'
 import { getCategories, type VideoCategory } from '../api/video'
+import {
+  getMyFollowers,
+  getMyFollowing,
+  unfollowUser,
+  type FollowUser
+} from '../api/follow'
 
 const router = useRouter()
 
@@ -26,6 +32,12 @@ const categories = ref<VideoCategory[]>([])
 const profileLoading = ref(false)
 const videoLoading = ref(false)
 const editLoading = ref(false)
+const followLoading = ref(false)
+const followTab = ref<'following' | 'followers'>('following')
+const followUsers = ref<FollowUser[]>([])
+const followPage = ref(1)
+const followSize = ref(10)
+const followTotal = ref(0)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -121,6 +133,39 @@ async function loadCategories() {
     categories.value = await getCategories()
   } catch {
     ElMessage.error('获取视频分区失败')
+  }
+}
+
+async function loadFollowUsers() {
+  try {
+    followLoading.value = true
+    const request = followTab.value === 'following' ? getMyFollowing : getMyFollowers
+    const result = await request({ page: followPage.value, size: followSize.value })
+    followUsers.value = result.records
+    followTotal.value = result.total
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取关注列表失败')
+  } finally {
+    followLoading.value = false
+  }
+}
+
+function changeFollowTab(tab: 'following' | 'followers') {
+  followTab.value = tab
+  followPage.value = 1
+  loadFollowUsers()
+}
+
+async function removeFollowing(user: FollowUser) {
+  try {
+    followLoading.value = true
+    await unfollowUser(user.id)
+    ElMessage.success(`已取消关注 ${user.nickname}`)
+    await loadFollowUsers()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '取消关注失败')
+  } finally {
+    followLoading.value = false
   }
 }
 
@@ -263,6 +308,7 @@ onMounted(() => {
   loadProfile()
   loadVideos()
   loadCategories()
+  loadFollowUsers()
 })
 </script>
 
@@ -332,6 +378,55 @@ onMounted(() => {
           </section>
         </template>
       </el-skeleton>
+
+      <section class="follow-section">
+        <div class="section-title">
+          <div>
+            <h2>我的关注</h2>
+            <p>管理你关注的创作者和粉丝</p>
+          </div>
+          <el-button :loading="followLoading" @click="loadFollowUsers">刷新</el-button>
+        </div>
+
+        <el-tabs
+          :model-value="followTab"
+          @tab-change="changeFollowTab($event as 'following' | 'followers')"
+        >
+          <el-tab-pane label="我的关注" name="following" />
+          <el-tab-pane label="我的粉丝" name="followers" />
+        </el-tabs>
+
+        <el-skeleton :loading="followLoading" animated :rows="3">
+          <template #default>
+            <div v-if="followUsers.length" class="follow-list">
+              <article v-for="user in followUsers" :key="user.id" class="follow-user">
+                <div class="follow-avatar">{{ user.nickname.slice(0, 1).toUpperCase() }}</div>
+                <div class="follow-user-info">
+                  <strong>{{ user.nickname }}</strong>
+                  <span>@{{ user.username }} · {{ formatDate(user.followedAt) }}</span>
+                </div>
+                <el-button
+                  v-if="followTab === 'following'"
+                  plain
+                  @click="removeFollowing(user)"
+                >取消关注</el-button>
+              </article>
+            </div>
+            <el-empty v-else :description="followTab === 'following' ? '你还没有关注任何用户' : '暂时还没有粉丝'" />
+          </template>
+        </el-skeleton>
+
+        <div v-if="followTotal > followSize" class="pagination">
+          <el-pagination
+            v-model:current-page="followPage"
+            :page-size="followSize"
+            :total="followTotal"
+            layout="prev, pager, next"
+            background
+            @current-change="loadFollowUsers"
+          />
+        </div>
+      </section>
 
       <section class="submission-section">
         <div class="section-title">
@@ -625,6 +720,57 @@ onMounted(() => {
   padding: 26px;
   border-radius: 12px;
   background: #fff;
+}
+
+.follow-section {
+  margin-top: 24px;
+  padding: 26px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.follow-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.follow-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.follow-user:last-child {
+  border-bottom: 0;
+}
+
+.follow-avatar {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border-radius: 50%;
+  background: #e8f3ff;
+  color: #1677ff;
+  font-weight: 600;
+}
+
+.follow-user-info {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.follow-user-info span {
+  overflow: hidden;
+  color: #9499a0;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .section-title {

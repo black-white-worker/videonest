@@ -11,6 +11,8 @@ import com.example.demo.module.video.vo.VideoListItemVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
+import java.util.List;
+
 @Mapper
 public interface VideoMapper extends BaseMapper<Video> {
 
@@ -22,6 +24,10 @@ public interface VideoMapper extends BaseMapper<Video> {
     int increaseViewCount(@Param("videoId") Long videoId);
 
     VideoDetailVO selectPublishedDetailById(@Param("videoId") Long videoId);
+
+    List<VideoListItemVO> selectPublishedListByIds(
+            @Param("videoIds") List<Long> videoIds
+    );
 
     int insertCreatorVideo(Video video);
 
@@ -43,6 +49,16 @@ public interface VideoMapper extends BaseMapper<Video> {
     int updateVideoById(Video video);
 
     int deleteVideoById(Long videoId);
+
+    int changeLikeCount(
+            @Param("videoId") Long videoId,
+            @Param("delta") int delta
+    );
+
+    int changeFavoriteCount(
+            @Param("videoId") Long videoId,
+            @Param("delta") int delta
+    );
 
 
 }

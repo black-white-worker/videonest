@@ -10,7 +10,26 @@ interface ApiError {
 
 const request = axios.create({
   baseURL: '/api',
-  timeout: 10000
+  timeout: 10000,
+  // 评论使用雪花 ID，超过 JavaScript Number 的安全整数范围。
+  // 必须在 JSON.parse 前将其改为字符串，避免请求回复/删除时丢失精度。
+  transformResponse: [
+    (data: string) => {
+      if (!data) {
+        return data
+      }
+
+      try {
+        const safeData = data.replace(
+          /"(id|parentId)"\s*:\s*(-?\d{16,})/g,
+          '"$1":"$2"'
+        )
+        return JSON.parse(safeData)
+      } catch {
+        return data
+      }
+    }
+  ]
 })
 
 request.interceptors.request.use(

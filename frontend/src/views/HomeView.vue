@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   getCategories,
+  getHotVideos,
   getVideoList,
   type VideoCategory,
   type VideoListItem
@@ -15,6 +16,7 @@ const categories = ref<VideoCategory[]>([])
 const videos = ref<VideoListItem[]>([])
 
 const selectedCategoryId = ref<number | undefined>(undefined)
+const isHotMode = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(12)
 const total = ref(0)
@@ -71,10 +73,32 @@ async function loadVideos() {
   }
 }
 
+async function loadHotVideos() {
+  try {
+    videoLoading.value = true
+
+    videos.value = await getHotVideos(pageSize.value)
+    total.value = videos.value.length
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '获取热门视频失败'
+    ElMessage.error(message)
+  } finally {
+    videoLoading.value = false
+  }
+}
+
 function selectCategory(categoryId?: number) {
+  isHotMode.value = false
   selectedCategoryId.value = categoryId
   currentPage.value = 1
   loadVideos()
+}
+
+function selectHotVideos() {
+  isHotMode.value = true
+  selectedCategoryId.value = undefined
+  currentPage.value = 1
+  loadHotVideos()
 }
 
 function handlePageChange(page: number) {
@@ -201,6 +225,14 @@ onMounted(async () => {
               >
                 {{ category.name }}
               </button>
+
+              <button
+                class="category-button"
+                :class="{ active: isHotMode }"
+                @click="selectHotVideos"
+              >
+                热门
+              </button>
             </div>
           </template>
         </el-skeleton>
@@ -210,7 +242,7 @@ onMounted(async () => {
     <section class="container content">
       <div class="section-title">
         <h2>
-          {{ selectedCategoryId === undefined ? '推荐视频' : '分区视频' }}
+          {{ isHotMode ? '热门视频' : (selectedCategoryId === undefined ? '推荐视频' : '分区视频') }}
         </h2>
         <span>共 {{ total }} 个视频</span>
       </div>
@@ -256,7 +288,7 @@ onMounted(async () => {
         </template>
       </el-skeleton>
 
-      <div v-if="total > pageSize" class="pagination">
+      <div v-if="!isHotMode && total > pageSize" class="pagination">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"

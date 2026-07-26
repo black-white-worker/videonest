@@ -34,6 +34,33 @@
         ORDER BY v.publish_time DESC, v.id DESC
     </select>
 
+    <select id="selectPublishedListByIds"
+            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+
+        SELECT
+        v.id,
+        v.title,
+        v.description,
+        v.cover_url AS coverUrl,
+        v.duration,
+        v.view_count AS viewCount,
+        v.like_count AS likeCount,
+        v.favorite_count AS favoriteCount,
+        v.publish_time AS publishTime,
+        v.author_id AS authorId,
+        u.nickname AS authorNickname,
+        v.category_id AS categoryId,
+        c.name AS categoryName
+        FROM video v
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
+        WHERE v.status = 'PUBLISHED'
+        AND v.id IN
+        <foreach collection="videoIds" item="videoId" open="(" separator="," close=")">
+            #{videoId}
+        </foreach>
+    </select>
+
     <update id="increaseViewCount">
         UPDATE video
         SET view_count = view_count + 1
@@ -201,5 +228,19 @@
         DELETE FROM video
         WHERE id = #{videoId}
     </delete>
+
+    <update id="changeLikeCount">
+        UPDATE video
+        SET like_count = GREATEST(like_count + #{delta}, 0)
+        WHERE id = #{videoId}
+        AND status = 'PUBLISHED'
+    </update>
+
+    <update id="changeFavoriteCount">
+        UPDATE video
+        SET favorite_count = GREATEST(favorite_count + #{delta}, 0)
+        WHERE id = #{videoId}
+        AND status = 'PUBLISHED'
+    </update>
 
 </mapper>

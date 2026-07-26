@@ -5,6 +5,7 @@ import VideoDetailView from '../views/VideoDetailView.vue'
 import UploadVideoView from '../views/UploadVideoView.vue'
 import AdminReviewView from '../views/AdminReviewView.vue'
 import ProfileView from '../views/ProfileView.vue'
+import AdminCommentView from '../views/AdminCommentView.vue'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -32,6 +33,10 @@ const router = createRouter({
     {
       path: '/profile',
       component: ProfileView
+    },
+    {
+      path: '/admin/comments',
+      component: AdminCommentView
     }
   ]
 })

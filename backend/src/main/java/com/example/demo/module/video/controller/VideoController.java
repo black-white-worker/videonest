@@ -10,6 +10,8 @@ import jakarta.validation.constraints.Min;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @Validated
 @RequestMapping("/api/videos")
@@ -50,6 +52,17 @@ public class VideoController {
                 videoService.getPublishedVideoDetail(id)
         );
     }
+
+    @GetMapping("/hot")
+    public ApiResponse<List<VideoListItemVO>> hot(
+            @RequestParam(defaultValue = "10")
+            @Min(value = 1, message = "热榜数量必须大于 0")
+            @Max(value = 50, message = "热榜数量不能超过 50")
+            int limit
+    ) {
+        return ApiResponse.success(videoService.listHotVideos(limit));
+    }
+
 
 
 }

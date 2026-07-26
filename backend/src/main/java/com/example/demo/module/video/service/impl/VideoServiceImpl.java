@@ -24,6 +24,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.example.demo.module.video.vo.CreatorProfileVO;
 import com.example.demo.module.video.vo.CreatorVideoListVO;
 import com.example.demo.module.video.dto.VideoUpdateRequest;
+import com.example.demo.module.video.service.HotRankService;
+import com.example.demo.infrastructure.redis.RedisKeys;
+import org.springframework.data.redis.core.RedisTemplate;
+
+import java.util.concurrent.TimeUnit;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class VideoServiceImpl implements VideoService {
@@ -32,15 +41,21 @@ public class VideoServiceImpl implements VideoService {
 
     private final VideoCategoryMapper videoCategoryMapper;
     private final MinioService minioService;
+    private final HotRankService hotRankService;
+    private final RedisTemplate<String, Object> redisTemplate;
 
     public VideoServiceImpl(
             VideoMapper videoMapper,
             VideoCategoryMapper videoCategoryMapper,
-            MinioService minioService
+            MinioService minioService,
+            HotRankService hotRankService,
+            RedisTemplate<String, Object> redisTemplate
     ) {
         this.videoMapper = videoMapper;
         this.videoCategoryMapper = videoCategoryMapper;
         this.minioService = minioService;
+        this.hotRankService = hotRankService;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -70,13 +85,42 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(404, "视频不存在、未发布或已下架");
         }
 
-        VideoDetailVO videoDetail =
-                videoMapper.selectPublishedDetailById(videoId);
+        String cacheKey = RedisKeys.videoDetail(videoId);
 
-        if (videoDetail == null) {
-            throw new BusinessException(404, "视频不存在");
+        Object cachedValue = redisTemplate.opsForValue().get(cacheKey);
+
+        VideoDetailVO videoDetail;
+
+        if (cachedValue instanceof VideoDetailVO cachedDetail) {
+            videoDetail = cachedDetail;
+
+            // 当前访问也会增加播放量，因此同步更新缓存中的播放量。
+            videoDetail.setViewCount(videoDetail.getViewCount() + 1);
+
+            redisTemplate.opsForValue().set(
+                    cacheKey,
+                    videoDetail,
+                    30,
+                    TimeUnit.MINUTES
+            );
+        } else {
+            // 缓存未命中：查询 MySQL，并写入 Redis。
+            videoDetail = videoMapper.selectPublishedDetailById(videoId);
+
+            if (videoDetail == null) {
+                throw new BusinessException(404, "视频不存在");
+            }
+
+            redisTemplate.opsForValue().set(
+                    cacheKey,
+                    videoDetail,
+                    30,
+                    TimeUnit.MINUTES
+            );
         }
 
+        // Redis 中缓存的是 MinIO 对象名，不能缓存临时访问 URL。
+        // 每次返回前重新生成 URL，避免 URL 到期。
         videoDetail.setCoverUrl(
                 minioService.getAccessUrl(videoDetail.getCoverUrl())
         );
@@ -85,7 +129,28 @@ public class VideoServiceImpl implements VideoService {
                 minioService.getAccessUrl(videoDetail.getVideoUrl())
         );
 
+        hotRankService.addPlayScore(videoId);
+
         return videoDetail;
+    }
+    @Override
+    public List<VideoListItemVO> listHotVideos(int limit) {
+        List<Long> videoIds = hotRankService.getTopVideoIds(limit);
+
+        if (videoIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, VideoListItemVO> videosById = new HashMap<>();
+        for (VideoListItemVO video : videoMapper.selectPublishedListByIds(videoIds)) {
+            video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()));
+            videosById.put(video.getId(), video);
+        }
+
+        return videoIds.stream()
+                .map(videosById::get)
+                .filter(java.util.Objects::nonNull)
+                .toList();
     }
 
     @Override
@@ -329,6 +394,9 @@ public class VideoServiceImpl implements VideoService {
         if (rows == 0) {
             throw new BusinessException(400, "视频更新失败");
         }
+
+        deleteVideoDetailCache(videoId);
+
     }
 
     @Override
@@ -351,6 +419,9 @@ public class VideoServiceImpl implements VideoService {
         if (rows == 0) {
             throw new BusinessException(400, "视频删除失败");
         }
+
+        deleteVideoDetailCache(videoId);
+
     }
 
     @Override
@@ -374,6 +445,9 @@ public class VideoServiceImpl implements VideoService {
         if (rows == 0) {
             throw new BusinessException(400, "视频更新失败");
         }
+
+        deleteVideoDetailCache(videoId);
+
     }
 
     @Override
@@ -390,6 +464,13 @@ public class VideoServiceImpl implements VideoService {
         if (rows == 0) {
             throw new BusinessException(400, "视频删除失败");
         }
+
+        deleteVideoDetailCache(videoId);
+
+    }
+
+    private void deleteVideoDetailCache(Long videoId) {
+        redisTemplate.delete(RedisKeys.videoDetail(videoId));
     }
 
 }

@@ -78,3 +78,24 @@ export async function updateAdminVideo(
 export async function deleteAdminVideo(videoId: number): Promise<void> {
   await request.delete(`/admin/videos/${videoId}`)
 }
+
+export interface AdminComment {
+  id: string
+  videoId: number
+  videoTitle: string
+  userId: number
+  username: string
+  nickname: string
+  parentId: string
+  content: string
+  createdAt: string
+}
+
+export async function getAdminComments(params: { page: number; size: number; keyword?: string }): Promise<PageResult<AdminComment>> {
+  const response = await request.get<ApiResponse<PageResult<AdminComment>>>('/admin/comments', { params })
+  return response.data.data
+}
+
+export async function deleteAdminComment(commentId: string): Promise<void> {
+  await request.delete(`/admin/comments/${commentId}`)
+}

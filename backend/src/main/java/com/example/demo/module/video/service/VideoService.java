@@ -5,7 +5,11 @@ import com.example.demo.module.video.dto.VideoCreateRequest;
 import com.example.demo.module.video.dto.VideoUpdateRequest;
 import com.example.demo.module.video.vo.*;
 
+import java.util.List;
+
+
 public interface VideoService {
+
 
     PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId,
@@ -14,6 +18,8 @@ public interface VideoService {
     );
 
     VideoDetailVO getPublishedVideoDetail(Long videoId);
+
+    List<VideoListItemVO> listHotVideos(int limit);
 
     VideoCreateVO createVideo(VideoCreateRequest request);
 

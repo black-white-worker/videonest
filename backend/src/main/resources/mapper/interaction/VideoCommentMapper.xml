@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.module.interaction.mapper.VideoCommentMapper">
+
+    <!-- 一级评论分页 -->
+    <select id="selectCommentPage"
+            resultType="com.example.demo.module.interaction.vo.VideoCommentVO">
+        SELECT
+        vc.id,
+        vc.video_id AS videoId,
+        vc.user_id AS userId,
+        vc.parent_id AS parentId,
+        vc.content,
+        vc.created_at AS createdAt,
+        u.username,
+        u.nickname,
+        (
+        SELECT COUNT(1)
+        FROM video_comment reply
+        WHERE reply.parent_id = vc.id
+        AND reply.status = 1
+        ) AS replyCount
+        FROM video_comment vc
+        INNER JOIN sys_user u ON vc.user_id = u.id
+        WHERE vc.video_id = #{videoId}
+        AND vc.parent_id = 0
+        AND vc.status = 1
+        ORDER BY vc.created_at DESC, vc.id DESC
+    </select>
+
+    <!-- 某条一级评论下的回复分页 -->
+    <select id="selectReplyPage"
+            resultType="com.example.demo.module.interaction.vo.VideoCommentVO">
+        SELECT
+        vc.id,
+        vc.video_id AS videoId,
+        vc.user_id AS userId,
+        vc.parent_id AS parentId,
+        vc.content,
+        vc.created_at AS createdAt,
+        u.username,
+        u.nickname
+        FROM video_comment vc
+        INNER JOIN sys_user u ON vc.user_id = u.id
+        WHERE vc.video_id = #{videoId}
+        AND vc.parent_id = #{parentId}
+        AND vc.status = 1
+        ORDER BY vc.created_at ASC, vc.id ASC
+    </select>
+
+    <update id="softDeleteByIdAndUserId">
+        UPDATE video_comment
+        SET status = 0,
+        updated_at = NOW()
+        WHERE id = #{commentId}
+        AND user_id = #{userId}
+        AND status = 1
+    </update>
+
+    <update id="softDeleteById">
+        UPDATE video_comment
+        SET status = 0,
+        updated_at = NOW()
+        WHERE id = #{commentId}
+        AND status = 1
+    </update>
+
+    <update id="softDeleteRepliesByParentId">
+        UPDATE video_comment
+        SET status = 0,
+        updated_at = NOW()
+        WHERE parent_id = #{parentId}
+        AND status = 1
+    </update>
+
+</mapper>

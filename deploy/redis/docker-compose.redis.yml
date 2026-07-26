@@ -1,0 +1,10 @@
+services:
+  redis:
+    image: redis:7
+    container_name: videonest-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass videonest_redis_2026
+    volumes:
+      - ./redis-data:/data
