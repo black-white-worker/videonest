@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.module.follow.mapper.UserFollowMapper">
+
+    <select id="selectFollowingPage"
+            resultType="com.example.demo.module.follow.vo.FollowUserVO">
+        SELECT u.id, u.username, u.nickname, u.role, uf.created_at AS followedAt
+        FROM user_follow uf
+        INNER JOIN sys_user u ON u.id = uf.followee_id
+        WHERE uf.follower_id = #{userId}
+          AND u.status = 1
+        ORDER BY uf.created_at DESC, uf.id DESC
+    </select>
+
+    <select id="selectFollowerPage"
+            resultType="com.example.demo.module.follow.vo.FollowUserVO">
+        SELECT u.id, u.username, u.nickname, u.role, uf.created_at AS followedAt
+        FROM user_follow uf
+        INNER JOIN sys_user u ON u.id = uf.follower_id
+        WHERE uf.followee_id = #{userId}
+          AND u.status = 1
+        ORDER BY uf.created_at DESC, uf.id DESC
+    </select>
+</mapper>
