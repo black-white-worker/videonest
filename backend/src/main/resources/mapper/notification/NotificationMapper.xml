@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.example.demo.module.notification.mapper.NotificationMapper">
+
+    <select id="selectNotificationPage"
+            resultType="com.example.demo.module.notification.vo.NotificationVO">
+        SELECT
+            n.id,
+            n.actor_id AS actorId,
+            actor.nickname AS actorNickname,
+            n.type,
+            n.video_id AS videoId,
+            v.title AS videoTitle,
+            n.comment_id AS commentId,
+            n.content,
+            n.is_read AS isRead,
+            n.create_time AS createTime
+        FROM notification n
+        INNER JOIN sys_user actor ON actor.id = n.actor_id
+        LEFT JOIN video v ON v.id = n.video_id
+        WHERE n.recipient_id = #{recipientId}
+        ORDER BY n.is_read ASC, n.create_time DESC, n.id DESC
+    </select>
+</mapper>

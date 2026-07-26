@@ -15,11 +15,16 @@ import com.example.demo.module.user.entity.SysUser;
 import com.example.demo.module.user.mapper.SysUserMapper;
 import com.example.demo.security.LoginUser;
 import com.example.demo.security.SecurityUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+
+import com.example.demo.module.notification.event.NotificationDomainEvent;
+import com.example.demo.module.notification.event.NotificationEvent;
 
 @Service
 public class FollowServiceImpl implements FollowService {
@@ -27,13 +32,16 @@ public class FollowServiceImpl implements FollowService {
     private final UserFollowMapper userFollowMapper;
     private final SysUserMapper sysUserMapper;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public FollowServiceImpl(UserFollowMapper userFollowMapper,
                              SysUserMapper sysUserMapper,
-                             RedisTemplate<String, Object> redisTemplate) {
+                             RedisTemplate<String, Object> redisTemplate,
+                             ApplicationEventPublisher eventPublisher) {
         this.userFollowMapper = userFollowMapper;
         this.sysUserMapper = sysUserMapper;
         this.redisTemplate = redisTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -51,6 +59,20 @@ public class FollowServiceImpl implements FollowService {
         userFollow.setFolloweeId(followeeId);
         userFollowMapper.insert(userFollow);
         refreshStatusCache(followerId, followeeId, true);
+
+        eventPublisher.publishEvent(
+                new NotificationDomainEvent(
+                        new NotificationEvent(
+                                UUID.randomUUID().toString(),
+                                followeeId,    // 接收通知的人：被关注者
+                                followerId,    // 触发事件的人：发起关注者
+                                "FOLLOW",
+                                null,
+                                null,
+                                "关注了你"
+                        )
+                )
+        );
     }
 
     @Override

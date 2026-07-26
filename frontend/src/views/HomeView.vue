@@ -9,6 +9,7 @@ import {
   type VideoCategory,
   type VideoListItem
 } from '../api/video'
+import { getUnreadNotificationCount } from '../api/notification'
 
 const router = useRouter()
 
@@ -23,6 +24,7 @@ const total = ref(0)
 
 const categoryLoading = ref(false)
 const videoLoading = ref(false)
+const unreadNotificationCount = ref(0)
 
 const user = computed(() => {
   const value = localStorage.getItem('userInfo')
@@ -145,9 +147,20 @@ function goVideoDetail(videoId: number) {
   router.push(`/video/${videoId}`)
 }
 
+async function loadUnreadNotificationCount() {
+  if (!localStorage.getItem('token')) return
+
+  try {
+    unreadNotificationCount.value = await getUnreadNotificationCount()
+  } catch {
+    unreadNotificationCount.value = 0
+  }
+}
+
 onMounted(async () => {
   await loadCategories()
   await loadVideos()
+  await loadUnreadNotificationCount()
 })
 </script>
 
@@ -161,6 +174,11 @@ onMounted(async () => {
         </div>
 
         <div v-if="user" class="user-area">
+          <el-badge :value="unreadNotificationCount" :hidden="unreadNotificationCount === 0" :max="99">
+            <el-button size="small" @click="router.push('/notifications')">
+              通知
+            </el-button>
+          </el-badge>
           <span class="nickname">
             {{ user.nickname }}
             <small>{{ user.role === 'ADMIN' ? '管理员' : '用户' }}</small>

@@ -35,6 +35,19 @@ spring:
           min-idle: 0
           max-wait: -1ms
 
+  rabbitmq:
+    host: 127.0.0.1
+    port: 5672
+    username: videonest
+    password: videonest_rabbit_2026
+    virtual-host: /
+    listener:
+      simple:
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 1000ms
+          max-attempts: 3
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml

@@ -13,12 +13,16 @@ import com.example.demo.module.interaction.vo.VideoCommentVO;
 import com.example.demo.module.video.entity.Video;
 import com.example.demo.module.video.mapper.VideoMapper;
 import com.example.demo.module.video.service.HotRankService;
+import com.example.demo.module.notification.event.NotificationDomainEvent;
+import com.example.demo.module.notification.event.NotificationEvent;
 import com.example.demo.security.LoginUser;
 import com.example.demo.security.SecurityUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -31,17 +35,21 @@ public class CommentServiceImpl implements CommentService {
     private final VideoCommentMapper videoCommentMapper;
     private final HotRankService hotRankService;
     private final StringRedisTemplate stringRedisTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
+    // =========【改动1】构造方法新增 eventPublisher 参数接收注入 =========
     public CommentServiceImpl(
             VideoMapper videoMapper,
             VideoCommentMapper videoCommentMapper,
             HotRankService hotRankService,
-            StringRedisTemplate stringRedisTemplate
+            StringRedisTemplate stringRedisTemplate,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.videoMapper = videoMapper;
         this.videoCommentMapper = videoCommentMapper;
         this.hotRankService = hotRankService;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -58,9 +66,9 @@ public class CommentServiceImpl implements CommentService {
                 ? 0L
                 : request.getParentId();
 
+        VideoComment parentComment = null;
         if (parentId != 0) {
-            VideoComment parentComment =
-                    videoCommentMapper.selectById(parentId);
+            parentComment = videoCommentMapper.selectById(parentId);
 
             if (parentComment == null
                     || !parentComment.getVideoId().equals(videoId)
@@ -81,8 +89,34 @@ public class CommentServiceImpl implements CommentService {
         comment.setStatus(1);
 
         videoCommentMapper.insert(comment);
-
         hotRankService.addCommentScore(videoId);
+
+        // =========【改动2：发布通知事件逻辑】=========
+        // 查询视频信息拿到作者ID
+        Video video = videoMapper.selectById(videoId);
+        // 判断通知接收人
+        Long recipientId = parentId == 0
+                ? video.getAuthorId()
+                : parentComment.getUserId();
+        // 判断消息类型
+        String type = parentId == 0 ? "COMMENT" : "REPLY";
+
+        // 避免自己评论自己、自己回复自己，不需要推送通知
+        if (!recipientId.equals(currentUser.userId())) {
+            eventPublisher.publishEvent(
+                    new NotificationDomainEvent(
+                            new NotificationEvent(
+                                    UUID.randomUUID().toString(),
+                                    recipientId,
+                                    currentUser.userId(),
+                                    type,
+                                    videoId,
+                                    comment.getId(),
+                                    comment.getContent()
+                            )
+                    )
+            );
+        }
     }
 
     @Override
