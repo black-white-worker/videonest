@@ -42,6 +42,10 @@ public interface VideoService {
 
     CreatorProfileVO getCreatorProfile();
 
+    PageResult<VideoListItemVO> listMyLikedVideos(long page, long size);
+
+    PageResult<VideoListItemVO> listMyFavoritedVideos(long page, long size);
+
     // 接口内增加
     void updateCreatorVideo(Long videoId, VideoUpdateRequest request);
 

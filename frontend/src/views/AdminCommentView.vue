@@ -63,13 +63,26 @@ async function restoreComment(comment: AdminComment) {
 }
 
 function search() { page.value = 1; loadComments() }
+function goBack() {
+  if (window.history.length > 1) {
+    router.back()
+    return
+  }
+  router.push('/')
+}
 function formatDate(value?: string) { return value ? new Date(value).toLocaleString('zh-CN') : '-' }
 onMounted(() => { if (ensureAdmin()) loadComments() })
 </script>
 
 <template>
   <main class="page">
-    <header><button @click="router.push('/')">VideoNest</button><el-button @click="router.push('/admin/review')">视频审核</el-button></header>
+    <header>
+      <button @click="router.push('/')">VideoNest</button>
+      <div class="header-actions">
+        <el-button @click="goBack">返回上一页</el-button>
+        <el-button @click="router.push('/admin/review')">视频审核</el-button>
+      </div>
+    </header>
     <section>
       <div class="title"><div><h1>评论管理</h1><p>共 {{ total }} 条评论</p></div><div class="tools"><el-select v-model="status" @change="search"><el-option label="正常评论" value="1" /><el-option label="已删除评论" value="0" /><el-option label="全部评论" value="" /></el-select><el-input v-model="keyword" placeholder="评论、用户或视频标题" clearable @keyup.enter="search" /><el-button type="primary" @click="search">搜索</el-button></div></div>
       <el-table :data="comments" v-loading="loading" empty-text="暂无评论">
@@ -87,5 +100,5 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
 </template>
 
 <style scoped>
-.page{min-height:100vh;background:#f6f7f8;color:#18191c}.page header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100% - 1100px)/2));background:#fff}.page header button{border:0;background:none;color:#1677ff;font-size:22px;font-weight:700;cursor:pointer}section{width:min(1240px,calc(100% - 48px));margin:0 auto;padding:32px 0}.title,.tools{display:flex;align-items:center;gap:10px}.title{justify-content:space-between;margin-bottom:20px}h1{margin:0 0 6px;font-size:25px}p,small{margin:0;color:#9499a0}.tools{width:560px}.tools .el-select{width:140px}.pagination{display:flex;justify-content:center;margin-top:24px}
+.page{min-height:100vh;background:#f6f7f8;color:#18191c}.page header{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 max(24px,calc((100% - 1100px)/2));background:#fff}.page header button{border:0;background:none;color:#1677ff;font-size:22px;font-weight:700;cursor:pointer}.header-actions{display:flex;align-items:center;gap:12px}section{width:min(1240px,calc(100% - 48px));margin:0 auto;padding:32px 0}.title,.tools{display:flex;align-items:center;gap:10px}.title{justify-content:space-between;margin-bottom:20px}h1{margin:0 0 6px;font-size:25px}p,small{margin:0;color:#9499a0}.tools{width:560px}.tools .el-select{width:140px}.pagination{display:flex;justify-content:center;margin-top:24px}
 </style>

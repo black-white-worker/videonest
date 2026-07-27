@@ -1,6 +1,7 @@
 import request from './request'
 import type { ApiResponse } from './auth'
 import type { PageResult } from './video'
+import type { VideoListItem } from './video'
 
 export interface CreatorProfile {
   userId: number
@@ -76,4 +77,14 @@ export async function updateCreatorVideo(
 
 export async function deleteCreatorVideo(videoId: number): Promise<void> {
   await request.delete(`/creator/videos/${videoId}`)
+}
+
+export async function getMyLikedVideos(params: { page: number; size: number }): Promise<PageResult<VideoListItem>> {
+  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>('/creator/videos/liked', { params })
+  return response.data.data
+}
+
+export async function getMyFavoriteVideos(params: { page: number; size: number }): Promise<PageResult<VideoListItem>> {
+  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>('/creator/videos/favorites', { params })
+  return response.data.data
 }

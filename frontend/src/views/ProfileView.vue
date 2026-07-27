@@ -9,13 +9,15 @@ import {
 import { useRouter } from 'vue-router'
 import {
   deleteCreatorVideo,
+  getMyFavoriteVideos,
+  getMyLikedVideos,
   getCreatorProfile,
   getCreatorVideos,
   updateCreatorVideo,
   type CreatorProfile,
   type CreatorVideo
 } from '../api/creator'
-import { getCategories, type VideoCategory } from '../api/video'
+import { getCategories, type VideoCategory, type VideoListItem } from '../api/video'
 import {
   getMyFollowers,
   getMyFollowing,
@@ -38,6 +40,12 @@ const followUsers = ref<FollowUser[]>([])
 const followPage = ref(1)
 const followSize = ref(10)
 const followTotal = ref(0)
+const interactionTab = ref<'favorites' | 'likes'>('favorites')
+const interactionVideos = ref<VideoListItem[]>([])
+const interactionLoading = ref(false)
+const interactionPage = ref(1)
+const interactionSize = ref(8)
+const interactionTotal = ref(0)
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -148,6 +156,26 @@ async function loadFollowUsers() {
   } finally {
     followLoading.value = false
   }
+}
+
+async function loadInteractionVideos() {
+  try {
+    interactionLoading.value = true
+    const request = interactionTab.value === 'favorites' ? getMyFavoriteVideos : getMyLikedVideos
+    const result = await request({ page: interactionPage.value, size: interactionSize.value })
+    interactionVideos.value = result.records
+    interactionTotal.value = result.total
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取互动视频失败')
+  } finally {
+    interactionLoading.value = false
+  }
+}
+
+function changeInteractionTab(tab: 'favorites' | 'likes') {
+  interactionTab.value = tab
+  interactionPage.value = 1
+  loadInteractionVideos()
 }
 
 function changeFollowTab(tab: 'following' | 'followers') {
@@ -313,6 +341,7 @@ onMounted(() => {
   loadVideos()
   loadCategories()
   loadFollowUsers()
+  loadInteractionVideos()
 })
 </script>
 
@@ -429,6 +458,37 @@ onMounted(() => {
             background
             @current-change="loadFollowUsers"
           />
+        </div>
+      </section>
+
+      <section class="interaction-section">
+        <div class="section-title">
+          <div>
+            <h2>我的互动</h2>
+            <p>查看你收藏和点赞过的已发布视频</p>
+          </div>
+          <el-button :loading="interactionLoading" @click="loadInteractionVideos">刷新</el-button>
+        </div>
+
+        <el-tabs :model-value="interactionTab" @tab-change="changeInteractionTab($event as 'favorites' | 'likes')">
+          <el-tab-pane label="我的收藏" name="favorites" />
+          <el-tab-pane label="我的点赞" name="likes" />
+        </el-tabs>
+
+        <el-skeleton :loading="interactionLoading" animated :count="4">
+          <template #default>
+            <div v-if="interactionVideos.length" class="interaction-grid">
+              <article v-for="video in interactionVideos" :key="video.id" class="interaction-card" @click="router.push(`/video/${video.id}`)">
+                <div class="interaction-cover"><img :src="video.coverUrl" :alt="video.title"><span>{{ formatDuration(video.duration) }}</span></div>
+                <h3 :title="video.title">{{ video.title }}</h3>
+                <p>{{ video.authorNickname }} · {{ video.categoryName }}</p>
+              </article>
+            </div>
+            <el-empty v-else :description="interactionTab === 'favorites' ? '你还没有收藏视频' : '你还没有点赞视频'" />
+          </template>
+        </el-skeleton>
+        <div v-if="interactionTotal > interactionSize" class="pagination">
+          <el-pagination v-model:current-page="interactionPage" :page-size="interactionSize" :total="interactionTotal" layout="prev, pager, next" background @current-change="loadInteractionVideos" />
         </div>
       </section>
 
@@ -746,6 +806,27 @@ onMounted(() => {
   background: #fff;
 }
 
+.interaction-section {
+  margin-top: 24px;
+  padding: 26px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.interaction-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.interaction-card { min-width: 0; cursor: pointer; }
+.interaction-cover { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 8px; background: #e5e7eb; }
+.interaction-cover img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
+.interaction-card:hover img { transform: scale(1.05); }
+.interaction-cover span { position: absolute; right: 6px; bottom: 6px; padding: 2px 5px; border-radius: 4px; background: rgb(0 0 0 / 65%); color: #fff; font-size: 12px; }
+.interaction-card h3 { overflow: hidden; margin: 9px 0 5px; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; }
+.interaction-card p { overflow: hidden; margin: 0; color: #9499a0; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+
 .follow-list {
   display: flex;
   flex-direction: column;
@@ -950,6 +1031,9 @@ onMounted(() => {
   .submission-section {
     padding: 20px;
   }
+
+  .interaction-section { padding: 20px; }
+  .interaction-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
 
   .video-card {
     grid-template-columns: 1fr;

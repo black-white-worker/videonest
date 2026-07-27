@@ -57,6 +57,22 @@ public class CreatorVideoController {
         );
     }
 
+    @GetMapping("/liked")
+    public ApiResponse<PageResult<com.example.demo.module.video.vo.VideoListItemVO>> listMyLikedVideos(
+            @RequestParam(defaultValue = "1") @Min(1) long page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(50) long size
+    ) {
+        return ApiResponse.success(videoService.listMyLikedVideos(page, size));
+    }
+
+    @GetMapping("/favorites")
+    public ApiResponse<PageResult<com.example.demo.module.video.vo.VideoListItemVO>> listMyFavoritedVideos(
+            @RequestParam(defaultValue = "1") @Min(1) long page,
+            @RequestParam(defaultValue = "10") @Min(1) @Max(50) long size
+    ) {
+        return ApiResponse.success(videoService.listMyFavoritedVideos(page, size));
+    }
+
     @PutMapping("/{id}")
     public ApiResponse<Void> updateMyVideo(
             @PathVariable @Min(value = 1, message = "视频 ID 不合法") Long id,

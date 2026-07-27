@@ -319,6 +319,28 @@ public class VideoServiceImpl implements VideoService {
         );
     }
 
+    @Override
+    public PageResult<VideoListItemVO> listMyLikedVideos(long page, long size) {
+        return listMyInteractionVideos(page, size, true);
+    }
+
+    @Override
+    public PageResult<VideoListItemVO> listMyFavoritedVideos(long page, long size) {
+        return listMyInteractionVideos(page, size, false);
+    }
+
+    private PageResult<VideoListItemVO> listMyInteractionVideos(long page, long size, boolean liked) {
+        Long userId = SecurityUtils.getCurrentUser().userId();
+        Page<VideoListItemVO> pageRequest = new Page<>(page, size);
+        IPage<VideoListItemVO> pageData = liked
+                ? videoMapper.selectMyLikedVideoPage(pageRequest, userId)
+                : videoMapper.selectMyFavoritedVideoPage(pageRequest, userId);
+        pageData.getRecords().forEach(video ->
+                video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()))
+        );
+        return PageResult.of(pageData);
+    }
+
 
     @Override
     public PageResult<CreatorVideoListVO> listCreatorVideos(

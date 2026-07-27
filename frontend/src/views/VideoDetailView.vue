@@ -871,4 +871,12 @@ h1 {
     font-size: 21px;
   }
 }
+/* 企业后台式的信息卡片、内容层级与播放器视觉。 */
+.detail-page{background:var(--vn-page);color:var(--vn-text)}
+.header{height:68px;background:rgb(255 255 255 / 94%);border-color:var(--vn-border);position:sticky;top:0;z-index:10;backdrop-filter:blur(14px)}
+.header-content,.container{width:min(1120px,calc(100% - 48px))}.logo{color:#172b4d;letter-spacing:-.4px}.logo-icon{border-radius:9px;background:linear-gradient(135deg,#1677ff,#5b9cff);box-shadow:0 4px 10px rgb(22 119 255 / 25%)}
+.container{padding-top:34px}.video-player-box{border-radius:var(--vn-radius);box-shadow:0 14px 34px rgb(16 24 40 / 16%)}
+.video-info,.comment-section{padding:28px 32px;border:1px solid var(--vn-border);border-radius:var(--vn-radius);box-shadow:var(--vn-shadow)}
+.video-info h1{color:#172b4d;font-size:28px}.statistics,.comment-header span,.comment-meta{color:var(--vn-text-muted)}.avatar{border-radius:12px;background:linear-gradient(135deg,#1677ff,#5b9cff)}.description p{color:var(--vn-text-secondary)}.reply-area{background:#f8fafc;border:1px solid #edf0f5}
+@media (max-width:700px){.header{height:60px}.header-content,.container{width:min(100% - 28px,1120px)}.container{padding-top:22px}.video-info,.comment-section{padding:20px}.video-info h1{font-size:22px}}
 </style>

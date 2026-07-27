@@ -221,6 +221,36 @@
         ORDER BY v.create_time DESC, v.id DESC
     </select>
 
+    <select id="selectMyLikedVideoPage"
+            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
+               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
+               v.author_id AS authorId, u.nickname AS authorNickname,
+               v.category_id AS categoryId, c.name AS categoryName
+        FROM video_like vl
+        INNER JOIN video v ON vl.video_id = v.id AND v.status = 'PUBLISHED'
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
+        WHERE vl.user_id = #{userId}
+        ORDER BY vl.id DESC
+    </select>
+
+    <select id="selectMyFavoritedVideoPage"
+            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
+               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
+               v.author_id AS authorId, u.nickname AS authorNickname,
+               v.category_id AS categoryId, c.name AS categoryName
+        FROM video_favorite vf
+        INNER JOIN video v ON vf.video_id = v.id AND v.status = 'PUBLISHED'
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
+        WHERE vf.user_id = #{userId}
+        ORDER BY vf.id DESC
+    </select>
+
     <update id="updateVideoById">
         UPDATE video
         SET

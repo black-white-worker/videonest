@@ -66,6 +66,5 @@ minio:
   bucket-name: videonest
 
 video-process:
-  # 若已将 FFmpeg 加入系统 PATH，保持 ffmpeg 即可。
   ffmpeg-path: S:/ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe
   timeout-seconds: 1800

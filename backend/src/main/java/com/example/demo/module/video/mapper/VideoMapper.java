@@ -47,6 +47,16 @@ public interface VideoMapper extends BaseMapper<Video> {
             @Param("authorId") Long authorId
     );
 
+    IPage<VideoListItemVO> selectMyLikedVideoPage(
+            Page<VideoListItemVO> page,
+            @Param("userId") Long userId
+    );
+
+    IPage<VideoListItemVO> selectMyFavoritedVideoPage(
+            Page<VideoListItemVO> page,
+            @Param("userId") Long userId
+    );
+
     int updateVideoById(Video video);
 
     int deleteVideoById(@Param("videoId") Long videoId);
