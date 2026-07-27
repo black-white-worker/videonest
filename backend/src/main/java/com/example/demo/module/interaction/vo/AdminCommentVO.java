@@ -22,5 +22,7 @@ public class AdminCommentVO {
     private Long parentId;
 
     private String content;
+    private Integer status;
     private LocalDateTime createdAt;
+    private LocalDateTime deletedAt;
 }

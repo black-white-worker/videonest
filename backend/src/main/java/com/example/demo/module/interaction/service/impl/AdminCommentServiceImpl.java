@@ -26,11 +26,12 @@ public class AdminCommentServiceImpl implements AdminCommentService {
 
     @Override
     public PageResult<AdminCommentVO> listComments(
-            long page, long size, Long videoId, String keyword) {
+            long page, long size, Long videoId, String keyword, Integer status) {
         IPage<AdminCommentVO> pageData = adminCommentMapper.selectAdminCommentPage(
                 new Page<>(page, size),
                 videoId,
-                StringUtils.hasText(keyword) ? keyword.trim() : null
+                StringUtils.hasText(keyword) ? keyword.trim() : null,
+                status
         );
         return PageResult.of(pageData);
     }
@@ -46,6 +47,19 @@ public class AdminCommentServiceImpl implements AdminCommentService {
         videoCommentMapper.softDeleteById(commentId);
         if (comment.getParentId() == 0) {
             videoCommentMapper.softDeleteRepliesByParentId(commentId);
+        }
+    }
+
+    @Override
+    @Transactional
+    public void restoreComment(Long commentId) {
+        VideoComment comment = videoCommentMapper.selectById(commentId);
+        if (comment == null || comment.getStatus() != 0) {
+            throw new BusinessException(404, "评论不存在或未被删除");
+        }
+
+        if (videoCommentMapper.restoreById(commentId) == 0) {
+            throw new BusinessException(400, "评论恢复失败");
         }
     }
 }

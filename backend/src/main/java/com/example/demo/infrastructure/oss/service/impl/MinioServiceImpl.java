@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.Set;
 import java.util.UUID;
@@ -21,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class MinioServiceImpl implements MinioService {
 
-    private static final long MAX_COVER_SIZE = 5 * 1024 * 1024L;
+    private static final long MAX_COVER_SIZE = 10 * 1024 * 1024L;
 
     private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024L;
 
@@ -164,4 +165,41 @@ public class MinioServiceImpl implements MinioService {
 
         throw new BusinessException(400, "不支持的上传类型");
     }
+
+    @Override
+    public InputStream download(String objectName) {
+        try {
+            return minioClient.getObject(
+                    io.minio.GetObjectArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .object(objectName)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new BusinessException(500, "下载 MinIO 视频失败：" + e.getMessage());
+        }
+    }
+
+    @Override
+    public void uploadFile(
+            java.nio.file.Path localFile,
+            String objectName,
+            String contentType
+    ) {
+        try {
+            ensureBucketExists();
+
+            minioClient.uploadObject(
+                    io.minio.UploadObjectArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .object(objectName)
+                            .filename(localFile.toString())
+                            .contentType(contentType)
+                            .build()
+            );
+        } catch (Exception e) {
+            throw new BusinessException(500, "上传处理结果到 MinIO 失败：" + e.getMessage());
+        }
+    }
+
 }

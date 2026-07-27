@@ -11,6 +11,7 @@ public interface AdminCommentMapper {
     IPage<AdminCommentVO> selectAdminCommentPage(
             Page<AdminCommentVO> page,
             @Param("videoId") Long videoId,
-            @Param("keyword") String keyword
+            @Param("keyword") String keyword,
+            @Param("status") Integer status
     );
 }

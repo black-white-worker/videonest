@@ -31,6 +31,10 @@
             AND v.category_id = #{categoryId}
         </if>
 
+        <if test="keyword != null and keyword != ''">
+            AND v.title LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+
         ORDER BY v.publish_time DESC, v.id DESC
     </select>
 
@@ -77,6 +81,9 @@
         v.description,
         v.cover_url AS coverUrl,
         v.video_url AS videoUrl,
+        v.video_480p_url AS video480pUrl,
+        v.video_720p_url AS video720pUrl,
+        v.video_1080p_url AS video1080pUrl,
         v.duration,
         v.view_count AS viewCount,
         v.like_count AS likeCount,
@@ -110,6 +117,7 @@
         description,
         cover_url,
         video_url,
+        original_video_url,
         duration,
         status,
         view_count,
@@ -122,6 +130,7 @@
         #{description},
         #{coverUrl},
         #{videoUrl},
+        #{originalVideoUrl},
         #{duration},
         #{status},
         #{viewCount},
@@ -194,6 +203,7 @@
         v.duration,
         v.status,
         v.reject_reason AS rejectReason,
+        v.process_error AS processError,
         v.publish_time AS publishTime,
         v.create_time AS createTime,
         v.view_count AS viewCount,

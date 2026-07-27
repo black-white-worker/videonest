@@ -17,14 +17,16 @@
         vc.created_at AS createdAt,
         u.username,
         u.nickname,
-        (
-        SELECT COUNT(1)
-        FROM video_comment reply
-        WHERE reply.parent_id = vc.id
-        AND reply.status = 1
-        ) AS replyCount
+        COALESCE(reply_count.replyCount, 0) AS replyCount
         FROM video_comment vc
         INNER JOIN sys_user u ON vc.user_id = u.id
+        LEFT JOIN (
+            SELECT parent_id, COUNT(1) AS replyCount
+            FROM video_comment
+            WHERE status = 1
+            AND parent_id &lt;&gt; 0
+            GROUP BY parent_id
+        ) reply_count ON reply_count.parent_id = vc.id
         WHERE vc.video_id = #{videoId}
         AND vc.parent_id = 0
         AND vc.status = 1
@@ -54,6 +56,7 @@
     <update id="softDeleteByIdAndUserId">
         UPDATE video_comment
         SET status = 0,
+        deleted_at = NOW(),
         updated_at = NOW()
         WHERE id = #{commentId}
         AND user_id = #{userId}
@@ -63,6 +66,7 @@
     <update id="softDeleteById">
         UPDATE video_comment
         SET status = 0,
+        deleted_at = NOW(),
         updated_at = NOW()
         WHERE id = #{commentId}
         AND status = 1
@@ -71,9 +75,19 @@
     <update id="softDeleteRepliesByParentId">
         UPDATE video_comment
         SET status = 0,
+        deleted_at = NOW(),
         updated_at = NOW()
         WHERE parent_id = #{parentId}
         AND status = 1
+    </update>
+
+    <update id="restoreById">
+        UPDATE video_comment
+        SET status = 1,
+            deleted_at = NULL,
+            updated_at = NOW()
+        WHERE id = #{commentId}
+          AND status = 0
     </update>
 
 </mapper>

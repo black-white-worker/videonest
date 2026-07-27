@@ -30,4 +30,6 @@ public interface VideoCommentMapper extends BaseMapper<VideoComment> {
     int softDeleteById(@Param("commentId") Long commentId);
 
     int softDeleteRepliesByParentId(@Param("parentId") Long parentId);
+
+    int restoreById(@Param("commentId") Long commentId);
 }

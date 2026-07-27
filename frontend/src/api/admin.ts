@@ -88,14 +88,20 @@ export interface AdminComment {
   nickname: string
   parentId: string
   content: string
+  status: number
   createdAt: string
+  deletedAt?: string
 }
 
-export async function getAdminComments(params: { page: number; size: number; keyword?: string }): Promise<PageResult<AdminComment>> {
+export async function getAdminComments(params: { page: number; size: number; keyword?: string; status?: number }): Promise<PageResult<AdminComment>> {
   const response = await request.get<ApiResponse<PageResult<AdminComment>>>('/admin/comments', { params })
   return response.data.data
 }
 
 export async function deleteAdminComment(commentId: string): Promise<void> {
   await request.delete(`/admin/comments/${commentId}`)
+}
+
+export async function restoreAdminComment(commentId: string): Promise<void> {
+  await request.put(`/admin/comments/${commentId}/restore`)
 }

@@ -1,6 +1,7 @@
 package com.example.demo.module.interaction.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.demo.common.api.PageResult;
 import com.example.demo.common.exception.BusinessException;
@@ -15,6 +16,8 @@ import com.example.demo.module.video.mapper.VideoMapper;
 import com.example.demo.module.video.service.HotRankService;
 import com.example.demo.module.notification.event.NotificationDomainEvent;
 import com.example.demo.module.notification.event.NotificationEvent;
+import com.example.demo.module.user.entity.SysUser;
+import com.example.demo.module.user.mapper.SysUserMapper;
 import com.example.demo.security.LoginUser;
 import com.example.demo.security.SecurityUtils;
 import org.springframework.context.ApplicationEventPublisher;
@@ -23,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
@@ -33,6 +37,7 @@ public class CommentServiceImpl implements CommentService {
 
     private final VideoMapper videoMapper;
     private final VideoCommentMapper videoCommentMapper;
+    private final SysUserMapper sysUserMapper;
     private final HotRankService hotRankService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ApplicationEventPublisher eventPublisher;
@@ -41,12 +46,14 @@ public class CommentServiceImpl implements CommentService {
     public CommentServiceImpl(
             VideoMapper videoMapper,
             VideoCommentMapper videoCommentMapper,
+            SysUserMapper sysUserMapper,
             HotRankService hotRankService,
             StringRedisTemplate stringRedisTemplate,
             ApplicationEventPublisher eventPublisher
     ) {
         this.videoMapper = videoMapper;
         this.videoCommentMapper = videoCommentMapper;
+        this.sysUserMapper = sysUserMapper;
         this.hotRankService = hotRankService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.eventPublisher = eventPublisher;
@@ -127,16 +134,28 @@ public class CommentServiceImpl implements CommentService {
     ) {
         validatePublishedVideo(videoId);
 
-        Page<VideoCommentVO> pageRequest =
-                new Page<>(page, size);
+        Page<VideoComment> pageRequest = new Page<>(page, size);
+        IPage<VideoComment> pageData = videoCommentMapper.selectPage(
+                pageRequest,
+                new LambdaQueryWrapper<VideoComment>()
+                        .eq(VideoComment::getVideoId, videoId)
+                        .eq(VideoComment::getParentId, 0L)
+                        .eq(VideoComment::getStatus, 1)
+                        .orderByDesc(VideoComment::getCreatedAt)
+                        .orderByDesc(VideoComment::getId)
+        );
 
-        IPage<VideoCommentVO> pageData =
-                videoCommentMapper.selectCommentPage(
-                        pageRequest,
-                        videoId
-                );
+        List<VideoCommentVO> records = pageData.getRecords().stream()
+                .map(this::toCommentVO)
+                .toList();
 
-        return PageResult.of(pageData);
+        return new PageResult<>(
+                records,
+                pageData.getTotal(),
+                pageData.getCurrent(),
+                pageData.getSize(),
+                pageData.getPages()
+        );
     }
 
     @Override
@@ -205,6 +224,29 @@ public class CommentServiceImpl implements CommentService {
                     "视频不存在、未发布或已下架"
             );
         }
+    }
+
+    private VideoCommentVO toCommentVO(VideoComment comment) {
+        VideoCommentVO result = new VideoCommentVO();
+        result.setId(comment.getId());
+        result.setVideoId(comment.getVideoId());
+        result.setUserId(comment.getUserId());
+        result.setParentId(comment.getParentId());
+        result.setContent(comment.getContent());
+        result.setCreatedAt(comment.getCreatedAt());
+
+        SysUser user = sysUserMapper.selectById(comment.getUserId());
+        if (user != null) {
+            result.setUsername(user.getUsername());
+            result.setNickname(user.getNickname());
+        }
+
+        result.setReplyCount(videoCommentMapper.selectCount(
+                new LambdaQueryWrapper<VideoComment>()
+                        .eq(VideoComment::getParentId, comment.getId())
+                        .eq(VideoComment::getStatus, 1)
+        ));
+        return result;
     }
 
     private void checkRateLimit(Long userId) {

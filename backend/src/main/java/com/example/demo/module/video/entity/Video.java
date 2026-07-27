@@ -2,6 +2,7 @@ package com.example.demo.module.video.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 
@@ -43,5 +44,18 @@ public class Video {
     private LocalDateTime updateTime;
 
     private String rejectReason;
+
+    private String originalVideoUrl;
+
+    @TableField("video_480p_url")
+    private String video480pUrl;
+
+    @TableField("video_720p_url")
+    private String video720pUrl;
+
+    @TableField("video_1080p_url")
+    private String video1080pUrl;
+
+    private String processError;
 
 }

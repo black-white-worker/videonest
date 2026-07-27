@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -23,6 +23,8 @@ const router = useRouter()
 
 const loading = ref(true)
 const video = ref<VideoDetail | null>(null)
+const player = ref<HTMLVideoElement | null>(null)
+const selectedQuality = ref<'480p' | '720p' | '1080p'>('720p')
 const liked = ref(false)
 const favorited = ref(false)
 const interactionLoading = ref(false)
@@ -40,6 +42,22 @@ const expandedReplyIds = ref<string[]>([])
 const repliesByCommentId = ref<Record<string, VideoComment[]>>({})
 const replyContents = ref<Record<string, string>>({})
 const replySubmittingIds = ref<string[]>([])
+
+const qualityOptions = computed(() => {
+  if (!video.value) return []
+
+  return [
+    { label: '480P', value: '480p' as const, url: video.value.video480pUrl },
+    { label: '720P', value: '720p' as const, url: video.value.video720pUrl || video.value.videoUrl },
+    { label: '1080P', value: '1080p' as const, url: video.value.video1080pUrl }
+  ]
+})
+
+const currentVideoUrl = computed(() =>
+  qualityOptions.value.find(option => option.value === selectedQuality.value)?.url
+    || video.value?.videoUrl
+    || ''
+)
 
 function formatNumber(value: number) {
   if (value >= 10000) {
@@ -69,15 +87,36 @@ async function loadVideoDetail() {
   try {
     loading.value = true
     video.value = await getVideoDetail(id)
-    await loadInteractionStatus(id)
-    await loadFollowStatus()
-    await loadComments(id)
+    selectedQuality.value = video.value.video720pUrl
+      ? '720p'
+      : qualityOptions.value[0]?.value || '720p'
   } catch (error) {
     const message = error instanceof Error ? error.message : '获取视频详情失败'
     ElMessage.error(message)
     router.push('/')
+    return
   } finally {
     loading.value = false
+  }
+
+  // 点赞、关注和评论加载失败不应影响播放器打开。
+  await Promise.allSettled([
+    loadInteractionStatus(id),
+    loadFollowStatus(),
+    loadComments(id)
+  ])
+}
+
+async function changeQuality() {
+  const currentTime = player.value?.currentTime || 0
+  const wasPlaying = player.value ? !player.value.paused : false
+
+  await nextTick()
+  if (!player.value) return
+
+  player.value.currentTime = currentTime
+  if (wasPlaying) {
+    player.value.play().catch(() => undefined)
   }
 }
 
@@ -361,9 +400,23 @@ onMounted(() => {
         <template #default>
           <template v-if="video">
             <div class="video-player-box">
+              <div v-if="qualityOptions.length" class="quality-switcher">
+                <span>清晰度</span>
+                <el-radio-group v-model="selectedQuality" size="small" @change="changeQuality">
+                  <el-radio-button
+                    v-for="option in qualityOptions"
+                    :key="option.value"
+                    :value="option.value"
+                    :disabled="!option.url"
+                  >
+                    {{ option.label }}
+                  </el-radio-button>
+                </el-radio-group>
+              </div>
               <video
+                ref="player"
                 :poster="video.coverUrl"
-                :src="video.videoUrl"
+                :src="currentVideoUrl"
                 controls
                 class="video-player"
               >
@@ -579,6 +632,7 @@ onMounted(() => {
 }
 
 .video-player-box {
+  position: relative;
   overflow: hidden;
   border-radius: 12px;
   background: #000;
@@ -619,6 +673,21 @@ h1 {
   gap: 15px;
   color: #9499a0;
   font-size: 14px;
+}
+
+.quality-switcher {
+  position: absolute;
+  z-index: 1;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgb(0 0 0 / 62%);
+  color: #fff;
+  font-size: 13px;
 }
 
 .interaction-actions {

@@ -18,7 +18,8 @@ public interface VideoMapper extends BaseMapper<Video> {
 
     IPage<VideoListItemVO> selectPublishedPage(
             Page<VideoListItemVO> page,
-            @Param("categoryId") Long categoryId
+            @Param("categoryId") Long categoryId,
+            @Param("keyword") String keyword
     );
 
     int increaseViewCount(@Param("videoId") Long videoId);
@@ -48,7 +49,7 @@ public interface VideoMapper extends BaseMapper<Video> {
 
     int updateVideoById(Video video);
 
-    int deleteVideoById(Long videoId);
+    int deleteVideoById(@Param("videoId") Long videoId);
 
     int changeLikeCount(
             @Param("videoId") Long videoId,

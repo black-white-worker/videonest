@@ -176,6 +176,8 @@ function handlePageChange(page: number) {
 
 function getStatusText(status: CreatorVideo['status']) {
   const map = {
+    PROCESSING: '转码中',
+    PROCESS_FAILED: '转码失败',
     PENDING: '审核中',
     PUBLISHED: '已发布',
     REJECTED: '已驳回'
@@ -186,6 +188,8 @@ function getStatusText(status: CreatorVideo['status']) {
 
 function getStatusType(status: CreatorVideo['status']) {
   const map = {
+    PROCESSING: 'info',
+    PROCESS_FAILED: 'danger',
     PENDING: 'warning',
     PUBLISHED: 'success',
     REJECTED: 'danger'
@@ -449,7 +453,12 @@ onMounted(() => {
                 class="video-card"
               >
                 <div class="cover-box">
-                  <img :src="video.coverUrl" :alt="video.title" />
+                  <img
+                    v-if="video.coverUrl"
+                    :src="video.coverUrl"
+                    :alt="video.title"
+                  />
+                  <span v-else class="processing-cover">处理中</span>
 
                   <span class="duration">
                     {{ formatDuration(video.duration) }}
@@ -484,6 +493,14 @@ onMounted(() => {
                   >
                     <strong>驳回原因：</strong>
                     {{ video.rejectReason }}
+                  </div>
+
+                  <div
+                    v-if="video.status === 'PROCESS_FAILED' && video.processError"
+                    class="reject-reason"
+                  >
+                    <strong>转码失败：</strong>
+                    {{ video.processError }}
                   </div>
 
                   <div class="video-actions">
@@ -822,6 +839,15 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.processing-cover {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  color: #7a7f87;
+  font-size: 14px;
 }
 
 .duration {

@@ -7,6 +7,7 @@ import com.example.demo.module.video.mapper.VideoMapper;
 import com.example.demo.module.video.service.VideoService;
 import com.example.demo.module.video.vo.VideoListItemVO;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.BeanUtils;
 import com.example.demo.common.exception.BusinessException;
 import com.example.demo.module.video.vo.VideoDetailVO;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,6 +28,8 @@ import com.example.demo.module.video.dto.VideoUpdateRequest;
 import com.example.demo.module.video.service.HotRankService;
 import com.example.demo.infrastructure.redis.RedisKeys;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.context.ApplicationEventPublisher;
+import com.example.demo.module.video.event.VideoProcessEvent;
 
 import java.util.concurrent.TimeUnit;
 import java.util.Collections;
@@ -43,31 +46,39 @@ public class VideoServiceImpl implements VideoService {
     private final MinioService minioService;
     private final HotRankService hotRankService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     public VideoServiceImpl(
             VideoMapper videoMapper,
             VideoCategoryMapper videoCategoryMapper,
             MinioService minioService,
             HotRankService hotRankService,
-            RedisTemplate<String, Object> redisTemplate
+            RedisTemplate<String, Object> redisTemplate,
+            ApplicationEventPublisher applicationEventPublisher
     ) {
         this.videoMapper = videoMapper;
         this.videoCategoryMapper = videoCategoryMapper;
         this.minioService = minioService;
         this.hotRankService = hotRankService;
         this.redisTemplate = redisTemplate;
+        this.applicationEventPublisher = applicationEventPublisher;
     }
 
     @Override
     public PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId,
+            String keyword,
             long page,
             long size
     ) {
         Page<VideoListItemVO> pageRequest = new Page<>(page, size);
 
         IPage<VideoListItemVO> pageData =
-                videoMapper.selectPublishedPage(pageRequest, categoryId);
+                videoMapper.selectPublishedPage(
+                        pageRequest,
+                        categoryId,
+                        StringUtils.hasText(keyword) ? keyword.trim() : null
+                );
 
         pageData.getRecords().forEach(video -> {
             video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()));
@@ -121,17 +132,22 @@ public class VideoServiceImpl implements VideoService {
 
         // Redis 中缓存的是 MinIO 对象名，不能缓存临时访问 URL。
         // 每次返回前重新生成 URL，避免 URL 到期。
-        videoDetail.setCoverUrl(
-                minioService.getAccessUrl(videoDetail.getCoverUrl())
+        VideoDetailVO response = new VideoDetailVO();
+        BeanUtils.copyProperties(videoDetail, response);
+        response.setCoverUrl(
+                minioService.getAccessUrl(response.getCoverUrl())
         );
 
-        videoDetail.setVideoUrl(
-                minioService.getAccessUrl(videoDetail.getVideoUrl())
+        response.setVideoUrl(
+                minioService.getAccessUrl(response.getVideoUrl())
         );
+        response.setVideo480pUrl(minioService.getAccessUrl(response.getVideo480pUrl()));
+        response.setVideo720pUrl(minioService.getAccessUrl(response.getVideo720pUrl()));
+        response.setVideo1080pUrl(minioService.getAccessUrl(response.getVideo1080pUrl()));
 
         hotRankService.addPlayScore(videoId);
 
-        return videoDetail;
+        return response;
     }
     @Override
     public List<VideoListItemVO> listHotVideos(int limit) {
@@ -165,12 +181,13 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(400, "视频分区不存在或已停用");
         }
 
-        if (!request.getCoverObjectName().startsWith("cover/")) {
-            throw new BusinessException(400, "封面文件路径不合法");
-        }
-
         if (!request.getVideoObjectName().startsWith("video/")) {
             throw new BusinessException(400, "视频文件路径不合法");
+        }
+
+        if (StringUtils.hasText(request.getCoverObjectName())
+                && !request.getCoverObjectName().startsWith("cover/")) {
+            throw new BusinessException(400, "封面文件路径不合法");
         }
 
         Video video = new Video();
@@ -179,14 +196,19 @@ public class VideoServiceImpl implements VideoService {
         video.setTitle(request.getTitle());
         video.setDescription(request.getDescription());
         video.setCoverUrl(request.getCoverObjectName());
-        video.setVideoUrl(request.getVideoObjectName());
+        video.setVideoUrl(null);
+        video.setOriginalVideoUrl(request.getVideoObjectName());
         video.setDuration(request.getDuration());
-        video.setStatus("PENDING");
+        video.setStatus("PROCESSING");
         video.setViewCount(0L);
         video.setLikeCount(0L);
         video.setFavoriteCount(0L);
 
         videoMapper.insertCreatorVideo(video);
+
+        applicationEventPublisher.publishEvent(
+                new VideoProcessEvent(video.getId(), video.getOriginalVideoUrl())
+        );
 
         return new VideoCreateVO(video.getId(), video.getStatus(), video.getRejectReason());
     }
@@ -337,18 +359,22 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(400, "视频分区不存在或已停用");
         }
 
-        if (!request.getCoverObjectName().startsWith("cover/")) {
+        if (StringUtils.hasText(request.getCoverObjectName())
+                && !request.getCoverObjectName().startsWith("cover/")) {
             throw new BusinessException(400, "封面文件路径不合法");
         }
 
-        if (!request.getVideoObjectName().startsWith("video/")) {
+        if (StringUtils.hasText(request.getVideoObjectName())
+                && !request.getVideoObjectName().startsWith("video/")
+                && !request.getVideoObjectName().startsWith("processed/")) {
             throw new BusinessException(400, "视频文件路径不合法");
         }
     }
 
     private Video buildUpdatedVideo(
             Long videoId,
-            VideoUpdateRequest request
+            VideoUpdateRequest request,
+            Video existed
     ) {
         Video video = new Video();
 
@@ -360,9 +386,15 @@ public class VideoServiceImpl implements VideoService {
                         ? null
                         : request.getDescription().trim()
         );
-        video.setCoverUrl(request.getCoverObjectName());
-        video.setVideoUrl(request.getVideoObjectName());
-        video.setDuration(request.getDuration());
+        video.setCoverUrl(StringUtils.hasText(request.getCoverObjectName())
+                ? request.getCoverObjectName()
+                : existed.getCoverUrl());
+        video.setVideoUrl(StringUtils.hasText(request.getVideoObjectName())
+                ? request.getVideoObjectName()
+                : existed.getVideoUrl());
+        video.setDuration(request.getDuration() == null
+                ? existed.getDuration()
+                : request.getDuration());
 
         return video;
     }
@@ -387,7 +419,7 @@ public class VideoServiceImpl implements VideoService {
 
         validateVideoUpdateRequest(request);
 
-        Video video = buildUpdatedVideo(videoId, request);
+        Video video = buildUpdatedVideo(videoId, request, existed);
 
         int rows = videoMapper.updateVideoById(video);
 
@@ -438,7 +470,7 @@ public class VideoServiceImpl implements VideoService {
 
         validateVideoUpdateRequest(request);
 
-        Video video = buildUpdatedVideo(videoId, request);
+        Video video = buildUpdatedVideo(videoId, request, existed);
 
         int rows = videoMapper.updateVideoById(video);
 

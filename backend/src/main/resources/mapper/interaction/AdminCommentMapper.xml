@@ -4,11 +4,13 @@
     <select id="selectAdminCommentPage" resultType="com.example.demo.module.interaction.vo.AdminCommentVO">
         SELECT vc.id, vc.video_id AS videoId, v.title AS videoTitle,
                vc.user_id AS userId, u.username, u.nickname,
-               vc.parent_id AS parentId, vc.content, vc.created_at AS createdAt
+               vc.parent_id AS parentId, vc.content, vc.status,
+               vc.created_at AS createdAt, vc.deleted_at AS deletedAt
         FROM video_comment vc
         INNER JOIN sys_user u ON u.id = vc.user_id
         INNER JOIN video v ON v.id = vc.video_id
-        WHERE vc.status = 1
+        WHERE 1 = 1
+        <if test="status != null">AND vc.status = #{status}</if>
         <if test="videoId != null">AND vc.video_id = #{videoId}</if>
         <if test="keyword != null and keyword != ''">
             AND (vc.content LIKE CONCAT('%', #{keyword}, '%')

@@ -15,6 +15,7 @@ public class VideoComment {
     private Long parentId;
     private String content;
     private Integer status;
+    private LocalDateTime deletedAt;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 }

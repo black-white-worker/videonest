@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.PutMapping;
 
 @RestController
 @Validated
@@ -29,15 +30,22 @@ public class AdminCommentController {
             @RequestParam(defaultValue = "1") @Min(1) long page,
             @RequestParam(defaultValue = "20") @Min(1) @Max(100) long size,
             @RequestParam(required = false) @Min(1) Long videoId,
-            @RequestParam(required = false) String keyword
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) @Min(0) @Max(1) Integer status
     ) {
         return ApiResponse.success(
-                adminCommentService.listComments(page, size, videoId, keyword));
+                adminCommentService.listComments(page, size, videoId, keyword, status));
     }
 
     @DeleteMapping("/{commentId}")
     public ApiResponse<Void> delete(@PathVariable @Min(1) Long commentId) {
         adminCommentService.deleteComment(commentId);
+        return ApiResponse.success();
+    }
+
+    @PutMapping("/{commentId}/restore")
+    public ApiResponse<Void> restore(@PathVariable @Min(1) Long commentId) {
+        adminCommentService.restoreComment(commentId);
         return ApiResponse.success();
     }
 }

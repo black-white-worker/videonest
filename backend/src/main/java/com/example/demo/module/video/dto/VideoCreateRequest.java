@@ -20,7 +20,6 @@ public class VideoCreateRequest {
     @Size(max = 2000, message = "视频简介不能超过 2000 个字符")
     private String description;
 
-    @NotBlank(message = "请上传视频封面")
     private String coverObjectName;
 
     @NotBlank(message = "请上传视频文件")

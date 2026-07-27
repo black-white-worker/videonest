@@ -114,9 +114,11 @@ CREATE TABLE video_comment (
     parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '0代表一级评论',
     content VARCHAR(500) NOT NULL,
     status TINYINT NOT NULL DEFAULT 1 COMMENT '1正常，0已删除',
+    deleted_at DATETIME NULL COMMENT '软删除时间，NULL表示未删除',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_video_created (video_id, created_at),
+    KEY idx_comment_deleted_at (deleted_at),
     KEY idx_parent_id (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
@@ -141,3 +143,14 @@ CREATE TABLE user_follow (
     KEY idx_followee_created (followee_id, created_at),
     KEY idx_follower_created (follower_id, created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户关注关系表';
+
+ALTER TABLE video
+    ADD COLUMN original_video_url VARCHAR(500) NULL COMMENT '用户上传的原始视频对象名' AFTER video_url,
+    ADD COLUMN video_480p_url VARCHAR(500) NULL COMMENT '480P 视频对象名' AFTER original_video_url,
+    ADD COLUMN video_720p_url VARCHAR(500) NULL COMMENT '720P 视频对象名' AFTER video_480p_url,
+    ADD COLUMN video_1080p_url VARCHAR(500) NULL COMMENT '1080P 视频对象名' AFTER video_720p_url,
+    ADD COLUMN process_error VARCHAR(1000) NULL COMMENT '转码失败原因' AFTER reject_reason;
+
+
+
+

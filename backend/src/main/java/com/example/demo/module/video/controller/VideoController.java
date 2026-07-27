@@ -7,6 +7,7 @@ import com.example.demo.module.video.vo.VideoDetailVO;
 import com.example.demo.module.video.vo.VideoListItemVO;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,6 +28,9 @@ public class VideoController {
     public ApiResponse<PageResult<VideoListItemVO>> list(
             @RequestParam(required = false) Long categoryId,
 
+            @RequestParam(required = false)
+            @Size(max = 100, message = "搜索关键词不能超过 100 个字符") String keyword,
+
             @RequestParam(defaultValue = "1")
             @Min(value = 1, message = "页码不能小于 1")
             long page,
@@ -37,7 +41,7 @@ public class VideoController {
             long size
     ) {
         return ApiResponse.success(
-                videoService.listPublishedVideos(categoryId, page, size)
+                videoService.listPublishedVideos(categoryId, keyword, page, size)
         );
     }
 

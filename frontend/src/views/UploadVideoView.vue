@@ -19,6 +19,7 @@ const form = reactive({
   title: '',
   description: '',
   categoryId: undefined as number | undefined,
+  // 后端自动截帧生成封面；仅保留该字段兼容尚未刷新的旧页面结构。
   coverObjectName: '',
   videoObjectName: '',
   duration: 0
@@ -212,7 +213,7 @@ async function submit() {
     })
 
     ElMessage.success('投稿已提交，等待管理员审核')
-    router.push('/')
+    router.push('/profile')
   } catch (error) {
     ElMessage.error(
       error instanceof Error ? error.message : '投稿提交失败'
@@ -453,6 +454,11 @@ onBeforeUnmount(() => {
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   margin: 8px 0 30px;
+}
+
+/* 封面由后端 FFmpeg 自动截帧，投稿页不再要求用户手动上传。 */
+.file-field:first-child {
+  display: block;
 }
 
 .file-field > label:first-child {

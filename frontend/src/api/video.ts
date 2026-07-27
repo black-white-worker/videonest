@@ -29,6 +29,9 @@ export interface VideoDetail {
   description: string
   coverUrl: string
   videoUrl: string
+  video480pUrl?: string
+  video720pUrl?: string
+  video1080pUrl?: string
   duration: number
   viewCount: number
   likeCount: number
@@ -59,6 +62,7 @@ export async function getCategories(): Promise<VideoCategory[]> {
 
 export async function getVideoList(params: {
   categoryId?: number
+  keyword?: string
   page: number
   size: number
 }): Promise<PageResult<VideoListItem>> {

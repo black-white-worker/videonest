@@ -13,6 +13,7 @@ public interface VideoService {
 
     PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId,
+            String keyword,
             long page,
             long size
     );

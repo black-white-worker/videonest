@@ -9,7 +9,7 @@ export interface CreateVideoRequest {
   categoryId: number
   title: string
   description: string
-  coverObjectName: string
+  coverObjectName?: string
   videoObjectName: string
   duration: number
 }
@@ -28,10 +28,6 @@ async function uploadFile(url: string, file: File): Promise<string> {
   return response.data.data.objectName
 }
 
-export function uploadCover(file: File): Promise<string> {
-  return uploadFile('/files/cover', file)
-}
-
 export function uploadVideo(file: File): Promise<string> {
   return uploadFile('/files/video', file)
 }
@@ -45,4 +41,8 @@ export async function createVideo(
   )
 
   return response.data.data
+}
+
+export function uploadCover(file: File): Promise<string> {
+  return uploadFile('/files/cover', file)
 }

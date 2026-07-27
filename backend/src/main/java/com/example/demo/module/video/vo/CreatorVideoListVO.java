@@ -23,6 +23,8 @@ public class CreatorVideoListVO {
 
     private String rejectReason;
 
+    private String processError;
+
     private LocalDateTime publishTime;
 
     private LocalDateTime createTime;

@@ -26,8 +26,9 @@ export interface CreatorVideo {
   videoObjectName: string
 
   duration: number
-  status: 'PENDING' | 'PUBLISHED' | 'REJECTED'
+  status: 'PROCESSING' | 'PROCESS_FAILED' | 'PENDING' | 'PUBLISHED' | 'REJECTED'
   rejectReason?: string
+  processError?: string
   publishTime?: string
   createTime: string
   viewCount: number
