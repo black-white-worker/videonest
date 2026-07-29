@@ -1,15 +1,17 @@
 server:
-  port: 8080
+  port: ${SERVER_PORT:8080}
 
 spring:
   application:
     name: videonest-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/videonest?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: Java666
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:videonest}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
 
   jackson:
     time-zone: Asia/Shanghai
@@ -22,11 +24,11 @@ spring:
 
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      username: default
-      password: videonest_redis_2026
-      database: 0
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      username: ${REDIS_USERNAME:default}
+      password: ${REDIS_PASSWORD}
+      database: ${REDIS_DATABASE:0}
       timeout: 3000ms
       lettuce:
         pool:
@@ -36,35 +38,60 @@ spring:
           max-wait: -1ms
 
   rabbitmq:
-    host: 127.0.0.1
-    port: 5672
-    username: videonest
-    password: videonest_rabbit_2026
-    virtual-host: /
+    host: ${RABBITMQ_HOST:127.0.0.1}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME}
+    password: ${RABBITMQ_PASSWORD}
+    virtual-host: ${RABBITMQ_VHOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
         acknowledge-mode: auto
+        default-requeue-rejected: false
+        prefetch: 1
         retry:
           enabled: true
           initial-interval: 1000ms
           max-attempts: 3
+          multiplier: 2
+          max-interval: 5000ms
 
 mybatis-plus:
   mapper-locations: classpath:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
 
 jwt:
-  secret: VHVD2026VideoNestSecretKeyMustBeLongEnough123456789abcdefghijk
-  expire-minutes: 1440
+  secret: ${JWT_SECRET}
+  expire-minutes: ${JWT_EXPIRE_MINUTES:1440}
 
 minio:
-  endpoint: http://127.0.0.1:9000
-  access-key: minioadmin
-  secret-key: minioadmin
-  bucket-name: videonest
+  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+  public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://127.0.0.1:9000}}
+  region: ${MINIO_REGION:us-east-1}
+  access-key: ${MINIO_ACCESS_KEY}
+  secret-key: ${MINIO_SECRET_KEY}
+  bucket-name: ${MINIO_BUCKET:videonest}
 
 video-process:
-  ffmpeg-path: S:/ffmpeg-8.1.2-essentials_build/bin/ffmpeg.exe
-  timeout-seconds: 1800
+  ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
+  timeout-seconds: ${VIDEO_PROCESS_TIMEOUT_SECONDS:1800}
+
+video-view-count:
+  flush-delay-milliseconds: ${VIDEO_VIEW_COUNT_FLUSH_DELAY_MILLISECONDS:10000}
+  batch-size: ${VIDEO_VIEW_COUNT_BATCH_SIZE:200}
+  redis-ttl-seconds: ${VIDEO_VIEW_COUNT_REDIS_TTL_SECONDS:604800}
+
+video-review:
+  timeout-milliseconds: ${VIDEO_REVIEW_TIMEOUT_MILLISECONDS:86400000}
+
+resource-cleanup:
+  retention-days: ${RESOURCE_RETENTION_DAYS:7}
+  fixed-delay-milliseconds: ${RESOURCE_CLEANUP_FIXED_DELAY_MILLISECONDS:3600000}
+  batch-size: ${RESOURCE_CLEANUP_BATCH_SIZE:20}
+
+logging:
+  level:
+    root: INFO
+    com.example.demo: ${APP_LOG_LEVEL:INFO}

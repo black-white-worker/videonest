@@ -30,14 +30,24 @@ import com.example.demo.infrastructure.redis.RedisKeys;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.context.ApplicationEventPublisher;
 import com.example.demo.module.video.event.VideoProcessEvent;
+import com.example.demo.module.video.event.ResourcePurgeDomainEvent;
+import com.example.demo.module.video.event.ResourcePurgeEvent;
+import com.example.demo.module.video.config.ResourceCleanupProperties;
+import com.example.demo.module.notification.event.NotificationDomainEvent;
+import com.example.demo.module.notification.event.NotificationEvent;
+import lombok.extern.slf4j.Slf4j;
 
+import java.time.LocalDateTime;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @Service
+@Slf4j
 public class VideoServiceImpl implements VideoService {
 
     private final VideoMapper videoMapper;
@@ -45,23 +55,29 @@ public class VideoServiceImpl implements VideoService {
     private final VideoCategoryMapper videoCategoryMapper;
     private final MinioService minioService;
     private final HotRankService hotRankService;
+    private final VideoViewCountService videoViewCountService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final ResourceCleanupProperties resourceCleanupProperties;
 
     public VideoServiceImpl(
             VideoMapper videoMapper,
             VideoCategoryMapper videoCategoryMapper,
             MinioService minioService,
             HotRankService hotRankService,
+            VideoViewCountService videoViewCountService,
             RedisTemplate<String, Object> redisTemplate,
-            ApplicationEventPublisher applicationEventPublisher
+            ApplicationEventPublisher applicationEventPublisher,
+            ResourceCleanupProperties resourceCleanupProperties
     ) {
         this.videoMapper = videoMapper;
         this.videoCategoryMapper = videoCategoryMapper;
         this.minioService = minioService;
         this.hotRankService = hotRankService;
+        this.videoViewCountService = videoViewCountService;
         this.redisTemplate = redisTemplate;
         this.applicationEventPublisher = applicationEventPublisher;
+        this.resourceCleanupProperties = resourceCleanupProperties;
     }
 
     @Override
@@ -88,14 +104,7 @@ public class VideoServiceImpl implements VideoService {
     }
 
     @Override
-    @Transactional
     public VideoDetailVO getPublishedVideoDetail(Long videoId) {
-        int affectedRows = videoMapper.increaseViewCount(videoId);
-
-        if (affectedRows == 0) {
-            throw new BusinessException(404, "视频不存在、未发布或已下架");
-        }
-
         String cacheKey = RedisKeys.videoDetail(videoId);
 
         Object cachedValue = redisTemplate.opsForValue().get(cacheKey);
@@ -104,16 +113,6 @@ public class VideoServiceImpl implements VideoService {
 
         if (cachedValue instanceof VideoDetailVO cachedDetail) {
             videoDetail = cachedDetail;
-
-            // 当前访问也会增加播放量，因此同步更新缓存中的播放量。
-            videoDetail.setViewCount(videoDetail.getViewCount() + 1);
-
-            redisTemplate.opsForValue().set(
-                    cacheKey,
-                    videoDetail,
-                    30,
-                    TimeUnit.MINUTES
-            );
         } else {
             // 缓存未命中：查询 MySQL，并写入 Redis。
             videoDetail = videoMapper.selectPublishedDetailById(videoId);
@@ -132,8 +131,23 @@ public class VideoServiceImpl implements VideoService {
 
         // Redis 中缓存的是 MinIO 对象名，不能缓存临时访问 URL。
         // 每次返回前重新生成 URL，避免 URL 到期。
+        if (populateVideoObjectSizes(videoDetail)) {
+            redisTemplate.opsForValue().set(
+                    cacheKey,
+                    videoDetail,
+                    30,
+                    TimeUnit.MINUTES
+            );
+        }
+
         VideoDetailVO response = new VideoDetailVO();
         BeanUtils.copyProperties(videoDetail, response);
+        long persistedViewCount = videoDetail.getViewCount() == null
+                ? 0L
+                : videoDetail.getViewCount();
+        response.setViewCount(
+                videoViewCountService.recordView(videoId, persistedViewCount)
+        );
         response.setCoverUrl(
                 minioService.getAccessUrl(response.getCoverUrl())
         );
@@ -149,6 +163,49 @@ public class VideoServiceImpl implements VideoService {
 
         return response;
     }
+
+    private boolean populateVideoObjectSizes(VideoDetailVO videoDetail) {
+        boolean changed = false;
+
+        if (videoDetail.getVideo480pSizeBytes() == null
+                && StringUtils.hasText(videoDetail.getVideo480pUrl())) {
+            videoDetail.setVideo480pSizeBytes(
+                    getObjectSizeSafely(videoDetail.getVideo480pUrl())
+            );
+            changed = videoDetail.getVideo480pSizeBytes() != null;
+        }
+
+        String video720pObjectName = StringUtils.hasText(videoDetail.getVideo720pUrl())
+                ? videoDetail.getVideo720pUrl()
+                : videoDetail.getVideoUrl();
+        if (videoDetail.getVideo720pSizeBytes() == null
+                && StringUtils.hasText(video720pObjectName)) {
+            videoDetail.setVideo720pSizeBytes(
+                    getObjectSizeSafely(video720pObjectName)
+            );
+            changed = changed || videoDetail.getVideo720pSizeBytes() != null;
+        }
+
+        if (videoDetail.getVideo1080pSizeBytes() == null
+                && StringUtils.hasText(videoDetail.getVideo1080pUrl())) {
+            videoDetail.setVideo1080pSizeBytes(
+                    getObjectSizeSafely(videoDetail.getVideo1080pUrl())
+            );
+            changed = changed || videoDetail.getVideo1080pSizeBytes() != null;
+        }
+
+        return changed;
+    }
+
+    private Long getObjectSizeSafely(String objectName) {
+        try {
+            return minioService.getObjectSize(objectName);
+        } catch (RuntimeException e) {
+            log.warn("获取视频对象大小失败，objectName={}", objectName, e);
+            return null;
+        }
+    }
+
     @Override
     public List<VideoListItemVO> listHotVideos(int limit) {
         List<Long> videoIds = hotRankService.getTopVideoIds(limit);
@@ -209,6 +266,12 @@ public class VideoServiceImpl implements VideoService {
         applicationEventPublisher.publishEvent(
                 new VideoProcessEvent(video.getId(), video.getOriginalVideoUrl())
         );
+        log.info(
+                "用户投稿创建成功，videoId={}，authorId={}，status={}",
+                video.getId(),
+                currentUser.userId(),
+                video.getStatus()
+        );
 
         return new VideoCreateVO(video.getId(), video.getStatus(), video.getRejectReason());
     }
@@ -243,6 +306,7 @@ public class VideoServiceImpl implements VideoService {
             String action,
             String rejectReason
     ) {
+        Video reviewedVideo = videoMapper.selectById(videoId);
         String status;
         String finalRejectReason = null;
 
@@ -276,6 +340,34 @@ public class VideoServiceImpl implements VideoService {
             );
 
         }
+        if ("REJECTED".equals(status)) {
+            LoginUser admin = SecurityUtils.getCurrentUser();
+            applicationEventPublisher.publishEvent(
+                    new NotificationDomainEvent(
+                            new NotificationEvent(
+                                    UUID.randomUUID().toString(),
+                                    reviewedVideo.getAuthorId(),
+                                    admin.userId(),
+                                    "VIDEO_REJECTED",
+                                    videoId,
+                                    null,
+                                    finalRejectReason
+                            )
+                    )
+            );
+            log.info(
+                    "视频驳回通知事件发布成功，videoId={}，authorId={}，adminId={}",
+                    videoId,
+                    reviewedVideo.getAuthorId(),
+                    admin.userId()
+            );
+        }
+        log.info(
+                "管理员审核视频成功，videoId={}，action={}，status={}",
+                videoId,
+                action,
+                status
+        );
     }
 
     @Override
@@ -450,6 +542,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        log.info("创作者更新视频成功，videoId={}，userId={}", videoId, currentUser.userId());
 
     }
 
@@ -468,13 +561,27 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(403, "无权删除其他用户的视频");
         }
 
-        int rows = videoMapper.deleteVideoById(videoId);
+        LocalDateTime purgeAfter = LocalDateTime.now().plusDays(
+                resourceCleanupProperties.getRetentionDays()
+        );
+        int rows = videoMapper.softDeleteVideo(
+                videoId,
+                currentUser.userId(),
+                purgeAfter
+        );
 
         if (rows == 0) {
             throw new BusinessException(400, "视频删除失败");
         }
 
         deleteVideoDetailCache(videoId);
+        publishResourcePurgeEvent(videoId, purgeAfter);
+        log.info(
+                "创作者视频已移入回收站，videoId={}，userId={}，purgeAfter={}",
+                videoId,
+                currentUser.userId(),
+                purgeAfter
+        );
 
     }
 
@@ -501,6 +608,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        log.info("管理员更新视频成功，videoId={}", videoId);
 
     }
 
@@ -513,18 +621,45 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(404, "视频不存在");
         }
 
-        int rows = videoMapper.deleteVideoById(videoId);
+        Long adminId = SecurityUtils.getCurrentUser().userId();
+        LocalDateTime purgeAfter = LocalDateTime.now().plusDays(
+                resourceCleanupProperties.getRetentionDays()
+        );
+        int rows = videoMapper.softDeleteVideo(videoId, adminId, purgeAfter);
 
         if (rows == 0) {
             throw new BusinessException(400, "视频删除失败");
         }
 
         deleteVideoDetailCache(videoId);
+        publishResourcePurgeEvent(videoId, purgeAfter);
+        log.info(
+                "管理员视频已移入回收站，videoId={}，adminId={}，purgeAfter={}",
+                videoId,
+                adminId,
+                purgeAfter
+        );
 
     }
 
     private void deleteVideoDetailCache(Long videoId) {
         redisTemplate.delete(RedisKeys.videoDetail(videoId));
+    }
+
+    private void publishResourcePurgeEvent(
+            Long videoId,
+            LocalDateTime purgeAfter
+    ) {
+        long delayMilliseconds = Math.max(
+                Duration.between(LocalDateTime.now(), purgeAfter).toMillis(),
+                0
+        );
+        applicationEventPublisher.publishEvent(
+                new ResourcePurgeDomainEvent(
+                        new ResourcePurgeEvent(videoId),
+                        delayMilliseconds
+                )
+        );
     }
 
 }

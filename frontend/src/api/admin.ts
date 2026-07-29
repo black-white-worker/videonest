@@ -17,6 +17,8 @@ export interface AdminVideoReview {
   categoryId: number
   categoryName: string
   rejectReason?: string
+  reviewDeadline?: string
+  reviewTimeoutNotified?: number
   coverObjectName: string
   videoObjectName: string
 }
@@ -77,6 +79,68 @@ export async function updateAdminVideo(
 
 export async function deleteAdminVideo(videoId: number): Promise<void> {
   await request.delete(`/admin/videos/${videoId}`)
+}
+
+export interface DeletedVideo {
+  id: number
+  title: string
+  authorId: number
+  authorNickname: string
+  coverUrl?: string
+  status: string
+  deletedAt: string
+  deletedBy: number
+  purgeAfter: string
+  purgeAttempts: number
+  purgeError?: string
+}
+
+export async function getDeletedVideos(params: {
+  page: number
+  size: number
+}): Promise<PageResult<DeletedVideo>> {
+  const response = await request.get<ApiResponse<PageResult<DeletedVideo>>>(
+    '/admin/videos/deleted',
+    { params }
+  )
+  return response.data.data
+}
+
+export async function purgeDeletedVideo(videoId: number): Promise<void> {
+  await request.delete(`/admin/videos/${videoId}/purge`)
+}
+
+export interface DeadLetterRecord {
+  id: number
+  queueName: string
+  messageType: 'VIDEO_PROCESS' | 'NOTIFICATION' | 'REVIEW_TIMEOUT' | 'RESOURCE_PURGE'
+  businessId?: string
+  payload: string
+  failureReason?: string
+  status: 'PENDING' | 'RETRIED' | 'IGNORED'
+  operatorId?: number
+  handledAt?: string
+  createTime: string
+}
+
+export async function getDeadLetters(params: {
+  page: number
+  size: number
+  status?: string
+}): Promise<PageResult<DeadLetterRecord>> {
+  const response = await request.get<ApiResponse<PageResult<DeadLetterRecord>>>(
+    '/admin/dead-letters',
+    { params }
+  )
+  return response.data.data
+}
+
+export async function retryDeadLetter(id: number): Promise<void> {
+  await request.post(`/admin/dead-letters/${id}/retry`)
+}
+
+export async function ignoreDeadLetter(id: number): Promise<void> {
+  await request.put(`/admin/dead-letters/${id}/ignore`)
 }
 
 export interface AdminComment {

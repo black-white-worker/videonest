@@ -12,12 +12,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 
 @Component
+@Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -103,17 +105,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     .getContext()
                     .setAuthentication(authentication);
 
-            System.out.println(
-                    "JWT认证成功："
-                            + username
-                            + ", role="
-                            + role
+            log.debug(
+                    "JWT 认证成功，userId={}，username={}，role={}",
+                    userId,
+                    username,
+                    role
             );
 
             filterChain.doFilter(request, response);
 
         } catch (JwtException | IllegalArgumentException e) {
-            System.out.println("JWT解析失败：" + e.getMessage());
+            log.warn(
+                    "JWT 解析失败，uri={}，reason={}",
+                    request.getRequestURI(),
+                    e.getMessage()
+            );
 
             SecurityContextHolder.clearContext();
 

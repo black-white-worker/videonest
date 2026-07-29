@@ -23,6 +23,12 @@ public class VideoDetailVO {
 
     private String video1080pUrl;
 
+    private Long video480pSizeBytes;
+
+    private Long video720pSizeBytes;
+
+    private Long video1080pSizeBytes;
+
     private Integer duration;
 
     private Long viewCount;

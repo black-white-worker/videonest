@@ -1,0 +1,16 @@
+spring:
+  config:
+    import:
+      - optional:file:.env[.properties]
+      - optional:file:../.env[.properties]
+
+jwt:
+  secret: ${JWT_SECRET:${random.uuid}${random.uuid}}
+
+mybatis-plus:
+  configuration:
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+logging:
+  level:
+    com.example.demo: DEBUG

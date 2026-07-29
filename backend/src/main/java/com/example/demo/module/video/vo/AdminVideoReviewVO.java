@@ -35,5 +35,8 @@ public class AdminVideoReviewVO {
 
     private String rejectReason;
 
+    private LocalDateTime reviewDeadline;
+
+    private Integer reviewTimeoutNotified;
 
 }

@@ -8,19 +8,25 @@ import com.example.demo.module.interaction.mapper.VideoFavoriteMapper;
 import com.example.demo.module.interaction.mapper.VideoLikeMapper;
 import com.example.demo.module.interaction.service.InteractionService;
 import com.example.demo.module.interaction.vo.InteractionStatusVO;
+import com.example.demo.module.notification.event.NotificationDomainEvent;
+import com.example.demo.module.notification.event.NotificationEvent;
 import com.example.demo.module.video.entity.Video;
 import com.example.demo.module.video.mapper.VideoMapper;
 import com.example.demo.module.video.service.HotRankService;
 import com.example.demo.module.video.vo.VideoDetailVO;
 import com.example.demo.security.LoginUser;
 import com.example.demo.security.SecurityUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.concurrent.TimeUnit;
+import java.util.UUID;
 
 @Service
+@Slf4j
 public class InteractionServiceImpl implements InteractionService {
 
     private final VideoMapper videoMapper;
@@ -28,19 +34,22 @@ public class InteractionServiceImpl implements InteractionService {
     private final VideoFavoriteMapper videoFavoriteMapper;
     private final HotRankService hotRankService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ApplicationEventPublisher eventPublisher;
 
     public InteractionServiceImpl(
             VideoMapper videoMapper,
             VideoLikeMapper videoLikeMapper,
             VideoFavoriteMapper videoFavoriteMapper,
             HotRankService hotRankService,
-            RedisTemplate<String, Object> redisTemplate
+            RedisTemplate<String, Object> redisTemplate,
+            ApplicationEventPublisher eventPublisher
     ) {
         this.videoMapper = videoMapper;
         this.videoLikeMapper = videoLikeMapper;
         this.videoFavoriteMapper = videoFavoriteMapper;
         this.hotRankService = hotRankService;
         this.redisTemplate = redisTemplate;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -99,6 +108,8 @@ public class InteractionServiceImpl implements InteractionService {
 
         updateDetailLikeCount(videoId, video.getLikeCount());
         hotRankService.addLikeScore(videoId);
+        publishNotification(video, currentUser.userId(), "LIKE", "点赞了你的视频");
+        log.info("视频点赞成功，videoId={}，userId={}", videoId, currentUser.userId());
     }
 
     @Override
@@ -128,6 +139,7 @@ public class InteractionServiceImpl implements InteractionService {
         );
 
         updateDetailLikeCount(videoId, video.getLikeCount());
+        log.info("取消视频点赞成功，videoId={}，userId={}", videoId, currentUser.userId());
     }
 
     @Override
@@ -160,6 +172,8 @@ public class InteractionServiceImpl implements InteractionService {
 
         updateDetailFavoriteCount(videoId, video.getFavoriteCount());
         hotRankService.addFavoriteScore(videoId);
+        publishNotification(video, currentUser.userId(), "FAVORITE", "收藏了你的视频");
+        log.info("视频收藏成功，videoId={}，userId={}", videoId, currentUser.userId());
     }
 
     @Override
@@ -189,6 +203,7 @@ public class InteractionServiceImpl implements InteractionService {
         );
 
         updateDetailFavoriteCount(videoId, video.getFavoriteCount());
+        log.info("取消视频收藏成功，videoId={}，userId={}", videoId, currentUser.userId());
     }
 
     private Video getPublishedVideo(Long videoId) {
@@ -339,5 +354,26 @@ public class InteractionServiceImpl implements InteractionService {
                     TimeUnit.MINUTES
             );
         }
+    }
+
+    private void publishNotification(
+            Video video,
+            Long actorId,
+            String type,
+            String content
+    ) {
+        eventPublisher.publishEvent(
+                new NotificationDomainEvent(
+                        new NotificationEvent(
+                                UUID.randomUUID().toString(),
+                                video.getAuthorId(),
+                                actorId,
+                                type,
+                                video.getId(),
+                                null,
+                                content
+                        )
+                )
+        );
     }
 }

@@ -25,8 +25,10 @@ import java.util.concurrent.TimeUnit;
 
 import com.example.demo.module.notification.event.NotificationDomainEvent;
 import com.example.demo.module.notification.event.NotificationEvent;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class FollowServiceImpl implements FollowService {
 
     private final UserFollowMapper userFollowMapper;
@@ -73,6 +75,7 @@ public class FollowServiceImpl implements FollowService {
                         )
                 )
         );
+        log.info("关注用户成功，followerId={}，followeeId={}", followerId, followeeId);
     }
 
     @Override
@@ -82,6 +85,7 @@ public class FollowServiceImpl implements FollowService {
         int rows = userFollowMapper.deleteByFollowerIdAndFolloweeId(followerId, followeeId);
         if (rows > 0) {
             refreshStatusCache(followerId, followeeId, false);
+            log.info("取消关注成功，followerId={}，followeeId={}", followerId, followeeId);
         }
     }
 

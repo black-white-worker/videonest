@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCategories, getHotVideos, getVideoList, type VideoCategory, type VideoListItem } from '../api/video'
 import { getUnreadNotificationCount } from '../api/notification'
+import SiteHeader from '../components/SiteHeader.vue'
 
 const router = useRouter()
 const categories = ref<VideoCategory[]>([])
@@ -23,6 +24,15 @@ const user = computed(() => {
     const value = localStorage.getItem('userInfo')
     return value ? JSON.parse(value) as { nickname: string; role: 'USER' | 'ADMIN' } : null
   } catch { return null }
+})
+
+const featuredVideo = computed(() => videos.value[0] || null)
+const userInitial = computed(() => user.value?.nickname?.slice(0, 1).toUpperCase() || '我')
+const sectionTitle = computed(() => {
+  if (keyword.value.trim()) return `“${keyword.value.trim()}”的搜索结果`
+  if (isHotMode.value) return '全站热门'
+  if (selectedCategoryId.value === undefined) return '为你推荐'
+  return categories.value.find(item => item.id === selectedCategoryId.value)?.name || '分区视频'
 })
 
 async function loadCategories() {
@@ -62,53 +72,711 @@ function formatNumber(value: number) { return value >= 10000 ? `${(value / 10000
 function formatDate(value: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '' }
 function logout() { localStorage.removeItem('token'); localStorage.removeItem('userInfo'); ElMessage.success('已退出登录'); router.push('/login') }
 function goVideoDetail(videoId: number) { router.push(`/video/${videoId}`) }
+function handleUserCommand(command: string) {
+  if (command === 'logout') {
+    logout()
+    return
+  }
+  router.push(command)
+}
 async function loadUnreadNotificationCount() { if (!localStorage.getItem('token')) return; try { unreadNotificationCount.value = await getUnreadNotificationCount() } catch { unreadNotificationCount.value = 0 } }
 onMounted(async () => { await loadCategories(); await loadVideos(); await loadUnreadNotificationCount() })
 </script>
 
 <template>
   <main class="home-page">
-    <header class="header"><div class="header-content">
-      <div class="logo" @click="selectCategory()"><span class="logo-icon">▶</span><span>VideoNest</span></div>
-      <div class="search-box"><el-input v-model="keyword" clearable placeholder="搜索视频标题" @keyup.enter="searchVideos" @clear="searchVideos"><template #append><el-button @click="searchVideos">搜索</el-button></template></el-input></div>
-      <div v-if="user" class="user-area">
-        <el-badge :value="unreadNotificationCount" :hidden="unreadNotificationCount === 0" :max="99"><el-button size="small" @click="router.push('/notifications')">通知</el-button></el-badge>
-        <span class="nickname">{{ user.nickname }} <small>{{ user.role === 'ADMIN' ? '管理员' : '用户' }}</small></span>
-        <el-button type="primary" plain size="small" @click="router.push('/profile')">个人主页</el-button>
-        <el-button type="primary" plain size="small" @click="router.push('/upload')">投稿</el-button>
-        <el-button v-if="user.role === 'ADMIN'" type="warning" plain size="small" @click="router.push('/admin/review')">审核投稿</el-button>
-        <el-button type="danger" plain size="small" @click="logout">退出登录</el-button>
-      </div>
-      <el-button v-else type="primary" @click="router.push('/login')">登录 / 注册</el-button>
-    </div></header>
+    <SiteHeader>
+      <template #nav>
+        <button class="site-nav-link" @click="selectCategory()">首页</button>
+        <button class="site-nav-link" @click="selectHotVideos">热门</button>
+        <button v-if="user" class="site-nav-link" @click="router.push('/profile')">动态</button>
+      </template>
 
-    <section class="category-section"><div class="container"><el-skeleton :loading="categoryLoading" animated><template #default><div class="categories">
-      <button class="category-button" :class="{ active: selectedCategoryId === undefined && !isHotMode && !keyword.trim() }" @click="selectCategory()">全部</button>
-      <button v-for="category in categories" :key="category.id" class="category-button" :class="{ active: selectedCategoryId === category.id && !keyword.trim() }" @click="selectCategory(category.id)">{{ category.name }}</button>
-      <button class="category-button" :class="{ active: isHotMode }" @click="selectHotVideos">热门</button>
-    </div></template></el-skeleton></div></section>
+      <template #search>
+        <el-input
+          v-model="keyword"
+          class="top-search"
+          clearable
+          placeholder="搜索你感兴趣的视频"
+          @keyup.enter="searchVideos"
+          @clear="searchVideos"
+        >
+          <template #append>
+            <el-button aria-label="搜索" @click="searchVideos">搜索</el-button>
+          </template>
+        </el-input>
+      </template>
+
+      <template #actions>
+        <template v-if="user">
+          <el-badge
+            :value="unreadNotificationCount"
+            :hidden="unreadNotificationCount === 0"
+            :max="99"
+          >
+            <button class="header-action" @click="router.push('/notifications')">
+              <span class="header-action__icon">消息</span>
+              <small>通知</small>
+            </button>
+          </el-badge>
+          <el-dropdown trigger="click" @command="handleUserCommand">
+            <button class="user-trigger">
+              <span class="user-avatar">{{ userInitial }}</span>
+              <span class="user-name">{{ user.nickname }}</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="/profile">个人中心</el-dropdown-item>
+                <el-dropdown-item command="/upload">创作中心</el-dropdown-item>
+                <el-dropdown-item v-if="user.role === 'ADMIN'" command="/admin/review">
+                  管理后台
+                </el-dropdown-item>
+                <el-dropdown-item divided command="logout">退出登录</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button class="upload-button" type="primary" @click="router.push('/upload')">
+            + 投稿
+          </el-button>
+        </template>
+        <el-button v-else type="primary" round @click="router.push('/login')">
+          登录
+        </el-button>
+      </template>
+    </SiteHeader>
+
+    <section
+      class="hero"
+      :class="{ 'has-cover': featuredVideo }"
+      :style="featuredVideo ? { '--hero-cover': `url(${featuredVideo.coverUrl})` } : undefined"
+    >
+      <div class="hero__veil" />
+      <div class="container hero__content">
+        <div class="hero__copy">
+          <span class="hero__eyebrow">VIDEONEST · 每天发现好内容</span>
+          <template v-if="featuredVideo">
+            <h1>{{ featuredVideo.title }}</h1>
+            <p>
+              {{ featuredVideo.authorNickname }} · {{ featuredVideo.categoryName }}
+              · {{ formatNumber(featuredVideo.viewCount) }} 次播放
+            </p>
+            <div class="hero__actions">
+              <el-button type="primary" size="large" @click="goVideoDetail(featuredVideo.id)">
+                立即观看
+              </el-button>
+              <el-button size="large" @click="selectHotVideos">浏览热门</el-button>
+            </div>
+          </template>
+          <template v-else>
+            <h1>让每一次创作，都被看见</h1>
+            <p>发现视频、分享灵感，和感兴趣的人一起交流。</p>
+          </template>
+        </div>
+        <div class="hero__side-note">
+          <span>今日推荐</span>
+          <strong>{{ total }}</strong>
+          <small>个正在被发现的视频</small>
+        </div>
+      </div>
+    </section>
+
+    <section class="channel-bar">
+      <div class="container channel-bar__inner">
+        <div class="channel-entry">
+          <button
+            class="channel-orb"
+            :class="{ active: selectedCategoryId === undefined && !isHotMode && !keyword.trim() }"
+            @click="selectCategory()"
+          >
+            <strong>首</strong>
+            <span>推荐</span>
+          </button>
+          <button class="channel-orb hot" :class="{ active: isHotMode }" @click="selectHotVideos">
+            <strong>热</strong>
+            <span>热门</span>
+          </button>
+        </div>
+        <el-skeleton :loading="categoryLoading" animated>
+          <template #default>
+            <div class="categories">
+              <button
+                v-for="category in categories"
+                :key="category.id"
+                class="category-button"
+                :class="{ active: selectedCategoryId === category.id && !keyword.trim() }"
+                @click="selectCategory(category.id)"
+              >
+                {{ category.name }}
+              </button>
+            </div>
+          </template>
+        </el-skeleton>
+        <div v-if="user" class="channel-shortcuts">
+          <button @click="router.push('/profile')">我的收藏</button>
+          <button @click="router.push('/notifications')">消息中心</button>
+        </div>
+      </div>
+    </section>
 
     <section class="container content">
-      <div class="section-title"><h2>{{ keyword.trim() ? `搜索结果：${keyword.trim()}` : (isHotMode ? '热门视频' : (selectedCategoryId === undefined ? '推荐视频' : '分区视频')) }}</h2><span>共 {{ total }} 个视频</span></div>
-      <el-skeleton :loading="videoLoading" animated :count="8"><template #default>
-        <div v-if="videos.length" class="video-grid"><article v-for="video in videos" :key="video.id" class="video-card" @click="goVideoDetail(video.id)">
-          <div class="cover-box"><img :src="video.coverUrl" :alt="video.title" class="cover"><span class="duration">{{ formatDuration(video.duration) }}</span></div>
-          <h3 :title="video.title">{{ video.title }}</h3><div class="video-meta"><span>{{ video.authorNickname }}</span><span>{{ formatNumber(video.viewCount) }} 播放</span></div><div class="video-meta secondary"><span>{{ video.categoryName }}</span><span>{{ formatDate(video.publishTime) }}</span></div>
-        </article></div>
-        <el-empty v-else :description="keyword.trim() ? '未找到匹配的视频' : '这个分区暂时还没有视频'" />
-      </template></el-skeleton>
-      <div v-if="!isHotMode && total > pageSize" class="pagination"><el-pagination v-model:current-page="currentPage" :page-size="pageSize" :total="total" layout="prev, pager, next" background @current-change="handlePageChange" /></div>
+      <div class="section-title">
+        <div>
+          <span class="section-kicker">{{ isHotMode ? 'TRENDING' : 'DISCOVER' }}</span>
+          <h2>{{ sectionTitle }}</h2>
+        </div>
+        <span>共 {{ total }} 个视频</span>
+      </div>
+
+      <el-skeleton :loading="videoLoading" animated :count="8">
+        <template #default>
+          <div v-if="videos.length" class="video-grid">
+            <article
+              v-for="video in videos"
+              :key="video.id"
+              class="video-card"
+              tabindex="0"
+              @click="goVideoDetail(video.id)"
+              @keyup.enter="goVideoDetail(video.id)"
+            >
+              <div class="cover-box">
+                <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
+                <div class="cover-gradient" />
+                <div class="cover-meta">
+                  <span>▶ {{ formatNumber(video.viewCount) }}</span>
+                  <span>{{ formatDuration(video.duration) }}</span>
+                </div>
+              </div>
+              <div class="video-card__body">
+                <h3 :title="video.title">{{ video.title }}</h3>
+                <div class="author-line">
+                  <span class="mini-avatar">{{ video.authorNickname.slice(0, 1) }}</span>
+                  <div>
+                    <strong>{{ video.authorNickname }}</strong>
+                    <span>{{ video.categoryName }} · {{ formatDate(video.publishTime) }}</span>
+                  </div>
+                </div>
+              </div>
+            </article>
+          </div>
+          <el-empty
+            v-else
+            :description="keyword.trim() ? '未找到匹配的视频' : '这个分区暂时还没有视频'"
+          />
+        </template>
+      </el-skeleton>
+
+      <div v-if="!isHotMode && total > pageSize" class="pagination">
+        <el-pagination
+          v-model:current-page="currentPage"
+          :page-size="pageSize"
+          :total="total"
+          layout="prev, pager, next"
+          background
+          @current-change="handlePageChange"
+        />
+      </div>
     </section>
   </main>
 </template>
 
 <style scoped>
-.home-page{min-height:100vh;background:var(--vn-page);color:var(--vn-text)}
-.header{height:68px;background:rgb(255 255 255 / 94%);border-bottom:1px solid var(--vn-border);position:sticky;top:0;z-index:10;backdrop-filter:blur(14px)}
-.header-content,.container{width:min(1280px,calc(100% - 64px));margin:0 auto}.header-content{height:100%;display:flex;align-items:center;gap:28px}
-.logo{display:flex;align-items:center;gap:9px;color:#172b4d;font-size:21px;font-weight:700;letter-spacing:-.4px;cursor:pointer}.logo-icon{width:30px;height:30px;display:inline-flex;justify-content:center;align-items:center;border-radius:9px;background:linear-gradient(135deg,#1677ff,#5b9cff);color:#fff;font-size:13px;box-shadow:0 4px 10px rgb(22 119 255 / 25%)}
-.search-box{width:min(410px,33vw);margin-right:auto}.user-area{display:flex;align-items:center;gap:10px;white-space:nowrap}.nickname{font-size:14px;font-weight:500}.nickname small{margin-left:5px;color:var(--vn-text-muted);font-weight:400}
-.category-section{background:#fff;border-bottom:1px solid var(--vn-border)}.categories{min-height:64px;display:flex;align-items:center;gap:10px;overflow-x:auto;scrollbar-width:none}.categories::-webkit-scrollbar{display:none}.category-button{flex-shrink:0;padding:8px 16px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--vn-text-secondary);font-size:14px;cursor:pointer;transition:.2s}.category-button:hover{background:#f0f6ff;color:var(--vn-primary)}.category-button.active{background:#e8f1ff;color:var(--vn-primary);font-weight:600}
-.content{padding:34px 0 56px}.section-title{margin-bottom:22px;display:flex;align-items:baseline;justify-content:space-between}.section-title h2{margin:0;color:#172b4d;font-size:24px;letter-spacing:-.4px}.section-title span{color:var(--vn-text-muted);font-size:14px}.video-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:28px 20px}.video-card{cursor:pointer;min-width:0}.cover-box{position:relative;overflow:hidden;aspect-ratio:16/9;border-radius:10px;background:#dce4f0;box-shadow:0 1px 2px rgb(16 24 40 / 8%)}.cover{width:100%;height:100%;display:block;object-fit:cover;transition:transform .35s ease}.video-card:hover .cover{transform:scale(1.055)}.duration{position:absolute;right:8px;bottom:8px;padding:3px 6px;border-radius:5px;background:rgb(15 23 42 / 78%);color:#fff;font-size:12px;font-variant-numeric:tabular-nums}.video-card h3{overflow:hidden;margin:11px 0 8px;color:#27364d;font-size:15px;line-height:22px;font-weight:600;white-space:nowrap;text-overflow:ellipsis;transition:color .2s}.video-card:hover h3{color:var(--vn-primary)}.video-meta{display:flex;justify-content:space-between;gap:8px;color:var(--vn-text-secondary);font-size:13px;overflow:hidden}.video-meta span{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}.secondary{margin-top:5px;color:var(--vn-text-muted)}.pagination{display:flex;justify-content:center;margin-top:42px}
-@media (max-width:960px){.header-content,.container{width:min(100% - 40px,1280px)}.video-grid{grid-template-columns:repeat(3,minmax(0,1fr))}.user-area{gap:7px}}@media (max-width:700px){.header{height:60px}.header-content,.container{width:min(100% - 28px,1280px)}.header-content{gap:12px}.logo{font-size:18px}.search-box{width:150px}.user-area .nickname,.user-area .el-button:not(:first-child){display:none}.content{padding-top:24px}.section-title h2{font-size:20px}.video-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 12px}}
+.home-page {
+  min-height: 100vh;
+  background: var(--vn-page);
+  color: var(--vn-text);
+}
+
+.container {
+  width: min(1360px, calc(100% - 64px));
+  margin: 0 auto;
+}
+
+.top-search :deep(.el-input__wrapper) {
+  border-radius: 9px 0 0 9px;
+  background: #f1f2f3;
+  box-shadow: none !important;
+}
+
+.top-search :deep(.el-input-group__append) {
+  border-radius: 0 9px 9px 0;
+  background: #f1f2f3;
+  box-shadow: none;
+}
+
+.header-action,
+.user-trigger {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.header-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  color: var(--vn-text-secondary);
+}
+
+.header-action__icon {
+  color: var(--vn-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.header-action small {
+  font-size: 11px;
+}
+
+.user-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 999px;
+}
+
+.user-trigger:hover {
+  background: #f1f2f3;
+}
+
+.user-avatar,
+.mini-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--vn-primary), #6ddcff);
+  color: #fff;
+  font-weight: 700;
+}
+
+.user-avatar {
+  width: 34px;
+  height: 34px;
+}
+
+.user-name {
+  max-width: 90px;
+  overflow: hidden;
+  color: var(--vn-text);
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upload-button {
+  min-width: 82px;
+  border: 0;
+  background: var(--vn-accent);
+  box-shadow: 0 6px 16px rgb(251 114 153 / 22%);
+}
+
+.upload-button:hover {
+  background: #ff8bad;
+}
+
+.hero {
+  position: relative;
+  height: clamp(270px, 31vw, 420px);
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 20% 20%, rgb(89 216 255 / 42%), transparent 38%),
+    radial-gradient(circle at 78% 32%, rgb(251 114 153 / 32%), transparent 36%),
+    linear-gradient(135deg, #263a6b, #172554 58%, #0f172a);
+}
+
+.hero.has-cover {
+  background-image: var(--hero-cover);
+  background-position: center 38%;
+  background-size: cover;
+}
+
+.hero__veil {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(10 19 45 / 90%) 0%, rgb(10 19 45 / 65%) 48%, rgb(10 19 45 / 22%) 100%),
+    linear-gradient(0deg, var(--vn-page) 0, transparent 22%);
+}
+
+.hero__content {
+  position: relative;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 30px;
+  color: #fff;
+}
+
+.hero__copy {
+  width: min(650px, 70%);
+}
+
+.hero__eyebrow,
+.section-kicker {
+  color: #76dfff;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.5px;
+}
+
+.hero h1 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 14px 0 12px;
+  font-size: clamp(28px, 3.4vw, 50px);
+  line-height: 1.18;
+  letter-spacing: -1.5px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.hero p {
+  margin: 0;
+  color: rgb(255 255 255 / 78%);
+  font-size: 15px;
+}
+
+.hero__actions {
+  margin-top: 26px;
+  display: flex;
+  gap: 10px;
+}
+
+.hero__side-note {
+  width: 170px;
+  padding: 18px 20px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 10%);
+  backdrop-filter: blur(16px);
+}
+
+.hero__side-note span,
+.hero__side-note small {
+  display: block;
+  color: rgb(255 255 255 / 68%);
+}
+
+.hero__side-note strong {
+  display: block;
+  margin: 5px 0 2px;
+  font-size: 36px;
+}
+
+.channel-bar {
+  position: relative;
+  z-index: 2;
+  margin-top: -5px;
+  border-bottom: 1px solid var(--vn-border-light);
+  background: var(--vn-surface);
+}
+
+.channel-bar__inner {
+  min-height: 92px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 28px;
+}
+
+.channel-entry {
+  display: flex;
+  gap: 14px;
+}
+
+.channel-orb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--vn-text-secondary);
+  cursor: pointer;
+}
+
+.channel-orb strong {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #6ed08f;
+  color: #fff;
+}
+
+.channel-orb.hot strong {
+  background: var(--vn-accent);
+}
+
+.channel-orb.active span {
+  color: var(--vn-primary);
+  font-weight: 700;
+}
+
+.categories {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(72px, 1fr));
+  gap: 9px;
+}
+
+.category-button,
+.channel-shortcuts button {
+  height: 34px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 7px;
+  background: #f6f7f8;
+  color: var(--vn-text-secondary);
+  cursor: pointer;
+  transition: .2s;
+}
+
+.category-button:hover,
+.category-button.active,
+.channel-shortcuts button:hover {
+  border-color: #bdeeff;
+  background: var(--vn-primary-soft);
+  color: var(--vn-primary-dark);
+}
+
+.channel-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, auto);
+  gap: 8px;
+}
+
+.channel-shortcuts button {
+  padding: 0 12px;
+}
+
+.content {
+  padding: 38px 0 64px;
+}
+
+.section-title {
+  margin-bottom: 22px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.section-title h2 {
+  margin: 4px 0 0;
+  font-size: 25px;
+  letter-spacing: -.5px;
+}
+
+.section-title > span {
+  color: var(--vn-text-muted);
+  font-size: 13px;
+}
+
+.video-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 30px 20px;
+}
+
+.video-card {
+  min-width: 0;
+  outline: none;
+  cursor: pointer;
+}
+
+.cover-box {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 10px;
+  background: #dce4f0;
+}
+
+.cover {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform .35s ease;
+}
+
+.cover-gradient {
+  position: absolute;
+  inset: 44% 0 0;
+  background: linear-gradient(transparent, rgb(0 0 0 / 70%));
+}
+
+.cover-meta {
+  position: absolute;
+  right: 9px;
+  bottom: 7px;
+  left: 9px;
+  display: flex;
+  justify-content: space-between;
+  color: #fff;
+  font-size: 12px;
+  text-shadow: 0 1px 2px #000;
+}
+
+.video-card:hover .cover,
+.video-card:focus .cover {
+  transform: scale(1.045);
+}
+
+.video-card__body h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  min-height: 44px;
+  margin: 10px 0 9px;
+  color: var(--vn-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 22px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  transition: color .2s;
+}
+
+.video-card:hover h3,
+.video-card:focus h3 {
+  color: var(--vn-primary-dark);
+}
+
+.author-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mini-avatar {
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+
+.author-line div {
+  min-width: 0;
+}
+
+.author-line strong,
+.author-line span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.author-line strong {
+  color: var(--vn-text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.author-line div span {
+  margin-top: 2px;
+  color: var(--vn-text-muted);
+  font-size: 11px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 44px;
+}
+
+@media (max-width: 1100px) {
+  .container {
+    width: min(100% - 40px, 1360px);
+  }
+
+  .channel-bar__inner {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .channel-shortcuts {
+    display: none;
+  }
+
+  .categories {
+    grid-template-columns: repeat(4, minmax(72px, 1fr));
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .container {
+    width: min(100% - 28px, 1360px);
+  }
+
+  .header-action,
+  .user-name {
+    display: none;
+  }
+
+  .upload-button {
+    min-width: auto;
+    padding: 8px 12px;
+  }
+
+  .hero {
+    height: 280px;
+  }
+
+  .hero__copy {
+    width: 100%;
+  }
+
+  .hero__side-note {
+    display: none;
+  }
+
+  .hero h1 {
+    font-size: 28px;
+  }
+
+  .channel-bar__inner {
+    min-height: 118px;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px 0;
+  }
+
+  .channel-entry {
+    display: none;
+  }
+
+  .categories {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    scrollbar-width: none;
+  }
+
+  .category-button {
+    min-width: 78px;
+    flex: 0 0 auto;
+  }
+
+  .content {
+    padding-top: 28px;
+  }
+
+  .video-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 24px 12px;
+  }
+
+  .video-card__body h3 {
+    font-size: 14px;
+    line-height: 20px;
+  }
+}
 </style>

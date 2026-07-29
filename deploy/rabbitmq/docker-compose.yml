@@ -1,11 +1,12 @@
 services:
   rabbitmq:
-    image: rabbitmq:4-management
+    build:
+      context: .
     container_name: videonest-rabbitmq
     restart: unless-stopped
     ports:
       - "5672:5672"
       - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: videonest
-      RABBITMQ_DEFAULT_PASS: videonest_rabbit_2026
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}

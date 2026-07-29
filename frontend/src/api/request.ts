@@ -3,9 +3,14 @@ import axios, {
   type AxiosResponse,
   type InternalAxiosRequestConfig
 } from 'axios'
+import { logger } from '../utils/logger'
 
 interface ApiError {
   message?: string
+}
+
+type TimedRequestConfig = InternalAxiosRequestConfig & {
+  requestStartedAt?: number
 }
 
 const request = axios.create({
@@ -40,6 +45,11 @@ request.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`
     }
 
+    ;(config as TimedRequestConfig).requestStartedAt = performance.now()
+    logger.info('api.request.started', {
+      method: config.method?.toUpperCase(),
+      url: config.url
+    })
     return config
   }
 )
@@ -47,18 +57,43 @@ request.interceptors.request.use(
 request.interceptors.response.use(
   (response: AxiosResponse) => {
     const result = response.data
+    const config = response.config as TimedRequestConfig
+    logger.info('api.request.succeeded', {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      status: response.status,
+      durationMs: config.requestStartedAt
+        ? Math.round(performance.now() - config.requestStartedAt)
+        : undefined
+    })
 
     if (result && result.code !== 200) {
+      logger.warn('api.business.failed', {
+        url: config.url,
+        code: result.code,
+        message: result.message
+      })
       return Promise.reject(new Error(result.message || '请求失败'))
     }
 
     return response
   },
   (error: AxiosError<ApiError>) => {
+    const config = error.config as TimedRequestConfig | undefined
     const message =
       error.response?.data?.message ||
       '网络异常，请检查 Spring Boot 后端是否已经启动'
 
+    logger.error('api.request.failed', {
+      method: config?.method?.toUpperCase(),
+      url: config?.url,
+      status: error.response?.status,
+      code: error.code,
+      durationMs: config?.requestStartedAt
+        ? Math.round(performance.now() - config.requestStartedAt)
+        : undefined,
+      message
+    })
     return Promise.reject(new Error(message))
   }
 )

@@ -12,8 +12,10 @@ import com.example.demo.module.interaction.vo.AdminCommentVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class AdminCommentServiceImpl implements AdminCommentService {
     private final AdminCommentMapper adminCommentMapper;
     private final VideoCommentMapper videoCommentMapper;
@@ -48,6 +50,7 @@ public class AdminCommentServiceImpl implements AdminCommentService {
         if (comment.getParentId() == 0) {
             videoCommentMapper.softDeleteRepliesByParentId(commentId);
         }
+        log.info("管理员软删除评论成功，commentId={}", commentId);
     }
 
     @Override
@@ -61,5 +64,6 @@ public class AdminCommentServiceImpl implements AdminCommentService {
         if (videoCommentMapper.restoreById(commentId) == 0) {
             throw new BusinessException(400, "评论恢复失败");
         }
+        log.info("管理员恢复评论成功，commentId={}", commentId);
     }
 }

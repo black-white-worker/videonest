@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.annotation.TableLogic;
 import lombok.Data;
 
 import java.time.LocalDateTime;
@@ -57,5 +58,22 @@ public class Video {
     private String video1080pUrl;
 
     private String processError;
+
+    @TableLogic(value = "0", delval = "1")
+    private Integer isDeleted;
+
+    private LocalDateTime deletedAt;
+
+    private Long deletedBy;
+
+    private LocalDateTime purgeAfter;
+
+    private Integer purgeAttempts;
+
+    private String purgeError;
+
+    private LocalDateTime reviewDeadline;
+
+    private Integer reviewTimeoutNotified;
 
 }

@@ -2,7 +2,14 @@ import request from './request'
 import type { ApiResponse } from './auth'
 import type { PageResult } from './video'
 
-export type NotificationType = 'FOLLOW' | 'COMMENT' | 'REPLY'
+export type NotificationType =
+  | 'FOLLOW'
+  | 'COMMENT'
+  | 'REPLY'
+  | 'LIKE'
+  | 'FAVORITE'
+  | 'REVIEW_TIMEOUT'
+  | 'VIDEO_REJECTED'
 
 export interface NotificationItem {
   id: number | string

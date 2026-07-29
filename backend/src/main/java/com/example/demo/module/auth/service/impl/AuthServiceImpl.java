@@ -11,8 +11,10 @@ import com.example.demo.module.auth.vo.LoginResponse;
 import com.example.demo.security.JwtTokenProvider;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class AuthServiceImpl implements AuthService {
 
     private final SysUserMapper sysUserMapper;
@@ -37,6 +39,7 @@ public class AuthServiceImpl implements AuthService {
         );
 
         if (count > 0) {
+            log.warn("用户注册失败，用户名已存在，username={}", request.getUsername());
             throw new BusinessException(400, "用户名已存在");
         }
 
@@ -48,6 +51,7 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(1);
 
         sysUserMapper.insert(user);
+        log.info("用户注册成功，userId={}，username={}", user.getId(), user.getUsername());
     }
 
     @Override
@@ -58,10 +62,12 @@ public class AuthServiceImpl implements AuthService {
         );
 
         if (user == null || !passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            log.warn("用户登录失败，用户名或密码错误，username={}", request.getUsername());
             throw new BusinessException(401, "用户名或密码错误");
         }
 
         if (user.getStatus() == 0) {
+            log.warn("禁用用户尝试登录，userId={}，username={}", user.getId(), user.getUsername());
             throw new BusinessException(403, "该账号已被禁用");
         }
 
@@ -72,6 +78,7 @@ public class AuthServiceImpl implements AuthService {
                         user.getRole()
                 )
         );
+        log.info("用户登录成功，userId={}，username={}", user.getId(), user.getUsername());
 
         return new LoginResponse(
                 token,

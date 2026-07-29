@@ -7,10 +7,15 @@ import com.example.demo.module.notification.event.NotificationEvent;
 import com.example.demo.module.notification.mapper.NotificationMapper;
 import com.example.demo.module.notification.service.NotificationMessageConsumerService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.support.converter.MessageConversionException;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 
 @Service
+@Slf4j
 public class NotificationMessageConsumerServiceImpl
         implements NotificationMessageConsumerService {
 
@@ -27,13 +32,13 @@ public class NotificationMessageConsumerServiceImpl
 
     @Override
     @RabbitListener(queues = RabbitMqConfig.NOTIFICATION_QUEUE)
-    public void consume(String message) throws Exception {
-        NotificationEvent event = objectMapper.readValue(
-                message,
-                NotificationEvent.class
-        );
+    public void consume(String message) {
+        NotificationEvent event = readEvent(message);
 
-        if (event.recipientId().equals(event.actorId())) {
+        if (event.recipientId().equals(event.actorId())
+                && !"REVIEW_TIMEOUT".equals(event.type())
+                && !"VIDEO_REJECTED".equals(event.type())) {
+            log.debug("忽略自己触发给自己的通知，eventId={}", event.eventId());
             return;
         }
 
@@ -43,6 +48,7 @@ public class NotificationMessageConsumerServiceImpl
         );
 
         if (count > 0) {
+            log.info("通知消息已消费，跳过重复投递，eventId={}", event.eventId());
             return;
         }
 
@@ -56,6 +62,25 @@ public class NotificationMessageConsumerServiceImpl
         notification.setContent(event.content());
         notification.setIsRead(0);
 
-        notificationMapper.insert(notification);
+        try {
+            notificationMapper.insert(notification);
+            log.info(
+                    "通知消息消费成功，eventId={}，type={}，recipientId={}",
+                    event.eventId(),
+                    event.type(),
+                    event.recipientId()
+            );
+        } catch (DuplicateKeyException e) {
+            log.info("通知唯一键冲突，按幂等消费成功处理，eventId={}", event.eventId());
+        }
+    }
+
+    private NotificationEvent readEvent(String message) {
+        try {
+            return objectMapper.readValue(message, NotificationEvent.class);
+        } catch (JsonProcessingException e) {
+            log.error("通知消息格式错误，payload={}", message, e);
+            throw new MessageConversionException("通知消息格式错误", e);
+        }
     }
 }

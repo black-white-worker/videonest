@@ -3,19 +3,11 @@
 </template>
 
 <style>
-/* 跨页面基础框架：保留各功能页的业务结构，只统一视觉语言。 */
+/* 跨页面基础框架只提供底色和基础间距，具体布局由各页面负责。 */
 .upload-page, .profile-page, .notification-page, .admin-page, .page {
   min-height: 100vh;
   background: var(--vn-page) !important;
   color: var(--vn-text);
-}
-
-.upload-card, .profile-card, .follow-section, .submission-section,
-.notification-list, .video-list, .admin-page .container > .el-table,
-.page .el-table {
-  border: 1px solid var(--vn-border);
-  border-radius: var(--vn-radius);
-  box-shadow: var(--vn-shadow);
 }
 
 .upload-page .header, .profile-page .header, .notification-page .header,
@@ -24,9 +16,6 @@
   border-color: var(--vn-border) !important;
   backdrop-filter: blur(14px);
 }
-
-.upload-page .logo, .profile-page .logo, .notification-page .logo,
-.admin-page .logo, .page .logo { color: #172b4d !important; }
 
 .upload-page .container, .profile-page .container, .notification-page .container,
 .admin-page .container, .page .container { padding-bottom: 56px; }

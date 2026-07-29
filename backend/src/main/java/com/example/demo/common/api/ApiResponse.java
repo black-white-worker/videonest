@@ -3,6 +3,9 @@ package com.example.demo.common.api;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 
+/**
+统一返回的结果类
+* */
 @Data
 @AllArgsConstructor
 public class ApiResponse<T> {

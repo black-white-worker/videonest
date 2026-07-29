@@ -24,6 +24,7 @@ import {
   unfollowUser,
   type FollowUser
 } from '../api/follow'
+import SiteHeader from '../components/SiteHeader.vue'
 
 const router = useRouter()
 
@@ -46,6 +47,7 @@ const interactionLoading = ref(false)
 const interactionPage = ref(1)
 const interactionSize = ref(8)
 const interactionTotal = ref(0)
+const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>('submissions')
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -295,7 +297,7 @@ async function submitEdit() {
 async function handleDelete(video: CreatorVideo) {
   try {
     await ElMessageBox.confirm(
-      `确定删除《${video.title}》吗？删除后无法恢复。`,
+      `确定将《${video.title}》移入回收站吗？到期后视频和封面资源将自动永久清理。`,
       '删除视频',
       {
         type: 'warning',
@@ -306,7 +308,7 @@ async function handleDelete(video: CreatorVideo) {
 
     await deleteCreatorVideo(video.id)
 
-    ElMessage.success('视频已删除')
+    ElMessage.success('视频已移入回收站')
 
     // 当前页只有一条数据且不是第一页时，自动返回上一页
     if (videos.value.length === 1 && currentPage.value > 1) {
@@ -347,28 +349,17 @@ onMounted(() => {
 
 <template>
   <main class="profile-page">
-    <header class="header">
-      <div class="header-content">
-        <button class="logo" @click="router.push('/')">
-          <span>▶</span>
-          VideoNest
-        </button>
-
-        <div class="header-actions">
-          <el-button type="primary" plain @click="router.push('/upload')">
-            投稿
-          </el-button>
-
-          <el-button @click="router.push('/')">
-            返回首页
-          </el-button>
-
-          <el-button type="danger" plain @click="logout">
-            退出登录
-          </el-button>
-        </div>
-      </div>
-    </header>
+    <SiteHeader max-width="1280px">
+      <template #nav>
+        <span class="center-label">个人中心</span>
+      </template>
+      <template #actions>
+        <el-button text @click="router.push('/notifications')">消息</el-button>
+        <el-button @click="router.push('/')">返回主站</el-button>
+        <el-button type="primary" @click="router.push('/upload')">+ 投稿</el-button>
+        <el-button text type="danger" @click="logout">退出</el-button>
+      </template>
+    </SiteHeader>
 
     <section class="container">
       <el-skeleton :loading="profileLoading" animated>
@@ -412,7 +403,39 @@ onMounted(() => {
         </template>
       </el-skeleton>
 
-      <section class="follow-section">
+      <div class="profile-workspace">
+        <aside class="center-sidebar">
+          <div class="center-sidebar__title">我的空间</div>
+          <button
+            :class="{ active: activeCenterSection === 'submissions' }"
+            @click="activeCenterSection = 'submissions'"
+          >
+            <span>▣</span>
+            <div><strong>投稿管理</strong><small>{{ total }} 个稿件</small></div>
+          </button>
+          <button
+            :class="{ active: activeCenterSection === 'interactions' }"
+            @click="activeCenterSection = 'interactions'"
+          >
+            <span>★</span>
+            <div><strong>收藏与点赞</strong><small>管理互动内容</small></div>
+          </button>
+          <button
+            :class="{ active: activeCenterSection === 'follows' }"
+            @click="activeCenterSection = 'follows'"
+          >
+            <span>◎</span>
+            <div><strong>关注与粉丝</strong><small>管理社交关系</small></div>
+          </button>
+          <div class="sidebar-create">
+            <strong>分享你的新灵感</strong>
+            <p>上传视频，和社区一起发现精彩。</p>
+            <el-button type="primary" @click="router.push('/upload')">发布视频</el-button>
+          </div>
+        </aside>
+
+        <div class="center-content">
+      <section v-show="activeCenterSection === 'follows'" class="follow-section">
         <div class="section-title">
           <div>
             <h2>我的关注</h2>
@@ -461,7 +484,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="interaction-section">
+      <section v-show="activeCenterSection === 'interactions'" class="interaction-section">
         <div class="section-title">
           <div>
             <h2>我的互动</h2>
@@ -479,7 +502,7 @@ onMounted(() => {
           <template #default>
             <div v-if="interactionVideos.length" class="interaction-grid">
               <article v-for="video in interactionVideos" :key="video.id" class="interaction-card" @click="router.push(`/video/${video.id}`)">
-                <div class="interaction-cover"><img :src="video.coverUrl" :alt="video.title"><span>{{ formatDuration(video.duration) }}</span></div>
+                <div class="interaction-cover"><img :src="video.coverUrl" :alt="video.title" loading="lazy"><span>{{ formatDuration(video.duration) }}</span></div>
                 <h3 :title="video.title">{{ video.title }}</h3>
                 <p>{{ video.authorNickname }} · {{ video.categoryName }}</p>
               </article>
@@ -492,7 +515,7 @@ onMounted(() => {
         </div>
       </section>
 
-      <section class="submission-section">
+      <section v-show="activeCenterSection === 'submissions'" class="submission-section">
         <div class="section-title">
           <div>
             <h2>我的投稿</h2>
@@ -513,11 +536,12 @@ onMounted(() => {
                 class="video-card"
               >
                 <div class="cover-box">
-                  <img
-                    v-if="video.coverUrl"
-                    :src="video.coverUrl"
-                    :alt="video.title"
-                  />
+                   <img
+                     v-if="video.coverUrl"
+                     :src="video.coverUrl"
+                     :alt="video.title"
+                     loading="lazy"
+                   />
                   <span v-else class="processing-cover">处理中</span>
 
                   <span class="duration">
@@ -531,6 +555,12 @@ onMounted(() => {
 
                     <el-tag :type="getStatusType(video.status)">
                       {{ getStatusText(video.status) }}
+                    </el-tag>
+                    <el-tag
+                      v-if="video.reviewTimeoutNotified === 1"
+                      type="danger"
+                    >
+                      审核已超时
                     </el-tag>
                   </div>
 
@@ -561,6 +591,14 @@ onMounted(() => {
                   >
                     <strong>转码失败：</strong>
                     {{ video.processError }}
+                  </div>
+
+                  <div
+                    v-if="video.reviewTimeoutNotified === 1"
+                    class="reject-reason"
+                  >
+                    <strong>审核提醒：</strong>
+                    等待审核已超时，管理员会尽快处理。
                   </div>
 
                   <div class="video-actions">
@@ -613,6 +651,8 @@ onMounted(() => {
           />
         </div>
       </section>
+        </div>
+      </div>
     </section>
 
     <el-dialog
@@ -1036,6 +1076,402 @@ onMounted(() => {
   .interaction-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
 
   .video-card {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<style scoped>
+.profile-page {
+  min-height: 100vh;
+  background: var(--vn-page);
+}
+
+.center-label {
+  padding-left: 16px;
+  border-left: 1px solid var(--vn-border);
+  color: var(--vn-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.container {
+  width: min(1280px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 28px 0 72px;
+}
+
+.profile-card {
+  position: relative;
+  overflow: hidden;
+  min-height: 190px;
+  margin-bottom: 22px;
+  padding: 30px 34px;
+  display: grid;
+  grid-template-columns: auto minmax(180px, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 16px;
+  background:
+    radial-gradient(circle at 82% 10%, rgb(251 114 153 / 20%), transparent 28%),
+    radial-gradient(circle at 12% 0%, rgb(94 216 255 / 28%), transparent 32%),
+    linear-gradient(135deg, #fff, #f4fbfe);
+  box-shadow: none;
+}
+
+.profile-card::after {
+  content: "VIDEONEST SPACE";
+  position: absolute;
+  right: 28px;
+  bottom: 14px;
+  color: rgb(0 174 236 / 8%);
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 2px;
+}
+
+.profile-card .avatar {
+  width: 88px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 4px solid #fff;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--vn-primary), #67dcff);
+  box-shadow: 0 10px 24px rgb(0 174 236 / 22%);
+  color: #fff;
+  font-size: 32px;
+  font-weight: 800;
+}
+
+.profile-info h1 {
+  margin: 0;
+  font-size: 26px;
+}
+
+.profile-info p {
+  margin: 5px 0 10px;
+  color: var(--vn-text-muted);
+  font-size: 13px;
+}
+
+.stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(74px, 1fr));
+  gap: 8px;
+}
+
+.stats > div {
+  min-width: 76px;
+  padding: 12px 10px;
+  border: 1px solid rgb(255 255 255 / 65%);
+  border-radius: 10px;
+  background: rgb(255 255 255 / 68%);
+  text-align: center;
+  backdrop-filter: blur(8px);
+}
+
+.stats strong,
+.stats span {
+  display: block;
+}
+
+.stats strong {
+  color: var(--vn-text);
+  font-size: 20px;
+}
+
+.stats span {
+  margin-top: 2px;
+  color: var(--vn-text-muted);
+  font-size: 11px;
+}
+
+.profile-workspace {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
+}
+
+.center-sidebar {
+  position: sticky;
+  top: 88px;
+  padding: 16px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 13px;
+  background: #fff;
+}
+
+.center-sidebar__title {
+  padding: 5px 9px 12px;
+  color: var(--vn-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.center-sidebar > button {
+  width: 100%;
+  margin-bottom: 5px;
+  padding: 11px 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--vn-text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.center-sidebar > button:hover,
+.center-sidebar > button.active {
+  background: var(--vn-primary-soft);
+  color: var(--vn-primary-dark);
+}
+
+.center-sidebar > button > span {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  background: #f1f2f3;
+}
+
+.center-sidebar > button.active > span {
+  background: var(--vn-primary);
+  color: #fff;
+}
+
+.center-sidebar strong,
+.center-sidebar small {
+  display: block;
+}
+
+.center-sidebar strong {
+  font-size: 13px;
+}
+
+.center-sidebar small {
+  margin-top: 2px;
+  color: var(--vn-text-muted);
+  font-size: 10px;
+}
+
+.sidebar-create {
+  margin-top: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #eefaff, #fff2f6);
+}
+
+.sidebar-create > strong {
+  color: var(--vn-text);
+  font-size: 12px;
+}
+
+.sidebar-create p {
+  margin: 6px 0 10px;
+  color: var(--vn-text-muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.sidebar-create .el-button {
+  width: 100%;
+}
+
+.center-content {
+  min-width: 0;
+}
+
+.follow-section,
+.interaction-section,
+.submission-section {
+  margin: 0;
+  padding: 26px 28px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 13px;
+  background: #fff;
+  box-shadow: none;
+}
+
+.section-title {
+  margin-bottom: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-title h2 {
+  margin: 0 0 4px;
+  font-size: 20px;
+}
+
+.section-title p {
+  margin: 0;
+  color: var(--vn-text-muted);
+  font-size: 12px;
+}
+
+.follow-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.follow-user {
+  padding: 14px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 10px;
+  background: #fafbfc;
+}
+
+.follow-avatar {
+  background: linear-gradient(135deg, var(--vn-primary), #6bdcff);
+}
+
+.interaction-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 22px 14px;
+}
+
+.interaction-card {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.interaction-cover {
+  border-radius: 9px;
+}
+
+.interaction-card h3 {
+  display: -webkit-box;
+  min-height: 40px;
+  margin: 9px 0 4px;
+  overflow: hidden;
+  font-size: 14px;
+  line-height: 20px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.interaction-card p {
+  color: var(--vn-text-muted);
+  font-size: 11px;
+}
+
+.submission-section .video-list {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.submission-section .video-card {
+  margin-bottom: 12px;
+  padding: 14px;
+  border: 1px solid var(--vn-border-light);
+  border-radius: 11px;
+  background: #fafbfc;
+  transition: border-color .2s, transform .2s;
+}
+
+.submission-section .video-card:hover {
+  border-color: #bceafb;
+  transform: translateY(-1px);
+}
+
+.reject-reason {
+  border: 0;
+  border-left: 3px solid #f56c6c;
+  border-radius: 6px;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+}
+
+@media (max-width: 1000px) {
+  .profile-card {
+    grid-template-columns: auto 1fr;
+  }
+
+  .stats {
+    grid-column: 1 / -1;
+  }
+
+  .profile-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .center-sidebar {
+    position: static;
+    display: flex;
+    overflow-x: auto;
+    gap: 6px;
+  }
+
+  .center-sidebar__title,
+  .sidebar-create {
+    display: none;
+  }
+
+  .center-sidebar > button {
+    min-width: 150px;
+    margin: 0;
+  }
+
+  .interaction-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .container {
+    width: min(100% - 24px, 1280px);
+    padding-top: 18px;
+  }
+
+  .profile-card {
+    padding: 24px 18px;
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .profile-card .avatar {
+    margin: 0 auto;
+  }
+
+  .stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .follow-section,
+  .interaction-section,
+  .submission-section {
+    padding: 20px 16px;
+  }
+
+  .follow-list {
+    grid-template-columns: 1fr;
+  }
+
+  .interaction-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .submission-section .video-card {
     grid-template-columns: 1fr;
   }
 }

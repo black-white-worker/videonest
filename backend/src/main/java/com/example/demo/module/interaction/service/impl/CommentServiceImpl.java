@@ -24,12 +24,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 @Service
+@Slf4j
 public class CommentServiceImpl implements CommentService {
 
     private static final int COMMENT_LIMIT = 5;
@@ -124,6 +126,13 @@ public class CommentServiceImpl implements CommentService {
                     )
             );
         }
+        log.info(
+                "评论创建成功，commentId={}，videoId={}，userId={}，type={}",
+                comment.getId(),
+                videoId,
+                currentUser.userId(),
+                type
+        );
     }
 
     @Override
@@ -199,6 +208,7 @@ public class CommentServiceImpl implements CommentService {
 
             videoCommentMapper.softDeleteById(commentId);
             videoCommentMapper.softDeleteRepliesByParentId(commentId);
+            log.info("管理员删除一级评论及回复成功，commentId={}", commentId);
             return;
         }
 
@@ -213,6 +223,7 @@ public class CommentServiceImpl implements CommentService {
                     "评论不存在，或你无权删除该评论"
             );
         }
+        log.info("用户删除评论成功，commentId={}，userId={}", commentId, currentUser.userId());
     }
 
     private void validatePublishedVideo(Long videoId) {

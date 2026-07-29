@@ -11,8 +11,10 @@ import com.example.demo.security.LoginUser;
 import com.example.demo.security.SecurityUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import lombok.extern.slf4j.Slf4j;
 
 @Service
+@Slf4j
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationMapper notificationMapper;
@@ -53,5 +55,6 @@ public class NotificationServiceImpl implements NotificationService {
         if (rows == 0) {
             throw new BusinessException(404, "通知不存在、已读或无权操作");
         }
+        log.info("通知标记已读成功，notificationId={}，userId={}", notificationId, userId);
     }
 }

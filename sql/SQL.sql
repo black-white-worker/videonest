@@ -1,6 +1,10 @@
-CREATE DATABASE videonest
+SET NAMES utf8mb4;
+
+CREATE DATABASE IF NOT EXISTS videonest
 DEFAULT CHARACTER SET utf8mb4
 COLLATE utf8mb4_unicode_ci;
+
+USE videonest;
 
 CREATE TABLE sys_user (
     id BIGINT NOT NULL AUTO_INCREMENT COMMENT '用户ID',
@@ -29,6 +33,14 @@ CREATE TABLE IF NOT EXISTS video_category (
     PRIMARY KEY (id),
     UNIQUE KEY uk_category_name (name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视频分区表';
+
+INSERT INTO video_category (id, name, sort_num, status) VALUES
+    (1, '动画', 1, 1),
+    (2, '音乐', 2, 1),
+    (3, '游戏', 3, 1),
+    (4, '知识', 4, 1),
+    (5, '生活', 5, 1),
+    (6, '科技', 6, 1);
 
 
 CREATE TABLE IF NOT EXISTS video (
@@ -122,7 +134,7 @@ CREATE TABLE video_comment (
     KEY idx_parent_id (parent_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE user_follow (
+CREATE TABLE IF NOT EXISTS user_follow (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     follower_id BIGINT NOT NULL COMMENT '发起关注的用户 ID',
     followee_id BIGINT NOT NULL COMMENT '被关注的用户 ID',
@@ -134,7 +146,7 @@ CREATE TABLE user_follow (
 
 USE videonest;
 
-CREATE TABLE user_follow (
+CREATE TABLE IF NOT EXISTS user_follow (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     follower_id BIGINT NOT NULL COMMENT '发起关注的用户 ID',
     followee_id BIGINT NOT NULL COMMENT '被关注的用户 ID',

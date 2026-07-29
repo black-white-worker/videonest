@@ -61,9 +61,39 @@ public final class RedisKeys {
     public static final String VIDEO_HOT_RANK_KEY =
             "videonest:video:hot";
 
+    public static final String VIDEO_VIEW_TOTAL_PREFIX =
+            "videonest:video:view:total:";
+
+    public static final String VIDEO_VIEW_DELTA_PREFIX =
+            "videonest:video:view:delta:";
+
+    public static final String VIDEO_VIEW_DIRTY_KEY =
+            "videonest:video:view:dirty";
+
+    public static final String VIDEO_PROCESS_LOCK_PREFIX =
+            "videonest:lock:video-process:";
+
+    public static final String RESOURCE_PURGE_LOCK_PREFIX =
+            "videonest:lock:resource-purge:";
+
+    public static final String RESOURCE_CLEANUP_JOB_LOCK =
+            "videonest:lock:resource-cleanup-job";
+
+    public static final String REVIEW_TIMEOUT_COUNT =
+            "videonest:video:review:timeout:count";
+
     public static String videoDetail(Long videoId) {
         return VIDEO_DETAIL_PREFIX + videoId;
     }
+
+    public static String videoViewTotal(Long videoId) {
+        return VIDEO_VIEW_TOTAL_PREFIX + videoId;
+    }
+
+    public static String videoViewDelta(Long videoId) {
+        return VIDEO_VIEW_DELTA_PREFIX + videoId;
+    }
+
 
     public static String videoLikeCount(Long videoId) {
         return VIDEO_LIKE_COUNT_PREFIX + videoId;
@@ -87,5 +117,13 @@ public final class RedisKeys {
 
     public static String userFollowStatus(Long followerId, Long followeeId) {
         return USER_FOLLOW_STATUS_PREFIX + followerId + ":" + followeeId;
+    }
+
+    public static String videoProcessLock(Long videoId) {
+        return VIDEO_PROCESS_LOCK_PREFIX + videoId;
+    }
+
+    public static String resourcePurgeLock(Long videoId) {
+        return RESOURCE_PURGE_LOCK_PREFIX + videoId;
     }
 }

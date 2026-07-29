@@ -8,10 +8,13 @@ import com.example.demo.module.video.vo.AdminVideoReviewVO;
 import com.example.demo.module.video.vo.CreatorVideoListVO;
 import com.example.demo.module.video.vo.VideoDetailVO;
 import com.example.demo.module.video.vo.VideoListItemVO;
+import com.example.demo.module.video.vo.DeletedVideoVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
+import java.util.Map;
+import java.time.LocalDateTime;
 
 @Mapper
 public interface VideoMapper extends BaseMapper<Video> {
@@ -22,7 +25,7 @@ public interface VideoMapper extends BaseMapper<Video> {
             @Param("keyword") String keyword
     );
 
-    int increaseViewCount(@Param("videoId") Long videoId);
+    int increaseViewCounts(@Param("deltas") Map<Long, Long> deltas);
 
     VideoDetailVO selectPublishedDetailById(@Param("videoId") Long videoId);
 
@@ -59,7 +62,42 @@ public interface VideoMapper extends BaseMapper<Video> {
 
     int updateVideoById(Video video);
 
-    int deleteVideoById(@Param("videoId") Long videoId);
+    int softDeleteVideo(
+            @Param("videoId") Long videoId,
+            @Param("deletedBy") Long deletedBy,
+            @Param("purgeAfter") LocalDateTime purgeAfter
+    );
+
+    IPage<DeletedVideoVO> selectDeletedVideoPage(Page<DeletedVideoVO> page);
+
+    Video selectDeletedVideoById(@Param("videoId") Long videoId);
+
+    List<Long> selectDuePurgeVideoIds(
+            @Param("now") LocalDateTime now,
+            @Param("limit") int limit
+    );
+
+    int incrementPurgeFailure(
+            @Param("videoId") Long videoId,
+            @Param("error") String error
+    );
+
+    int markProcessFailed(
+            @Param("videoId") Long videoId,
+            @Param("error") String error
+    );
+
+    int markReviewTimedOut(@Param("videoId") Long videoId);
+
+    int hardDeleteVideoLikes(@Param("videoId") Long videoId);
+
+    int hardDeleteVideoFavorites(@Param("videoId") Long videoId);
+
+    int hardDeleteVideoComments(@Param("videoId") Long videoId);
+
+    int hardDeleteVideoNotifications(@Param("videoId") Long videoId);
+
+    int hardDeleteVideo(@Param("videoId") Long videoId);
 
     int changeLikeCount(
             @Param("videoId") Long videoId,

@@ -25,6 +25,10 @@ public class CreatorVideoListVO {
 
     private String processError;
 
+    private LocalDateTime reviewDeadline;
+
+    private Integer reviewTimeoutNotified;
+
     private LocalDateTime publishTime;
 
     private LocalDateTime createTime;

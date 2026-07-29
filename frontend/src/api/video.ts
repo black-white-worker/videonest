@@ -32,6 +32,9 @@ export interface VideoDetail {
   video480pUrl?: string
   video720pUrl?: string
   video1080pUrl?: string
+  video480pSizeBytes?: number
+  video720pSizeBytes?: number
+  video1080pSizeBytes?: number
   duration: number
   viewCount: number
   likeCount: number

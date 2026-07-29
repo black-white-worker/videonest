@@ -26,6 +26,7 @@
         INNER JOIN sys_user u ON v.author_id = u.id
         INNER JOIN video_category c ON v.category_id = c.id
         WHERE v.status = 'PUBLISHED'
+        AND v.is_deleted = 0
 
         <if test="categoryId != null">
             AND v.category_id = #{categoryId}
@@ -59,17 +60,26 @@
         INNER JOIN sys_user u ON v.author_id = u.id
         INNER JOIN video_category c ON v.category_id = c.id
         WHERE v.status = 'PUBLISHED'
+        AND v.is_deleted = 0
         AND v.id IN
         <foreach collection="videoIds" item="videoId" open="(" separator="," close=")">
             #{videoId}
         </foreach>
     </select>
 
-    <update id="increaseViewCount">
+    <update id="increaseViewCounts">
         UPDATE video
-        SET view_count = view_count + 1
-        WHERE id = #{videoId}
-        AND status = 'PUBLISHED'
+        SET view_count = view_count + CASE id
+        <foreach collection="deltas" index="videoId" item="delta">
+            WHEN #{videoId} THEN #{delta}
+        </foreach>
+        ELSE 0
+        END
+        WHERE id IN
+        <foreach collection="deltas" index="videoId" item="delta"
+                 open="(" separator="," close=")">
+            #{videoId}
+        </foreach>
     </update>
 
     <select id="selectPublishedDetailById"
@@ -103,6 +113,7 @@
 
         WHERE v.id = #{videoId}
         AND v.status = 'PUBLISHED'
+        AND v.is_deleted = 0
     </select>
 
 
@@ -151,6 +162,8 @@
         v.duration,
         v.status,
         v.reject_reason AS rejectReason,
+        v.review_deadline AS reviewDeadline,
+        v.review_timeout_notified AS reviewTimeoutNotified,
         v.create_time AS createTime,
         v.cover_url AS coverObjectName,
         v.video_url AS videoObjectName,
@@ -167,6 +180,7 @@
         LEFT JOIN video_category c ON v.category_id = c.id
 
         WHERE v.status = 'PENDING'
+        AND v.is_deleted = 0
 
         ORDER BY v.create_time ASC
     </select>
@@ -187,6 +201,7 @@
 
         WHERE id = #{videoId}
         AND status = 'PENDING'
+        AND is_deleted = 0
     </update>
 
     <select id="selectCreatorVideoPage"
@@ -204,6 +219,8 @@
         v.status,
         v.reject_reason AS rejectReason,
         v.process_error AS processError,
+        v.review_deadline AS reviewDeadline,
+        v.review_timeout_notified AS reviewTimeoutNotified,
         v.publish_time AS publishTime,
         v.create_time AS createTime,
         v.view_count AS viewCount,
@@ -217,6 +234,7 @@
         LEFT JOIN video_category c ON v.category_id = c.id
 
         WHERE v.author_id = #{authorId}
+        AND v.is_deleted = 0
 
         ORDER BY v.create_time DESC, v.id DESC
     </select>
@@ -229,7 +247,7 @@
                v.author_id AS authorId, u.nickname AS authorNickname,
                v.category_id AS categoryId, c.name AS categoryName
         FROM video_like vl
-        INNER JOIN video v ON vl.video_id = v.id AND v.status = 'PUBLISHED'
+        INNER JOIN video v ON vl.video_id = v.id AND v.status = 'PUBLISHED' AND v.is_deleted = 0
         INNER JOIN sys_user u ON v.author_id = u.id
         INNER JOIN video_category c ON v.category_id = c.id
         WHERE vl.user_id = #{userId}
@@ -244,7 +262,7 @@
                v.author_id AS authorId, u.nickname AS authorNickname,
                v.category_id AS categoryId, c.name AS categoryName
         FROM video_favorite vf
-        INNER JOIN video v ON vf.video_id = v.id AND v.status = 'PUBLISHED'
+        INNER JOIN video v ON vf.video_id = v.id AND v.status = 'PUBLISHED' AND v.is_deleted = 0
         INNER JOIN sys_user u ON v.author_id = u.id
         INNER JOIN video_category c ON v.category_id = c.id
         WHERE vf.user_id = #{userId}
@@ -262,11 +280,105 @@
         duration = #{duration},
         update_time = NOW()
         WHERE id = #{id}
+        AND is_deleted = 0
     </update>
 
-    <delete id="deleteVideoById">
-        DELETE FROM video
+    <update id="softDeleteVideo">
+        UPDATE video
+        SET is_deleted = 1,
+            deleted_at = NOW(),
+            deleted_by = #{deletedBy},
+            purge_after = #{purgeAfter},
+            purge_error = NULL,
+            update_time = NOW()
         WHERE id = #{videoId}
+          AND is_deleted = 0
+    </update>
+
+    <select id="selectDeletedVideoPage"
+            resultType="com.example.demo.module.video.vo.DeletedVideoVO">
+        SELECT v.id,
+               v.title,
+               v.author_id AS authorId,
+               u.nickname AS authorNickname,
+               v.cover_url AS coverUrl,
+               v.status,
+               v.deleted_at AS deletedAt,
+               v.deleted_by AS deletedBy,
+               v.purge_after AS purgeAfter,
+               v.purge_attempts AS purgeAttempts,
+               v.purge_error AS purgeError
+        FROM video v
+        LEFT JOIN sys_user u ON u.id = v.author_id
+        WHERE v.is_deleted = 1
+        ORDER BY v.deleted_at DESC, v.id DESC
+    </select>
+
+    <select id="selectDeletedVideoById"
+            resultType="com.example.demo.module.video.entity.Video">
+        SELECT *
+        FROM video
+        WHERE id = #{videoId}
+          AND is_deleted = 1
+    </select>
+
+    <select id="selectDuePurgeVideoIds" resultType="java.lang.Long">
+        SELECT id
+        FROM video
+        WHERE is_deleted = 1
+          AND purge_after IS NOT NULL
+          AND purge_after &lt;= #{now}
+        ORDER BY purge_after ASC
+        LIMIT #{limit}
+    </select>
+
+    <update id="incrementPurgeFailure">
+        UPDATE video
+        SET purge_attempts = purge_attempts + 1,
+            purge_error = #{error},
+            update_time = NOW()
+        WHERE id = #{videoId}
+          AND is_deleted = 1
+    </update>
+
+    <update id="markProcessFailed">
+        UPDATE video
+        SET status = 'PROCESS_FAILED',
+            process_error = #{error},
+            update_time = NOW()
+        WHERE id = #{videoId}
+          AND status = 'PROCESSING'
+          AND is_deleted = 0
+    </update>
+
+    <update id="markReviewTimedOut">
+        UPDATE video
+        SET review_timeout_notified = 1,
+            update_time = NOW()
+        WHERE id = #{videoId}
+          AND status = 'PENDING'
+          AND is_deleted = 0
+          AND review_timeout_notified = 0
+    </update>
+
+    <delete id="hardDeleteVideoLikes">
+        DELETE FROM video_like WHERE video_id = #{videoId}
+    </delete>
+
+    <delete id="hardDeleteVideoFavorites">
+        DELETE FROM video_favorite WHERE video_id = #{videoId}
+    </delete>
+
+    <delete id="hardDeleteVideoComments">
+        DELETE FROM video_comment WHERE video_id = #{videoId}
+    </delete>
+
+    <delete id="hardDeleteVideoNotifications">
+        DELETE FROM notification WHERE video_id = #{videoId}
+    </delete>
+
+    <delete id="hardDeleteVideo">
+        DELETE FROM video WHERE id = #{videoId} AND is_deleted = 1
     </delete>
 
     <update id="changeLikeCount">
@@ -274,6 +386,7 @@
         SET like_count = GREATEST(like_count + #{delta}, 0)
         WHERE id = #{videoId}
         AND status = 'PUBLISHED'
+        AND is_deleted = 0
     </update>
 
     <update id="changeFavoriteCount">
@@ -281,6 +394,7 @@
         SET favorite_count = GREATEST(favorite_count + #{delta}, 0)
         WHERE id = #{videoId}
         AND status = 'PUBLISHED'
+        AND is_deleted = 0
     </update>
 
 </mapper>
