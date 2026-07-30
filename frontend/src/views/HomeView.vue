@@ -293,14 +293,23 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
 
 .top-search :deep(.el-input__wrapper) {
   border-radius: 9px 0 0 9px;
-  background: #f1f2f3;
-  box-shadow: none !important;
+  background: #fff;
+  box-shadow: 0 0 0 1px #94a3b8 inset !important;
 }
 
 .top-search :deep(.el-input-group__append) {
   border-radius: 0 9px 9px 0;
-  background: #f1f2f3;
-  box-shadow: none;
+  background: #0284c7;
+  box-shadow: 0 0 0 1px #0284c7 inset;
+}
+
+.top-search :deep(.el-input-group__append .el-button) {
+  color: #fff;
+  font-weight: 700;
+}
+
+.top-search :deep(.el-input__inner::placeholder) {
+  color: #64748b;
 }
 
 .header-action,
@@ -314,30 +323,39 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
-  color: var(--vn-text-secondary);
+  min-width: 52px;
+  padding: 5px 8px;
+  gap: 2px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #334155;
 }
 
 .header-action__icon {
-  color: var(--vn-text);
-  font-size: 13px;
+  color: #0f172a;
+  font-size: 14px;
   font-weight: 700;
 }
 
 .header-action small {
-  font-size: 11px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .user-trigger {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 6px;
+  padding: 5px 9px;
+  border: 1px solid #cbd5e1;
   border-radius: 999px;
 }
 
 .user-trigger:hover {
-  background: #f1f2f3;
+  background: #e0f2fe;
+  border-color: #7dd3fc;
 }
 
 .user-avatar,
@@ -359,9 +377,9 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
 .user-name {
   max-width: 90px;
   overflow: hidden;
-  color: var(--vn-text);
-  font-size: 13px;
-  font-weight: 600;
+  color: #0f172a;
+  font-size: 14px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

@@ -39,16 +39,16 @@ const router = useRouter()
 .site-header {
   position: relative;
   z-index: 30;
-  height: 64px;
-  border-bottom: 1px solid rgb(0 0 0 / 6%);
-  background: rgb(255 255 255 / 92%);
+  height: 72px;
+  border-bottom: 1px solid #cbd5e1;
+  background: rgb(255 255 255 / 98%);
   backdrop-filter: blur(18px) saturate(150%);
 }
 
 .site-header.elevated {
   position: sticky;
   top: 0;
-  box-shadow: 0 1px 8px rgb(0 0 0 / 4%);
+  box-shadow: 0 3px 14px rgb(15 23 42 / 10%);
 }
 
 .site-header__inner {
@@ -57,15 +57,16 @@ const router = useRouter()
   margin: 0 auto;
   display: flex;
   align-items: center;
-  gap: 24px;
+  gap: 28px;
 }
 
 .site-brand {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 9px;
-  padding: 0;
+  gap: 10px;
+  padding: 5px 8px;
+  border-radius: 12px;
   border: 0;
   background: transparent;
   color: var(--vn-text);
@@ -73,20 +74,30 @@ const router = useRouter()
 }
 
 .site-brand__mark {
-  width: 34px;
-  height: 34px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 11px;
-  background: linear-gradient(135deg, var(--vn-primary), #5ed8ff);
-  box-shadow: 0 6px 16px rgb(0 174 236 / 24%);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #0284c7, #38bdf8);
+  box-shadow: 0 5px 14px rgb(2 132 199 / 30%);
   color: #fff;
-  font-size: 13px;
+  font-size: 0;
+}
+
+.site-brand__mark::before {
+  content: '';
+  width: 0;
+  height: 0;
+  margin-left: 3px;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 12px solid #fff;
 }
 
 .site-brand__name {
-  font-size: 20px;
+  font-size: 22px;
   font-weight: 800;
   letter-spacing: -.5px;
 }
@@ -115,19 +126,21 @@ const router = useRouter()
 }
 
 :slotted(.site-nav-link) {
-  padding: 8px 10px;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--vn-text-secondary);
-  font-size: 14px;
+  padding: 9px 14px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: #f8fafc;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 700;
   cursor: pointer;
   transition: color .2s, background .2s;
 }
 
 :slotted(.site-nav-link:hover) {
-  background: var(--vn-primary-soft);
-  color: var(--vn-primary-dark);
+  border-color: #7dd3fc;
+  background: #e0f2fe;
+  color: #075985;
 }
 
 @media (max-width: 900px) {
@@ -143,7 +156,7 @@ const router = useRouter()
 
 @media (max-width: 620px) {
   .site-header {
-    height: 58px;
+    height: 62px;
   }
 
   .site-brand__name {

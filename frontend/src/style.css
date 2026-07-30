@@ -49,6 +49,16 @@ a { color: inherit; text-decoration: none; }
 
 .el-button { font-weight: 500; }
 .el-button--primary { box-shadow: 0 3px 10px rgb(0 174 236 / 18%); }
+
+/* 顶部栏的主操作（如“投稿”）使用深色文字，避免在浅色背景下辨识度不足。 */
+.site-header .el-button--primary,
+.header .el-button--primary,
+.admin-topbar .el-button--primary {
+  --el-button-text-color: #111827;
+  color: #111827;
+  font-weight: 800;
+}
+
 .el-input__wrapper, .el-textarea__inner, .el-select__wrapper { box-shadow: 0 0 0 1px var(--vn-border) inset !important; }
 .el-input__wrapper:hover, .el-textarea__inner:hover, .el-select__wrapper:hover { box-shadow: 0 0 0 1px #8adcf7 inset !important; }
 .el-table { --el-table-header-bg-color: #f8fafc; --el-table-border-color: var(--vn-border); }
