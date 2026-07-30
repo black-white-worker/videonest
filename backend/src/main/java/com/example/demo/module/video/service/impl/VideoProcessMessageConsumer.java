@@ -60,7 +60,10 @@ public class VideoProcessMessageConsumer {
         this.redisTemplate = redisTemplate;
     }
 
-    @RabbitListener(queues = RabbitMqConfig.VIDEO_PROCESS_QUEUE)
+    @RabbitListener(
+            queues = RabbitMqConfig.VIDEO_PROCESS_QUEUE,
+            concurrency = "${video-process.consumer-concurrency:2}"
+    )
     public void consume(String message) {
         VideoProcessEvent event = readEvent(message);
         Video video = videoMapper.selectById(event.videoId());
