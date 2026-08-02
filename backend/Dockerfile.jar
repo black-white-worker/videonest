@@ -1,0 +1,8 @@
+ARG BACKEND_BASE_IMAGE=videonest-backend-base:java21-ffmpeg
+FROM ${BACKEND_BASE_IMAGE}
+
+WORKDIR /app
+COPY target/*.jar app.jar
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]

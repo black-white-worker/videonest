@@ -56,9 +56,6 @@ const user = computed(() => {
   } catch { return null }
 })
 
-const featuredVideo = computed(() => videos.value[0] || null)
-const spotlightVideos = computed(() => videos.value.slice(1, 7))
-const remainingVideos = computed(() => videos.value.slice(7))
 const activeWallpaper = computed(() => wallpaperSlides[activeWallpaperIndex.value])
 const userInitial = computed(() => user.value?.nickname?.slice(0, 1).toUpperCase() || '我')
 const sectionTitle = computed(() => {
@@ -275,74 +272,17 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
 
       <el-skeleton :loading="videoLoading" animated :count="8">
         <template #default>
-          <div v-if="videos.length" class="rank-showcase">
+          <div v-if="videos.length" class="video-grid">
             <article
-              v-if="featuredVideo"
-              class="rank-featured-card"
-              tabindex="0"
-              @click="goVideoDetail(featuredVideo.id)"
-              @keyup.enter="goVideoDetail(featuredVideo.id)"
-            >
-              <div class="rank-featured-cover">
-                <img :src="featuredVideo.coverUrl" :alt="featuredVideo.title" loading="eager">
-                <div class="rank-featured-overlay">
-                  <span class="rank-number">NO.1</span>
-                  <div>
-                    <h3>{{ featuredVideo.title }}</h3>
-                    <p>{{ featuredVideo.description || '本期首位推荐作品，点击进入观看完整内容。' }}</p>
-                    <div class="rank-featured-meta">
-                      <span>▶ {{ formatNumber(featuredVideo.viewCount) }} 播放</span>
-                      <span>♥ {{ formatNumber(featuredVideo.likeCount) }}</span>
-                      <span>{{ formatDuration(featuredVideo.duration) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </article>
-
-            <div class="rank-compact-grid">
-              <article
-                v-for="(video, index) in spotlightVideos"
-                :key="video.id"
-                class="video-card compact-video-card"
-                tabindex="0"
-                @click="goVideoDetail(video.id)"
-                @keyup.enter="goVideoDetail(video.id)"
-              >
-                <div class="cover-box">
-                  <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
-                  <span class="compact-rank">{{ String(index + 2).padStart(2, '0') }}</span>
-                  <div class="cover-gradient" />
-                  <div class="cover-meta">
-                    <span>▶ {{ formatNumber(video.viewCount) }}</span>
-                    <span>{{ formatDuration(video.duration) }}</span>
-                  </div>
-                </div>
-                <div class="video-card__body">
-                  <h3 :title="video.title">{{ video.title }}</h3>
-                  <div class="author-line">
-                    <span class="mini-avatar">{{ video.authorNickname.slice(0, 1) }}</span>
-                    <div>
-                      <strong>{{ video.authorNickname }}</strong>
-                      <span>{{ video.categoryName }} · {{ formatDate(video.publishTime) }}</span>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            </div>
-          </div>
-          <div v-if="remainingVideos.length" class="rank-more-grid">
-            <article
-              v-for="(video, index) in remainingVideos"
+              v-for="video in videos"
               :key="video.id"
-              class="video-card compact-video-card"
+              class="video-card"
               tabindex="0"
               @click="goVideoDetail(video.id)"
               @keyup.enter="goVideoDetail(video.id)"
             >
               <div class="cover-box">
                 <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
-                <span class="compact-rank">{{ String(index + 8).padStart(2, '0') }}</span>
                 <div class="cover-gradient" />
                 <div class="cover-meta">
                   <span>▶ {{ formatNumber(video.viewCount) }}</span>
@@ -454,6 +394,8 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   padding: 5px 9px;
   border: 1px solid #cbd5e1;
   border-radius: 999px;
+  background: #f8fafc;
+  color: #0f172a;
 }
 
 .user-trigger:hover {

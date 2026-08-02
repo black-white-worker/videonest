@@ -1,0 +1,6 @@
+# Compose override for local HTTP benchmarks.
+# The backend reaches MySQL over the Compose network, so the host does not need
+# a 3306 binding. This avoids colliding with an existing local MySQL instance.
+services:
+  mysql:
+    ports: !reset []
