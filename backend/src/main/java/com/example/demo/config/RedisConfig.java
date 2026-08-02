@@ -6,6 +6,7 @@ import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.GenericJacksonJsonRedisSerializer;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 
 /**
  * RedisTemplate 自定义序列化配置
@@ -33,8 +34,7 @@ public class RedisConfig {
         // Spring Data Redis 4.x 推荐的 JSON 序列化器，key统一存字符串
         //将Java对象自动转为JSON存入Redis，取出自动转回对象
         // GenericJacksonJsonRedisSerializer 使用Jackson完成序列化
-        GenericJacksonJsonRedisSerializer jsonSerializer =
-                GenericJacksonJsonRedisSerializer.builder().build();
+        GenericJacksonJsonRedisSerializer jsonSerializer = createJsonSerializer();
 
         // 普通 key / hash key 使用字符串序列化，这样可读
         template.setKeySerializer(stringSerializer);
@@ -47,5 +47,18 @@ public class RedisConfig {
         // 加载所有配置，初始化序列化相关参数
         template.afterPropertiesSet();
         return template;
+    }
+
+    public static GenericJacksonJsonRedisSerializer createJsonSerializer() {
+        // Spring Data Redis 4 默认不写类型信息，会把对象读成 Map。
+        // 仅允许项目域对象和 JDK 集合参与多态反序列化，避免开放任意类型。
+        var typeValidator = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("com.example.demo.")
+                .allowIfSubType("java.util.")
+                .allowSubTypesWithExplicitDeserializer()
+                .build();
+        return GenericJacksonJsonRedisSerializer.builder()
+                .enableDefaultTyping(typeValidator)
+                .build();
     }
 }

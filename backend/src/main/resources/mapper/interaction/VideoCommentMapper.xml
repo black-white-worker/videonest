@@ -24,6 +24,7 @@
             SELECT parent_id, COUNT(1) AS replyCount
             FROM video_comment
             WHERE status = 1
+            AND video_id = #{videoId}
             AND parent_id &lt;&gt; 0
             GROUP BY parent_id
         ) reply_count ON reply_count.parent_id = vc.id

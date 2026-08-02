@@ -85,6 +85,17 @@ export async function getVideoDetail(id: number): Promise<VideoDetail> {
   return response.data.data
 }
 
+export async function reportVideoView(id: number): Promise<{
+  accepted: boolean
+  viewCount: number
+}> {
+  const response = await request.post<ApiResponse<{
+    accepted: boolean
+    viewCount: number
+  }>>(`/videos/${id}/views`)
+  return response.data.data
+}
+
 export interface InteractionStatus {
   liked: boolean
   favorited: boolean

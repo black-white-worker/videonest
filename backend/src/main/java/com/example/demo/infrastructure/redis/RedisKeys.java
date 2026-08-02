@@ -61,6 +61,24 @@ public final class RedisKeys {
     public static final String VIDEO_HOT_RANK_KEY =
             "videonest:video:hot";
 
+    public static final String VIDEO_HOT_BUCKET_PREFIX =
+            "videonest:video:hot:hour:";
+
+    public static final String VIDEO_DETAIL_LOCK_PREFIX =
+            "videonest:lock:video-detail:";
+
+    public static final String VIDEO_VIEW_DEDUP_PREFIX =
+            "videonest:video:view:dedup:";
+
+    public static final String ANONYMOUS_VIEW_RATE_PREFIX =
+            "videonest:video:view:anonymous-rate:";
+
+    public static final String UPLOAD_TICKET_PREFIX =
+            "videonest:upload:ticket:";
+
+    public static final String UPLOAD_CONFIRMED_PREFIX =
+            "videonest:upload:confirmed:";
+
     public static final String VIDEO_VIEW_TOTAL_PREFIX =
             "videonest:video:view:total:";
 
@@ -92,6 +110,26 @@ public final class RedisKeys {
 
     public static String videoViewDelta(Long videoId) {
         return VIDEO_VIEW_DELTA_PREFIX + videoId;
+    }
+
+    public static String videoDetailLock(Long videoId) {
+        return VIDEO_DETAIL_LOCK_PREFIX + videoId;
+    }
+
+    public static String videoViewDedup(Long videoId, String viewerKey) {
+        return VIDEO_VIEW_DEDUP_PREFIX + videoId + ":" + viewerKey;
+    }
+
+    public static String anonymousViewRate(String ipHash, long window) {
+        return ANONYMOUS_VIEW_RATE_PREFIX + ipHash + ":" + window;
+    }
+
+    public static String uploadTicket(String uploadId) {
+        return UPLOAD_TICKET_PREFIX + uploadId;
+    }
+
+    public static String confirmedUpload(String objectName) {
+        return UPLOAD_CONFIRMED_PREFIX + objectName;
     }
 
 

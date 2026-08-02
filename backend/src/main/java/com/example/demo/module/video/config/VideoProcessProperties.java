@@ -11,5 +11,7 @@ public class VideoProcessProperties {
 
     private String ffmpegPath = "ffmpeg";
 
+    private String ffprobePath = "ffprobe";
+
     private long timeoutSeconds = 1800;
 }

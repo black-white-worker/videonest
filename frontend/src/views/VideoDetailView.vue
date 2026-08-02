@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
@@ -11,6 +11,7 @@ import {
   getInteractionStatus,
   getVideoDetail,
   likeVideo,
+  reportVideoView,
   unfavoriteVideo,
   unlikeVideo,
   type VideoComment,
@@ -35,6 +36,9 @@ let pendingPlaybackState: {
   currentTime: number
   shouldResume: boolean
 } | null = null
+let playStartedAt: number | null = null
+let watchedMilliseconds = 0
+let viewReported = false
 const liked = ref(false)
 const favorited = ref(false)
 const interactionLoading = ref(false)
@@ -217,6 +221,40 @@ function handleLoadedMetadata() {
   if (playbackState.shouldResume) {
     currentPlayer.play().catch(() => undefined)
   }
+}
+
+function handlePlay() {
+  if (viewReported || playStartedAt !== null) return
+  playStartedAt = performance.now()
+}
+
+function handlePause() {
+  if (playStartedAt === null) return
+  watchedMilliseconds += performance.now() - playStartedAt
+  playStartedAt = null
+  void reportViewWhenEligible()
+}
+
+async function reportViewWhenEligible() {
+  const activeMilliseconds = playStartedAt === null
+    ? 0
+    : performance.now() - playStartedAt
+  if (viewReported || watchedMilliseconds + activeMilliseconds < 5000 || !video.value) {
+    return
+  }
+
+  // 先置位，避免 timeupdate 并发重复上报；失败时允许后续播放重试。
+  viewReported = true
+  try {
+    const result = await reportVideoView(video.value.id)
+    video.value.viewCount = result.viewCount
+  } catch {
+    viewReported = false
+  }
+}
+
+function handleTimeUpdate() {
+  void reportViewWhenEligible()
 }
 
 function isMyVideo(): boolean {
@@ -479,6 +517,10 @@ function goHome() {
 onMounted(() => {
   loadVideoDetail()
 })
+
+onBeforeUnmount(() => {
+  handlePause()
+})
 </script>
 
 <template>
@@ -534,6 +576,10 @@ onMounted(() => {
                     controls
                     class="video-player"
                     @loadedmetadata="handleLoadedMetadata"
+                    @play="handlePlay"
+                    @pause="handlePause"
+                    @ended="handlePause"
+                    @timeupdate="handleTimeUpdate"
                   >
                     当前浏览器不支持视频播放。
                   </video>

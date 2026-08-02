@@ -4,8 +4,11 @@ import com.example.demo.common.exception.BusinessException;
 import com.example.demo.common.exception.StorageOperationException;
 import com.example.demo.infrastructure.oss.config.MinioProperties;
 import com.example.demo.infrastructure.oss.service.MinioService;
+import com.example.demo.infrastructure.oss.service.StoredObjectMetadata;
 import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
+import io.minio.CopyObjectArgs;
+import io.minio.CopySource;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -45,8 +48,7 @@ public class MinioServiceImpl implements MinioService {
     // 允许上传的封面图片MIME类型集合
     private static final Set<String> IMAGE_TYPES = Set.of(
             "image/jpeg",
-            "image/png",
-            "image/webp"
+            "image/png"
     );
 
 
@@ -74,6 +76,71 @@ public class MinioServiceImpl implements MinioService {
                         minioProperties.getSecretKey()
                 )
                 .build();
+    }
+
+    @Override
+    public String createPresignedPutUrl(String objectName, int expiryMinutes) {
+        try {
+            ensureBucketExists();
+            return publicMinioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder()
+                            .method(Method.PUT)
+                            .bucket(minioProperties.getBucketName())
+                            .object(objectName)
+                            .expiry(expiryMinutes, TimeUnit.MINUTES)
+                            .build()
+            );
+        } catch (IOException e) {
+            throw storageFailure("PRESIGN_PUT", "连接 MinIO 生成上传地址失败", true, e);
+        } catch (GeneralSecurityException e) {
+            throw storageFailure("PRESIGN_PUT", "MinIO 安全配置错误", false, e);
+        } catch (MinioException e) {
+            throw storageFailure("PRESIGN_PUT", "MinIO 无法生成上传地址", isRetryable(e), e);
+        }
+    }
+
+    @Override
+    public StoredObjectMetadata statObject(String objectName) {
+        try {
+            var stat = minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .object(objectName)
+                            .build()
+            );
+            return new StoredObjectMetadata(stat.size(), stat.contentType());
+        } catch (IOException e) {
+            throw storageFailure("STAT", "连接 MinIO 获取资源信息失败", true, e);
+        } catch (GeneralSecurityException e) {
+            throw storageFailure("STAT", "MinIO 安全配置错误", false, e);
+        } catch (MinioException e) {
+            throw storageFailure("STAT", "MinIO 无法获取资源信息", isRetryable(e), e);
+        }
+    }
+
+    @Override
+    public void moveObject(String sourceObjectName, String targetObjectName) {
+        try {
+            minioClient.copyObject(
+                    CopyObjectArgs.builder()
+                            .bucket(minioProperties.getBucketName())
+                            .object(targetObjectName)
+                            .source(
+                                    CopySource.builder()
+                                            .bucket(minioProperties.getBucketName())
+                                            .object(sourceObjectName)
+                                            .build()
+                            )
+                            .build()
+            );
+            deleteObject(sourceObjectName);
+        } catch (IOException e) {
+            throw storageFailure("PROMOTE", "连接 MinIO 确认上传对象失败", true, e);
+        } catch (GeneralSecurityException e) {
+            throw storageFailure("PROMOTE", "MinIO 安全配置错误", false, e);
+        } catch (MinioException e) {
+            throw storageFailure("PROMOTE", "MinIO 无法确认上传对象", isRetryable(e), e);
+        }
     }
 
     /**
@@ -187,20 +254,7 @@ public class MinioServiceImpl implements MinioService {
             return null;
         }
 
-        try {
-            return minioClient.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(minioProperties.getBucketName())
-                            .object(objectNameOrUrl)
-                            .build()
-            ).size();
-        } catch (IOException e) {
-            throw storageFailure("STAT", "连接 MinIO 获取资源信息失败", true, e);
-        } catch (GeneralSecurityException e) {
-            throw storageFailure("STAT", "MinIO 安全配置错误", false, e);
-        } catch (MinioException e) {
-            throw storageFailure("STAT", "MinIO 无法获取资源信息", isRetryable(e), e);
-        }
+        return statObject(objectNameOrUrl).size();
     }
 
     /**
@@ -246,7 +300,7 @@ public class MinioServiceImpl implements MinioService {
             if (!IMAGE_TYPES.contains(contentType)) {
                 throw new BusinessException(
                         400,
-                        "封面仅支持 JPG、PNG、WebP 格式"
+                        "封面仅支持 JPG、PNG 格式"
                 );
             }
 
@@ -336,8 +390,12 @@ public class MinioServiceImpl implements MinioService {
         }
     }
 
+    /**
+     * 删除MinIO文件，幂等实现
+     */
     @Override
     public void deleteObject(String objectName) {
+        // 参数为空 或者 是外部http链接，直接return，无需操作MinIO
         if (!StringUtils.hasText(objectName)
                 || objectName.startsWith("http://")
                 || objectName.startsWith("https://")) {
@@ -345,6 +403,7 @@ public class MinioServiceImpl implements MinioService {
         }
 
         try {
+            // 调用MinIO SDK执行删除
             minioClient.removeObject(
                     RemoveObjectArgs.builder()
                             .bucket(minioProperties.getBucketName())
@@ -353,7 +412,9 @@ public class MinioServiceImpl implements MinioService {
             );
             log.info("MinIO 资源删除成功，objectName={}", objectName);
         } catch (ErrorResponseException e) {
+            //桶内找不到这个文件（文件本来就不存在）
             if ("NoSuchKey".equals(e.errorResponse().code())) {
+                // 直接return，不抛出异常,上层业务感知不到错误
                 log.info("MinIO 资源已不存在，按幂等删除成功处理，objectName={}", objectName);
                 return;
             }
@@ -367,6 +428,14 @@ public class MinioServiceImpl implements MinioService {
         }
     }
 
+    /**
+     * 统一封装存储异常：打印错误日志，构建自定义异常向外抛出
+     * @param operation 操作标识 UPLOAD/DOWNLOAD/PRESIGN/DELETE
+     * @param message 错误描述
+     * @param retryable 是否支持重试
+     * @param cause 原始异常
+     * @return 自定义存储异常
+     */
     private StorageOperationException storageFailure(
             String operation,
             String message,
@@ -383,6 +452,10 @@ public class MinioServiceImpl implements MinioService {
         return new StorageOperationException(operation, message, retryable, cause);
     }
 
+    /**
+     * 判断MinIO异常是否可以重试
+     * 408超时、429限流、5xx服务端错误 → 允许重试
+     */
     private boolean isRetryable(MinioException exception) {
         if (exception instanceof ErrorResponseException errorResponseException) {
             int statusCode = errorResponseException.response().code();

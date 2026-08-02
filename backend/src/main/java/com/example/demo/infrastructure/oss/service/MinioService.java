@@ -11,6 +11,15 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface MinioService {
 
+    String createPresignedPutUrl(
+            String objectName,
+            int expiryMinutes
+    );
+
+    StoredObjectMetadata statObject(String objectName);
+
+    void moveObject(String sourceObjectName, String targetObjectName);
+
     /**
      * 接收前端上传文件（SpringMVC上传文件），上传至MinIO指定文件夹
      * @param file 前端传过来的文件对象 MultipartFile

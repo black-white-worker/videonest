@@ -48,6 +48,7 @@ const interactionPage = ref(1)
 const interactionSize = ref(8)
 const interactionTotal = ref(0)
 const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>('submissions')
+const profileCoverUrl = 'https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=2200&q=88'
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -364,7 +365,11 @@ onMounted(() => {
     <section class="container">
       <el-skeleton :loading="profileLoading" animated>
         <template #default>
-          <section v-if="profile" class="profile-card">
+          <section
+            v-if="profile"
+            class="profile-card profile-space-banner"
+            :style="{ '--profile-cover': `url(${profileCoverUrl})` }"
+          >
             <div class="avatar">
               {{ profile.nickname.slice(0, 1).toUpperCase() }}
             </div>
@@ -1473,6 +1478,171 @@ onMounted(() => {
 
   .submission-section .video-card {
     grid-template-columns: 1fr;
+  }
+}
+</style>
+
+<style scoped>
+/* 个人空间参考内容站主页：横幅身份区 + 横向内容导航。 */
+.profile-space-banner {
+  min-height: 270px;
+  padding: 128px 34px 28px;
+  align-items: end;
+  border: 0;
+  background-color: #25324a;
+  background-image: var(--profile-cover);
+  background-position: center 48%;
+  background-size: cover;
+  box-shadow: 0 12px 30px rgb(15 23 42 / 14%);
+  color: #fff;
+}
+
+.profile-space-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(4 10 24 / 4%) 20%, rgb(4 10 24 / 78%) 100%),
+    linear-gradient(90deg, rgb(4 10 24 / 28%), transparent 64%);
+}
+
+.profile-space-banner::after {
+  z-index: 1;
+  color: rgb(255 255 255 / 14%);
+}
+
+.profile-space-banner > * {
+  position: relative;
+  z-index: 2;
+}
+
+.profile-space-banner .avatar {
+  width: 98px;
+  height: 98px;
+  border-color: rgb(255 255 255 / 92%);
+  background: linear-gradient(135deg, #00aeec, #78e4ff);
+  box-shadow: 0 10px 28px rgb(0 0 0 / 24%);
+}
+
+.profile-space-banner .profile-info h1 {
+  color: #fff;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 38%);
+}
+
+.profile-space-banner .profile-info p {
+  color: rgb(255 255 255 / 76%);
+}
+
+.profile-space-banner .stats > div {
+  border-color: rgb(255 255 255 / 18%);
+  background: rgb(8 15 30 / 44%);
+  backdrop-filter: blur(14px);
+}
+
+.profile-space-banner .stats strong {
+  color: #fff;
+}
+
+.profile-space-banner .stats span {
+  color: rgb(255 255 255 / 68%);
+}
+
+.profile-workspace {
+  grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.center-sidebar {
+  position: sticky;
+  z-index: 8;
+  top: 80px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  gap: 6px;
+  border-radius: 12px;
+  box-shadow: 0 5px 18px rgb(15 23 42 / 5%);
+  scrollbar-width: none;
+}
+
+.center-sidebar__title {
+  display: none;
+}
+
+.center-sidebar > button {
+  width: auto;
+  min-width: 164px;
+  margin: 0;
+  padding: 9px 12px;
+  flex: 0 0 auto;
+}
+
+.center-sidebar > button.active {
+  background: #dff5fd;
+  color: #075985;
+}
+
+.center-sidebar > button.active > span {
+  background: #00aeec;
+  color: #111827;
+  font-weight: 900;
+}
+
+.sidebar-create {
+  min-width: 250px;
+  margin: 0 0 0 auto;
+  padding: 10px 12px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 10px;
+}
+
+.sidebar-create p {
+  margin: 2px 0 0;
+}
+
+.sidebar-create .el-button {
+  width: auto;
+  grid-row: 1 / 3;
+  grid-column: 2;
+  color: #111827;
+  font-weight: 800;
+}
+
+.center-content {
+  width: 100%;
+}
+
+@media (max-width: 1000px) {
+  .profile-space-banner {
+    grid-template-columns: auto 1fr;
+  }
+
+  .center-sidebar {
+    position: sticky;
+  }
+
+  .sidebar-create {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .profile-space-banner {
+    min-height: 330px;
+    padding: 110px 18px 22px;
+    grid-template-columns: 1fr;
+    background-position: center;
+  }
+
+  .center-sidebar {
+    top: 68px;
+  }
+
+  .center-sidebar > button {
+    min-width: 150px;
   }
 }
 </style>

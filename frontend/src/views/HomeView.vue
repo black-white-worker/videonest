@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { getCategories, getHotVideos, getVideoList, type VideoCategory, type VideoListItem } from '../api/video'
@@ -19,6 +19,36 @@ const categoryLoading = ref(false)
 const videoLoading = ref(false)
 const unreadNotificationCount = ref(0)
 
+interface WallpaperSlide {
+  imageUrl: string
+  eyebrow: string
+  title: string
+  description: string
+}
+
+const wallpaperSlides: WallpaperSlide[] = [
+  {
+    imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=2400&q=88',
+    eyebrow: 'VIDEONEST · 灵感正在发生',
+    title: '在光影之间，遇见新的故事',
+    description: '每日轮换的网络风景壁纸，让内容发现从第一眼开始。'
+  },
+  {
+    imageUrl: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=2400&q=88',
+    eyebrow: 'DISCOVER · 去更远的地方',
+    title: '世界很大，镜头替你先出发',
+    description: '汇集创作者的新鲜表达，也收藏属于你的片刻共鸣。'
+  },
+  {
+    imageUrl: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=2400&q=88',
+    eyebrow: 'TRENDING · 此刻全站热门',
+    title: '跟上热度，也保留自己的方向',
+    description: '热门内容持续更新，发现正在被大家讨论的作品。'
+  }
+]
+const activeWallpaperIndex = ref(0)
+let wallpaperTimer: number | undefined
+
 const user = computed(() => {
   try {
     const value = localStorage.getItem('userInfo')
@@ -27,6 +57,9 @@ const user = computed(() => {
 })
 
 const featuredVideo = computed(() => videos.value[0] || null)
+const spotlightVideos = computed(() => videos.value.slice(1, 7))
+const remainingVideos = computed(() => videos.value.slice(7))
+const activeWallpaper = computed(() => wallpaperSlides[activeWallpaperIndex.value])
 const userInitial = computed(() => user.value?.nickname?.slice(0, 1).toUpperCase() || '我')
 const sectionTitle = computed(() => {
   if (keyword.value.trim()) return `“${keyword.value.trim()}”的搜索结果`
@@ -72,6 +105,12 @@ function formatNumber(value: number) { return value >= 10000 ? `${(value / 10000
 function formatDate(value: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '' }
 function logout() { localStorage.removeItem('token'); localStorage.removeItem('userInfo'); ElMessage.success('已退出登录'); router.push('/login') }
 function goVideoDetail(videoId: number) { router.push(`/video/${videoId}`) }
+function showWallpaper(index: number) { activeWallpaperIndex.value = (index + wallpaperSlides.length) % wallpaperSlides.length }
+function nextWallpaper() { showWallpaper(activeWallpaperIndex.value + 1) }
+function restartWallpaperTimer() {
+  if (wallpaperTimer) window.clearInterval(wallpaperTimer)
+  wallpaperTimer = window.setInterval(nextWallpaper, 8000)
+}
 function handleUserCommand(command: string) {
   if (command === 'logout') {
     logout()
@@ -80,12 +119,18 @@ function handleUserCommand(command: string) {
   router.push(command)
 }
 async function loadUnreadNotificationCount() { if (!localStorage.getItem('token')) return; try { unreadNotificationCount.value = await getUnreadNotificationCount() } catch { unreadNotificationCount.value = 0 } }
-onMounted(async () => { await loadCategories(); await loadVideos(); await loadUnreadNotificationCount() })
+onMounted(async () => {
+  restartWallpaperTimer()
+  await loadCategories()
+  await loadVideos()
+  await loadUnreadNotificationCount()
+})
+onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer) })
 </script>
 
 <template>
   <main class="home-page">
-    <SiteHeader>
+    <SiteHeader overlay :elevated="false">
       <template #nav>
         <button class="site-nav-link" @click="selectCategory()">首页</button>
         <button class="site-nav-link" @click="selectHotVideos">热门</button>
@@ -146,34 +191,35 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
     </SiteHeader>
 
     <section
-      class="hero"
-      :class="{ 'has-cover': featuredVideo }"
-      :style="featuredVideo ? { '--hero-cover': `url(${featuredVideo.coverUrl})` } : undefined"
+      class="hero wallpaper-hero"
+      :style="{ '--hero-cover': `url(${activeWallpaper.imageUrl})` }"
     >
       <div class="hero__veil" />
       <div class="container hero__content">
         <div class="hero__copy">
-          <span class="hero__eyebrow">VIDEONEST · 每天发现好内容</span>
-          <template v-if="featuredVideo">
-            <h1>{{ featuredVideo.title }}</h1>
-            <p>
-              {{ featuredVideo.authorNickname }} · {{ featuredVideo.categoryName }}
-              · {{ formatNumber(featuredVideo.viewCount) }} 次播放
-            </p>
-            <div class="hero__actions">
-              <el-button type="primary" size="large" @click="goVideoDetail(featuredVideo.id)">
-                立即观看
-              </el-button>
-              <el-button size="large" @click="selectHotVideos">浏览热门</el-button>
-            </div>
-          </template>
-          <template v-else>
-            <h1>让每一次创作，都被看见</h1>
-            <p>发现视频、分享灵感，和感兴趣的人一起交流。</p>
-          </template>
+          <span class="hero__eyebrow">{{ activeWallpaper.eyebrow }}</span>
+          <h1>{{ activeWallpaper.title }}</h1>
+          <p>{{ activeWallpaper.description }}</p>
+          <div class="hero__actions">
+            <el-button class="hero-primary-button" size="large" @click="selectCategory()">
+              浏览推荐
+            </el-button>
+            <el-button class="hero-secondary-button" size="large" @click="selectHotVideos">
+              查看热门
+            </el-button>
+          </div>
+          <div class="wallpaper-dots" aria-label="壁纸切换">
+            <button
+              v-for="(_, index) in wallpaperSlides"
+              :key="index"
+              :class="{ active: activeWallpaperIndex === index }"
+              :aria-label="`切换到第 ${index + 1} 张壁纸`"
+              @click="showWallpaper(index); restartWallpaperTimer()"
+            />
+          </div>
         </div>
         <div class="hero__side-note">
-          <span>今日推荐</span>
+          <span>{{ isHotMode ? '热门模式' : '今日推荐' }}</span>
           <strong>{{ total }}</strong>
           <small>个正在被发现的视频</small>
         </div>
@@ -229,17 +275,74 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
 
       <el-skeleton :loading="videoLoading" animated :count="8">
         <template #default>
-          <div v-if="videos.length" class="video-grid">
+          <div v-if="videos.length" class="rank-showcase">
             <article
-              v-for="video in videos"
+              v-if="featuredVideo"
+              class="rank-featured-card"
+              tabindex="0"
+              @click="goVideoDetail(featuredVideo.id)"
+              @keyup.enter="goVideoDetail(featuredVideo.id)"
+            >
+              <div class="rank-featured-cover">
+                <img :src="featuredVideo.coverUrl" :alt="featuredVideo.title" loading="eager">
+                <div class="rank-featured-overlay">
+                  <span class="rank-number">NO.1</span>
+                  <div>
+                    <h3>{{ featuredVideo.title }}</h3>
+                    <p>{{ featuredVideo.description || '本期首位推荐作品，点击进入观看完整内容。' }}</p>
+                    <div class="rank-featured-meta">
+                      <span>▶ {{ formatNumber(featuredVideo.viewCount) }} 播放</span>
+                      <span>♥ {{ formatNumber(featuredVideo.likeCount) }}</span>
+                      <span>{{ formatDuration(featuredVideo.duration) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </article>
+
+            <div class="rank-compact-grid">
+              <article
+                v-for="(video, index) in spotlightVideos"
+                :key="video.id"
+                class="video-card compact-video-card"
+                tabindex="0"
+                @click="goVideoDetail(video.id)"
+                @keyup.enter="goVideoDetail(video.id)"
+              >
+                <div class="cover-box">
+                  <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
+                  <span class="compact-rank">{{ String(index + 2).padStart(2, '0') }}</span>
+                  <div class="cover-gradient" />
+                  <div class="cover-meta">
+                    <span>▶ {{ formatNumber(video.viewCount) }}</span>
+                    <span>{{ formatDuration(video.duration) }}</span>
+                  </div>
+                </div>
+                <div class="video-card__body">
+                  <h3 :title="video.title">{{ video.title }}</h3>
+                  <div class="author-line">
+                    <span class="mini-avatar">{{ video.authorNickname.slice(0, 1) }}</span>
+                    <div>
+                      <strong>{{ video.authorNickname }}</strong>
+                      <span>{{ video.categoryName }} · {{ formatDate(video.publishTime) }}</span>
+                    </div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+          <div v-if="remainingVideos.length" class="rank-more-grid">
+            <article
+              v-for="(video, index) in remainingVideos"
               :key="video.id"
-              class="video-card"
+              class="video-card compact-video-card"
               tabindex="0"
               @click="goVideoDetail(video.id)"
               @keyup.enter="goVideoDetail(video.id)"
             >
               <div class="cover-box">
                 <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
+                <span class="compact-rank">{{ String(index + 8).padStart(2, '0') }}</span>
                 <div class="cover-gradient" />
                 <div class="cover-meta">
                   <span>▶ {{ formatNumber(video.viewCount) }}</span>
@@ -795,6 +898,312 @@ onMounted(async () => { await loadCategories(); await loadVideos(); await loadUn
   .video-card__body h3 {
     font-size: 14px;
     line-height: 20px;
+  }
+}
+</style>
+
+<style scoped>
+/* 首页采用独立网络壁纸横幅，视频封面只出现在内容榜单。 */
+.wallpaper-hero {
+  height: clamp(330px, 30vw, 440px);
+  padding-top: 72px;
+  background-color: #162133;
+  background-image: var(--hero-cover);
+  background-position: center;
+  background-size: cover;
+  transition: background-image .45s ease;
+}
+
+.wallpaper-hero .hero__veil {
+  background:
+    linear-gradient(90deg, rgb(6 13 28 / 82%) 0%, rgb(6 13 28 / 49%) 48%, rgb(6 13 28 / 18%) 100%),
+    linear-gradient(0deg, rgb(6 13 28 / 48%), transparent 46%);
+}
+
+.wallpaper-hero .hero__content {
+  align-items: center;
+}
+
+.wallpaper-hero .hero__copy {
+  width: min(700px, 72%);
+  padding-top: 12px;
+  text-shadow: 0 2px 18px rgb(0 0 0 / 34%);
+}
+
+.wallpaper-hero .hero__eyebrow {
+  color: #b9f1ff;
+}
+
+.wallpaper-hero h1 {
+  max-width: 680px;
+  margin-top: 10px;
+  font-size: clamp(32px, 3.4vw, 52px);
+}
+
+.wallpaper-hero p {
+  max-width: 600px;
+  color: rgb(255 255 255 / 88%);
+  font-size: 16px;
+}
+
+.hero-primary-button,
+.hero-secondary-button {
+  min-width: 112px;
+  border: 0;
+  font-weight: 800;
+}
+
+.hero-primary-button {
+  background: #fff;
+  color: #111827;
+}
+
+.hero-primary-button:hover {
+  background: #eaf9ff;
+  color: #075985;
+}
+
+.hero-secondary-button {
+  border: 1px solid rgb(255 255 255 / 46%);
+  background: rgb(15 23 42 / 50%);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+
+.hero-secondary-button:hover {
+  border-color: #fff;
+  background: rgb(255 255 255 / 18%);
+  color: #fff;
+}
+
+.wallpaper-dots {
+  margin-top: 22px;
+  display: flex;
+  gap: 8px;
+}
+
+.wallpaper-dots button {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 52%);
+  cursor: pointer;
+  transition: width .2s, background .2s;
+}
+
+.wallpaper-dots button.active {
+  width: 28px;
+  background: #fff;
+}
+
+.wallpaper-hero .hero__side-note {
+  background: rgb(7 15 30 / 42%);
+}
+
+.rank-showcase {
+  display: grid;
+  grid-template-columns: minmax(430px, 1.35fr) minmax(0, 2fr);
+  align-items: stretch;
+  gap: 18px;
+}
+
+.rank-featured-card {
+  min-width: 0;
+  outline: none;
+  cursor: pointer;
+}
+
+.rank-featured-cover {
+  position: relative;
+  height: 100%;
+  min-height: 448px;
+  overflow: hidden;
+  border-radius: 13px;
+  background: #dce4f0;
+  box-shadow: 0 14px 34px rgb(15 23 42 / 13%);
+}
+
+.rank-featured-cover > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  transition: transform .45s ease;
+}
+
+.rank-featured-card:hover img,
+.rank-featured-card:focus img {
+  transform: scale(1.035);
+}
+
+.rank-featured-overlay {
+  position: absolute;
+  inset: 0;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(180deg, rgb(0 0 0 / 5%) 28%, rgb(4 9 20 / 88%) 100%);
+  color: #fff;
+}
+
+.rank-number,
+.compact-rank {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 7px;
+  font-weight: 900;
+  letter-spacing: .4px;
+}
+
+.rank-number {
+  align-self: flex-start;
+  padding: 6px 10px;
+  background: #fb7299;
+  color: #111827;
+  box-shadow: 0 6px 16px rgb(251 114 153 / 28%);
+  font-size: 12px;
+}
+
+.rank-featured-overlay h3 {
+  display: -webkit-box;
+  overflow: hidden;
+  margin: 0;
+  color: #fff;
+  font-size: clamp(23px, 2.2vw, 33px);
+  line-height: 1.3;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rank-featured-overlay p {
+  display: -webkit-box;
+  max-width: 620px;
+  overflow: hidden;
+  margin: 9px 0 13px;
+  color: rgb(255 255 255 / 76%);
+  font-size: 13px;
+  line-height: 1.65;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.rank-featured-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: rgb(255 255 255 / 86%);
+  font-size: 12px;
+}
+
+.rank-compact-grid,
+.rank-more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px 16px;
+}
+
+.rank-more-grid {
+  margin-top: 30px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.compact-video-card {
+  min-width: 0;
+}
+
+.compact-video-card .cover-box {
+  border-radius: 9px;
+  box-shadow: 0 5px 16px rgb(15 23 42 / 7%);
+}
+
+.compact-rank {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  left: 8px;
+  min-width: 28px;
+  height: 25px;
+  padding: 0 6px;
+  background: rgb(255 255 255 / 90%);
+  color: #111827;
+  font-size: 11px;
+  backdrop-filter: blur(8px);
+}
+
+@media (max-width: 1180px) {
+  .rank-showcase {
+    grid-template-columns: minmax(360px, 1.1fr) minmax(0, 1.55fr);
+  }
+
+  .rank-compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .rank-featured-cover {
+    min-height: 610px;
+  }
+
+  .rank-more-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .wallpaper-hero {
+    height: 360px;
+  }
+
+  .rank-showcase {
+    grid-template-columns: 1fr;
+  }
+
+  .rank-featured-cover {
+    min-height: 390px;
+  }
+
+  .rank-compact-grid,
+  .rank-more-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .wallpaper-hero {
+    height: 350px;
+    padding-top: 62px;
+  }
+
+  .wallpaper-hero .hero__copy {
+    width: 100%;
+  }
+
+  .wallpaper-hero h1 {
+    font-size: 29px;
+  }
+
+  .wallpaper-hero p {
+    font-size: 13px;
+  }
+
+  .rank-featured-cover {
+    min-height: 350px;
+  }
+
+  .rank-featured-overlay {
+    padding: 18px;
+  }
+
+  .rank-compact-grid,
+  .rank-more-grid {
+    gap: 22px 10px;
+  }
+
+  .rank-more-grid {
+    margin-top: 24px;
   }
 }
 </style>

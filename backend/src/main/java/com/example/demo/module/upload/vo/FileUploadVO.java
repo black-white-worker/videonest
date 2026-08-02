@@ -8,4 +8,9 @@ import lombok.Data;
 public class FileUploadVO {
 
     private String objectName;
+    private Integer detectedDuration;
+
+    public FileUploadVO(String objectName) {
+        this.objectName = objectName;
+    }
 }

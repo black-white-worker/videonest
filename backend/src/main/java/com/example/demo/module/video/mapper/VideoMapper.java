@@ -29,6 +29,10 @@ public interface VideoMapper extends BaseMapper<Video> {
 
     VideoDetailVO selectPublishedDetailById(@Param("videoId") Long videoId);
 
+    Long selectPublishedViewCountById(@Param("videoId") Long videoId);
+
+    List<VideoListItemVO> selectRecentPublished(@Param("limit") int limit);
+
     List<VideoListItemVO> selectPublishedListByIds(
             @Param("videoIds") List<Long> videoIds
     );

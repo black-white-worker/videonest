@@ -1,6 +1,7 @@
 package com.example.demo.module.video.service.impl;
 
 import com.example.demo.infrastructure.redis.RedisKeys;
+import com.example.demo.common.exception.BusinessException;
 import com.example.demo.module.video.mapper.VideoMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,14 +22,30 @@ public class VideoViewCountService {
 
     private static final DefaultRedisScript<Long> RECORD_VIEW_SCRIPT =
             new DefaultRedisScript<>("""
-                    if redis.call('EXISTS', KEYS[1]) == 0 then
-                        redis.call('SET', KEYS[1], ARGV[1])
+                    if ARGV[5] == '1' then
+                        local rate = redis.call('INCR', KEYS[2])
+                        if rate == 1 then
+                            redis.call('EXPIRE', KEYS[2], ARGV[7])
+                        end
+                        if rate > tonumber(ARGV[6]) then
+                            return -1
+                        end
                     end
-                    local total = redis.call('INCRBY', KEYS[1], 1)
-                    redis.call('INCRBY', KEYS[2], 1)
-                    redis.call('SADD', KEYS[3], ARGV[2])
-                    redis.call('EXPIRE', KEYS[1], ARGV[3])
-                    redis.call('EXPIRE', KEYS[2], ARGV[3])
+                    if not redis.call('SET', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
+                        local current = redis.call('GET', KEYS[3])
+                        if not current then
+                            current = ARGV[1]
+                        end
+                        return -tonumber(current) - 1
+                    end
+                    if redis.call('EXISTS', KEYS[3]) == 0 then
+                        redis.call('SET', KEYS[3], ARGV[1])
+                    end
+                    local total = redis.call('INCRBY', KEYS[3], 1)
+                    redis.call('INCRBY', KEYS[4], 1)
+                    redis.call('SADD', KEYS[5], ARGV[2])
+                    redis.call('EXPIRE', KEYS[3], ARGV[3])
+                    redis.call('EXPIRE', KEYS[4], ARGV[3])
                     return total
                     """, Long.class);
 
@@ -61,6 +78,12 @@ public class VideoViewCountService {
     @Value("${video-view-count.redis-ttl-seconds:604800}")
     private long redisTtlSeconds;
 
+    @Value("${video-view-count.dedup-window-seconds:1800}")
+    private long dedupWindowSeconds;
+
+    @Value("${video-view-count.anonymous-limit-per-minute:30}")
+    private int anonymousLimitPerMinute;
+
     public VideoViewCountService(
             StringRedisTemplate redisTemplate,
             VideoMapper videoMapper
@@ -69,22 +92,44 @@ public class VideoViewCountService {
         this.videoMapper = videoMapper;
     }
 
-    public long recordView(Long videoId, long persistedViewCount) {
+    public ViewRecordResult recordView(
+            Long videoId,
+            long persistedViewCount,
+            String viewerKey,
+            String ipHash,
+            boolean anonymous
+    ) {
+        long rateWindow = System.currentTimeMillis() / 60_000L;
         Long total = redisTemplate.execute(
                 RECORD_VIEW_SCRIPT,
                 List.of(
+                        RedisKeys.videoViewDedup(videoId, viewerKey),
+                        RedisKeys.anonymousViewRate(ipHash, rateWindow),
                         RedisKeys.videoViewTotal(videoId),
                         RedisKeys.videoViewDelta(videoId),
                         RedisKeys.VIDEO_VIEW_DIRTY_KEY
                 ),
                 Long.toString(persistedViewCount),
                 videoId.toString(),
-                Long.toString(redisTtlSeconds)
+                Long.toString(redisTtlSeconds),
+                Long.toString(dedupWindowSeconds),
+                anonymous ? "1" : "0",
+                Integer.toString(anonymousLimitPerMinute),
+                "60"
         );
         if (total == null) {
             throw new IllegalStateException("Redis did not return the video view count");
         }
-        return total;
+        if (anonymous && total == -1L) {
+            throw new BusinessException(429, "匿名播放上报过于频繁，请稍后再试");
+        }
+        if (total < 0) {
+            return new ViewRecordResult(false, -total - 1);
+        }
+        return new ViewRecordResult(true, total);
+    }
+
+    public record ViewRecordResult(boolean accepted, long viewCount) {
     }
 
     @Scheduled(

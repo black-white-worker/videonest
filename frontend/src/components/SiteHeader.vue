@@ -4,16 +4,18 @@ import { useRouter } from 'vue-router'
 withDefaults(defineProps<{
   maxWidth?: string
   elevated?: boolean
+  overlay?: boolean
 }>(), {
   maxWidth: '1360px',
-  elevated: true
+  elevated: true,
+  overlay: false
 })
 
 const router = useRouter()
 </script>
 
 <template>
-  <header class="site-header" :class="{ elevated }">
+  <header class="site-header" :class="{ elevated, overlay }">
     <div class="site-header__inner" :style="{ '--header-max-width': maxWidth }">
       <button class="site-brand" aria-label="返回首页" @click="router.push('/')">
         <span class="site-brand__mark">▶</span>
@@ -49,6 +51,28 @@ const router = useRouter()
   position: sticky;
   top: 0;
   box-shadow: 0 3px 14px rgb(15 23 42 / 10%);
+}
+
+.site-header.overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  border-bottom-color: rgb(255 255 255 / 16%);
+  background: linear-gradient(180deg, rgb(2 8 23 / 62%), rgb(2 8 23 / 10%));
+  box-shadow: none;
+  color: #fff;
+  backdrop-filter: none;
+}
+
+.site-header.overlay .site-brand {
+  color: #fff;
+  text-shadow: 0 1px 6px rgb(0 0 0 / 35%);
+}
+
+.site-header.overlay .site-brand__mark {
+  background: linear-gradient(135deg, #22c3f5, #00aeec);
+  box-shadow: 0 5px 18px rgb(0 0 0 / 22%);
 }
 
 .site-header__inner {
@@ -141,6 +165,20 @@ const router = useRouter()
   border-color: #7dd3fc;
   background: #e0f2fe;
   color: #075985;
+}
+
+.site-header.overlay :slotted(.site-nav-link) {
+  border-color: transparent;
+  background: rgb(15 23 42 / 28%);
+  color: #fff;
+  text-shadow: 0 1px 5px rgb(0 0 0 / 38%);
+  backdrop-filter: blur(8px);
+}
+
+.site-header.overlay :slotted(.site-nav-link:hover) {
+  border-color: rgb(255 255 255 / 32%);
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
 }
 
 @media (max-width: 900px) {

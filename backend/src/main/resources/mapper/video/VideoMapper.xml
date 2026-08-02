@@ -239,6 +239,30 @@
         ORDER BY v.create_time DESC, v.id DESC
     </select>
 
+    <select id="selectPublishedViewCountById" resultType="java.lang.Long">
+        SELECT view_count
+        FROM video
+        WHERE id = #{videoId}
+          AND status = 'PUBLISHED'
+          AND is_deleted = 0
+    </select>
+
+    <select id="selectRecentPublished"
+            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
+               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
+               v.author_id AS authorId, u.nickname AS authorNickname,
+               v.category_id AS categoryId, c.name AS categoryName
+        FROM video v
+        INNER JOIN sys_user u ON u.id = v.author_id
+        INNER JOIN video_category c ON c.id = v.category_id
+        WHERE v.status = 'PUBLISHED'
+          AND v.is_deleted = 0
+        ORDER BY v.publish_time DESC, v.id DESC
+        LIMIT #{limit}
+    </select>
+
     <select id="selectMyLikedVideoPage"
             resultType="com.example.demo.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,

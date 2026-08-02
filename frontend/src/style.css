@@ -47,8 +47,15 @@ a { color: inherit; text-decoration: none; }
   --el-bg-color-page: var(--vn-page);
 }
 
-.el-button { font-weight: 500; }
-.el-button--primary { box-shadow: 0 3px 10px rgb(0 174 236 / 18%); }
+.el-button { font-weight: 600; }
+.el-button--primary {
+  --el-button-text-color: #0f172a;
+  --el-button-hover-text-color: #0f172a;
+  --el-button-active-text-color: #0f172a;
+  color: #0f172a;
+  box-shadow: 0 3px 10px rgb(0 174 236 / 18%);
+  font-weight: 800;
+}
 
 /* 顶部栏的主操作（如“投稿”）使用深色文字，避免在浅色背景下辨识度不足。 */
 .site-header .el-button--primary,

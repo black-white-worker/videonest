@@ -82,6 +82,12 @@ public class SecurityConfig {
                                 "/api/health"
                         ).permitAll()
 
+                        // 播放满阈值后的计数上报允许匿名访问，服务端另做去重与限频。
+                        .requestMatchers(
+                                HttpMethod.POST,
+                                "/api/videos/*/views"
+                        ).permitAll()
+
                         /*
                         * requestMatchers匹配的请求路径
                         * permitAll()直接放行
@@ -94,7 +100,7 @@ public class SecurityConfig {
                                 "/api/videos/**"
                         ).permitAll()
 
-                        // 上传封面、上传视频：只要求已经登录
+                        // 直传凭证签发与完成确认：只要求已经登录
                         .requestMatchers("/api/files/**")
                         .authenticated()//不区分角色只要登录就行
 

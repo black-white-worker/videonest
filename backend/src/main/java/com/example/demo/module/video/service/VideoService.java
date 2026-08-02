@@ -20,6 +20,13 @@ public interface VideoService {
 
     VideoDetailVO getPublishedVideoDetail(Long videoId);
 
+    VideoViewReportVO recordView(
+            Long videoId,
+            String viewerKey,
+            String ipHash,
+            boolean anonymous
+    );
+
     List<VideoListItemVO> listHotVideos(int limit);
 
     VideoCreateVO createVideo(VideoCreateRequest request);

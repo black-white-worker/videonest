@@ -10,6 +10,7 @@ import com.example.demo.module.video.entity.Video;
 import com.example.demo.module.video.mapper.VideoMapper;
 import com.example.demo.module.video.service.HotRankService;
 import com.example.demo.security.LoginUser;
+import com.example.demo.module.upload.service.UploadSessionService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,6 +20,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -51,10 +53,16 @@ class VideoServiceImplReviewNotificationTest {
     private RedisTemplate<String, Object> redisTemplate;
 
     @Mock
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Mock
     private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private ResourceCleanupProperties resourceCleanupProperties;
+
+    @Mock
+    private UploadSessionService uploadSessionService;
 
     private VideoServiceImpl videoService;
 
@@ -67,8 +75,10 @@ class VideoServiceImplReviewNotificationTest {
                 hotRankService,
                 videoViewCountService,
                 redisTemplate,
+                stringRedisTemplate,
                 eventPublisher,
-                resourceCleanupProperties
+                resourceCleanupProperties,
+                uploadSessionService
         );
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken(

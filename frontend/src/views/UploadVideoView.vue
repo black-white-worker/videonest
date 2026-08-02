@@ -74,8 +74,8 @@ async function loadCategories() {
 }
 
 function validateImage(file: File) {
-  if (!file.type.startsWith('image/')) {
-    ElMessage.error('请选择图片格式的封面文件')
+  if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    ElMessage.error('封面仅支持 JPG、PNG 格式')
     return false
   }
 
@@ -116,27 +116,6 @@ async function handleCoverChange(event: Event) {
   }
 }
 
-function getVideoDuration(file: File): Promise<number> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file)
-    const video = document.createElement('video')
-
-    video.preload = 'metadata'
-
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(url)
-      resolve(Math.max(1, Math.round(video.duration)))
-    }
-
-    video.onerror = () => {
-      URL.revokeObjectURL(url)
-      reject(new Error('无法读取视频时长，请更换视频文件'))
-    }
-
-    video.src = url
-  })
-}
-
 async function handleVideoChange(event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -158,13 +137,13 @@ async function handleVideoChange(event: Event) {
   try {
     videoUploading.value = true
 
-    const [objectName, duration] = await Promise.all([
-      uploadVideo(file),
-      getVideoDuration(file)
-    ])
+    const uploadResult = await uploadVideo(file)
+    if (!uploadResult.detectedDuration) {
+      throw new Error('后端未能探测视频时长')
+    }
 
-    form.videoObjectName = objectName
-    form.duration = duration
+    form.videoObjectName = uploadResult.objectName
+    form.duration = uploadResult.detectedDuration
 
     ElMessage.success('视频上传成功')
   } catch (error) {

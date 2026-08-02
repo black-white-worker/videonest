@@ -1,5 +1,7 @@
 server:
   port: ${SERVER_PORT:8080}
+  # 仅信任容器/内网反向代理转发的客户端地址，供匿名播放限频使用。
+  forward-headers-strategy: native
 
 spring:
   application:
@@ -76,15 +78,25 @@ minio:
 
 video-process:
   ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
+  ffprobe-path: ${FFPROBE_PATH:ffprobe}
   timeout-seconds: ${VIDEO_PROCESS_TIMEOUT_SECONDS:1800}
   # 单机 Docker 环境默认同时执行两个转码任务，避免多个 FFmpeg 进程耗尽内存。
   # 可设置为 2-4，让 RabbitMQ 在任务积压时最多扩展至四个消费者。
   consumer-concurrency: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:2}
 
+upload-security:
+  # 生产环境可设置为 clamscan 或 clamdscan，并将 required 设为 true 以失败关闭。
+  antivirus-command: ${ANTIVIRUS_COMMAND:}
+  antivirus-required: ${ANTIVIRUS_REQUIRED:false}
+  scan-timeout-seconds: ${UPLOAD_SCAN_TIMEOUT_SECONDS:120}
+  max-image-pixels: ${MAX_UPLOAD_IMAGE_PIXELS:50000000}
+
 video-view-count:
   flush-delay-milliseconds: ${VIDEO_VIEW_COUNT_FLUSH_DELAY_MILLISECONDS:10000}
   batch-size: ${VIDEO_VIEW_COUNT_BATCH_SIZE:200}
   redis-ttl-seconds: ${VIDEO_VIEW_COUNT_REDIS_TTL_SECONDS:604800}
+  dedup-window-seconds: ${VIDEO_VIEW_DEDUP_WINDOW_SECONDS:1800}
+  anonymous-limit-per-minute: ${ANONYMOUS_VIEW_LIMIT_PER_MINUTE:30}
 
 video-review:
   timeout-milliseconds: ${VIDEO_REVIEW_TIMEOUT_MILLISECONDS:86400000}
