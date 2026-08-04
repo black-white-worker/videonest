@@ -143,6 +143,9 @@ public class VideoResourceCleanupServiceImpl
     private Set<String> resourceObjectNames(Video video) {
         Set<String> names = new LinkedHashSet<>();
         names.add(video.getCoverUrl());
+        names.add(video.getOriginalCoverUrl());
+        names.add(video.getCoverListUrl());
+        names.add(video.getCoverDetailUrl());
         names.add(video.getOriginalVideoUrl());
         names.add(video.getVideoUrl());
         names.add(video.getVideo480pUrl());

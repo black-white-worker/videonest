@@ -15,6 +15,7 @@ services:
       - ./sql/SQL.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
       - ./sql/2026-07-29-enterprise-reliability.sql:/docker-entrypoint-initdb.d/03-enterprise-reliability.sql:ro
       - ./sql/2026-08-02-hot-upload-query-hardening.sql:/docker-entrypoint-initdb.d/04-hot-upload-query-hardening.sql:ro
+      - ./sql/2026-08-04-media-delivery.sql:/docker-entrypoint-initdb.d/05-media-delivery.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
@@ -82,6 +83,8 @@ services:
         until mc alias set local http://minio:9000 "$${MINIO_ACCESS_KEY}" "$${MINIO_SECRET_KEY}";
         do sleep 2; done &&
         mc mb --ignore-existing "local/$${MINIO_BUCKET}" &&
+        mc anonymous set download "local/$${MINIO_BUCKET}/processed" &&
+        mc anonymous set download "local/$${MINIO_BUCKET}/cover/processed" &&
         mc ilm rule add --prefix "staging/" --expire-days 1 "local/$${MINIO_BUCKET}"
     environment:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
@@ -122,6 +125,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
       MINIO_BUCKET: ${MINIO_BUCKET}
+      MINIO_PUBLIC_READ_PREFIXES: ${MINIO_PUBLIC_READ_PREFIXES:-processed/,cover/processed/}
       JWT_SECRET: ${JWT_SECRET}
       FFMPEG_PATH: ffmpeg
       FFPROBE_PATH: ffprobe
@@ -148,6 +152,8 @@ services:
   frontend:
     build:
       context: ./frontend
+      args:
+        VITE_PUBLIC_SITE_URL: ${VITE_PUBLIC_SITE_URL:-}
     container_name: videonest-frontend
     restart: unless-stopped
     depends_on:

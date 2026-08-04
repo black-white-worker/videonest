@@ -24,8 +24,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
@@ -57,6 +60,9 @@ public class MinioServiceImpl implements MinioService {
     private final MinioProperties minioProperties;
 
     //构造器注入
+    /**
+     * 服务内部访问 MinIO：走内网地址，速度快、不走外网流量
+     * */
     public MinioServiceImpl(
             MinioClient minioClient,
             MinioProperties minioProperties
@@ -66,18 +72,31 @@ public class MinioServiceImpl implements MinioService {
         String publicEndpoint = StringUtils.hasText(
                 minioProperties.getPublicEndpoint()
         )
+                // 如果配置了公网地址，优先使用公网地址
                 ? minioProperties.getPublicEndpoint()
+                // 未配置公网地址，则降级使用默认内网endpoint
                 : minioProperties.getEndpoint();
+
+        // 构建【公网专用MinioClient】用于生成预签名URL
+        // 预签名URL里面会嵌入endpoint地址！
+        // 如果直接用内网client生成url，前端拿到地址无法公网访问
         this.publicMinioClient = MinioClient.builder()
-                .endpoint(publicEndpoint)
-                .region(minioProperties.getRegion())
-                .credentials(
+                .endpoint(publicEndpoint)               // 使用公网节点地址
+                .region(minioProperties.getRegion())    // 存储区域
+                .credentials(                           // 账号密钥
                         minioProperties.getAccessKey(),
                         minioProperties.getSecretKey()
                 )
                 .build();
     }
 
+    /**
+     * 生成PUT方式预签名上传URL
+     * 前端拿到URL直接PUT二进制文件上传到MinIO，无需后端中转文件流
+     * @param objectName 文件在桶内唯一名称
+     * @param expiryMinutes 链接有效时长（分钟）
+     * @return 预签名上传地址
+     */
     @Override
     public String createPresignedPutUrl(String objectName, int expiryMinutes) {
         try {
@@ -87,7 +106,7 @@ public class MinioServiceImpl implements MinioService {
                             .method(Method.PUT)
                             .bucket(minioProperties.getBucketName())
                             .object(objectName)
-                            .expiry(expiryMinutes, TimeUnit.MINUTES)
+                            .expiry(expiryMinutes, TimeUnit.MINUTES)    // 链接过期时间
                             .build()
             );
         } catch (IOException e) {
@@ -99,6 +118,11 @@ public class MinioServiceImpl implements MinioService {
         }
     }
 
+    /**
+     * 查询文件元数据
+     * @param objectName 对象名称
+     * @return 文件大小、文件content-type封装对象
+     */
     @Override
     public StoredObjectMetadata statObject(String objectName) {
         try {
@@ -224,6 +248,10 @@ public class MinioServiceImpl implements MinioService {
             return objectNameOrUrl;
         }
 
+        if (isPublicObject(objectNameOrUrl)) {
+            return buildPublicObjectUrl(objectNameOrUrl);
+        }
+
         try {
             // 生成1小时有效期临时访问URL
             return publicMinioClient.getPresignedObjectUrl(
@@ -241,6 +269,31 @@ public class MinioServiceImpl implements MinioService {
         } catch (MinioException e) {
             throw storageFailure("PRESIGN", "MinIO 无法生成访问地址", isRetryable(e), e);
         }
+    }
+
+    private boolean isPublicObject(String objectName) {
+        String prefixes = minioProperties.getPublicReadPrefixes();
+        if (!StringUtils.hasText(prefixes)) {
+            return false;
+        }
+        return Arrays.stream(prefixes.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .anyMatch(objectName::startsWith);
+    }
+
+    private String buildPublicObjectUrl(String objectName) {
+        String endpoint = StringUtils.hasText(minioProperties.getPublicEndpoint())
+                ? minioProperties.getPublicEndpoint()
+                : minioProperties.getEndpoint();
+        String encodedObjectName = Arrays.stream(objectName.split("/", -1))
+                .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8)
+                        .replace("+", "%20"))
+                .reduce((left, right) -> left + "/" + right)
+                .orElse("");
+        return endpoint.replaceAll("/+$", "")
+                + "/" + minioProperties.getBucketName()
+                + "/" + encodedObjectName;
     }
 
     /**

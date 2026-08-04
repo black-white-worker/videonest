@@ -12,7 +12,16 @@
         v.id,
         v.title,
         v.description,
-        v.cover_url AS coverUrl,
+        COALESCE(
+            v.cover_list_url,
+            v.cover_detail_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
         v.duration,
         v.view_count AS viewCount,
         v.like_count AS likeCount,
@@ -46,7 +55,16 @@
         v.id,
         v.title,
         v.description,
-        v.cover_url AS coverUrl,
+        COALESCE(
+            v.cover_list_url,
+            v.cover_detail_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
         v.duration,
         v.view_count AS viewCount,
         v.like_count AS likeCount,
@@ -89,7 +107,16 @@
         v.id,
         v.title,
         v.description,
-        v.cover_url AS coverUrl,
+        COALESCE(
+            v.cover_detail_url,
+            v.cover_list_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
         v.video_url AS videoUrl,
         v.video_480p_url AS video480pUrl,
         v.video_720p_url AS video720pUrl,
@@ -127,6 +154,9 @@
         title,
         description,
         cover_url,
+        original_cover_url,
+        cover_list_url,
+        cover_detail_url,
         video_url,
         original_video_url,
         duration,
@@ -140,6 +170,9 @@
         #{title},
         #{description},
         #{coverUrl},
+        #{originalCoverUrl},
+        #{coverListUrl},
+        #{coverDetailUrl},
         #{videoUrl},
         #{originalVideoUrl},
         #{duration},
@@ -157,7 +190,16 @@
         v.id,
         v.title,
         v.description,
-        v.cover_url AS coverUrl,
+        COALESCE(
+            v.cover_list_url,
+            v.cover_detail_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
         v.video_url AS videoUrl,
         v.duration,
         v.status,
@@ -165,7 +207,16 @@
         v.review_deadline AS reviewDeadline,
         v.review_timeout_notified AS reviewTimeoutNotified,
         v.create_time AS createTime,
-        v.cover_url AS coverObjectName,
+        COALESCE(
+            v.cover_detail_url,
+            v.cover_list_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverObjectName,
         v.video_url AS videoObjectName,
 
         u.id AS authorId,
@@ -211,9 +262,27 @@
         v.id,
         v.title,
         v.description,
-        v.cover_url AS coverUrl,
+        COALESCE(
+            v.cover_list_url,
+            v.cover_detail_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
         v.video_url AS videoUrl,
-        v.cover_url AS coverObjectName,
+        COALESCE(
+            v.cover_detail_url,
+            v.cover_list_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverObjectName,
         v.video_url AS videoObjectName,
         v.duration,
         v.status,
@@ -249,7 +318,17 @@
 
     <select id="selectRecentPublished"
             resultType="com.example.demo.module.video.vo.VideoListItemVO">
-        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+        SELECT v.id, v.title, v.description,
+        COALESCE(
+            v.cover_list_url,
+            v.cover_detail_url,
+            CASE
+                WHEN v.cover_url LIKE 'cover/auto/%'
+                  OR v.cover_url LIKE 'http://%'
+                  OR v.cover_url LIKE 'https://%'
+                THEN v.cover_url
+            END
+        ) AS coverUrl,
                v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
                v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
                v.author_id AS authorId, u.nickname AS authorNickname,
@@ -265,7 +344,17 @@
 
     <select id="selectMyLikedVideoPage"
             resultType="com.example.demo.module.video.vo.VideoListItemVO">
-        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+        SELECT v.id, v.title, v.description,
+               COALESCE(
+                   v.cover_list_url,
+                   v.cover_detail_url,
+                   CASE
+                       WHEN v.cover_url LIKE 'cover/auto/%'
+                         OR v.cover_url LIKE 'http://%'
+                         OR v.cover_url LIKE 'https://%'
+                       THEN v.cover_url
+                   END
+               ) AS coverUrl,
                v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
                v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
                v.author_id AS authorId, u.nickname AS authorNickname,
@@ -280,7 +369,17 @@
 
     <select id="selectMyFavoritedVideoPage"
             resultType="com.example.demo.module.video.vo.VideoListItemVO">
-        SELECT v.id, v.title, v.description, v.cover_url AS coverUrl,
+        SELECT v.id, v.title, v.description,
+               COALESCE(
+                   v.cover_list_url,
+                   v.cover_detail_url,
+                   CASE
+                       WHEN v.cover_url LIKE 'cover/auto/%'
+                         OR v.cover_url LIKE 'http://%'
+                         OR v.cover_url LIKE 'https://%'
+                       THEN v.cover_url
+                   END
+               ) AS coverUrl,
                v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
                v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
                v.author_id AS authorId, u.nickname AS authorNickname,
@@ -325,7 +424,16 @@
                v.title,
                v.author_id AS authorId,
                u.nickname AS authorNickname,
-               v.cover_url AS coverUrl,
+               COALESCE(
+                   v.cover_list_url,
+                   v.cover_detail_url,
+                   CASE
+                       WHEN v.cover_url LIKE 'cover/auto/%'
+                         OR v.cover_url LIKE 'http://%'
+                         OR v.cover_url LIKE 'https://%'
+                       THEN v.cover_url
+                   END
+               ) AS coverUrl,
                v.status,
                v.deleted_at AS deletedAt,
                v.deleted_by AS deletedBy,
@@ -353,6 +461,22 @@
           AND purge_after IS NOT NULL
           AND purge_after &lt;= #{now}
         ORDER BY purge_after ASC
+        LIMIT #{limit}
+    </select>
+
+    <select id="selectCoverThumbnailBackfillBatch"
+            resultType="com.example.demo.module.video.entity.Video">
+        SELECT *
+        FROM video
+        WHERE is_deleted = 0
+          AND status != 'PROCESSING'
+          AND (cover_list_url IS NULL OR cover_detail_url IS NULL)
+          AND (
+              original_cover_url LIKE 'cover/%'
+              OR cover_url LIKE 'cover/%'
+          )
+          AND COALESCE(original_cover_url, cover_url) NOT LIKE 'cover/processed/%'
+        ORDER BY id ASC
         LIMIT #{limit}
     </select>
 

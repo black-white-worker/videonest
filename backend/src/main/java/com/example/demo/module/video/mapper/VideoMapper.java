@@ -81,6 +81,8 @@ public interface VideoMapper extends BaseMapper<Video> {
             @Param("limit") int limit
     );
 
+    List<Video> selectCoverThumbnailBackfillBatch(@Param("limit") int limit);
+
     int incrementPurgeFailure(
             @Param("videoId") Long videoId,
             @Param("error") String error

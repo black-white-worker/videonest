@@ -75,6 +75,7 @@ minio:
   access-key: ${MINIO_ACCESS_KEY}
   secret-key: ${MINIO_SECRET_KEY}
   bucket-name: ${MINIO_BUCKET:videonest}
+  public-read-prefixes: ${MINIO_PUBLIC_READ_PREFIXES:processed/,cover/processed/}
 
 video-process:
   ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
@@ -83,6 +84,8 @@ video-process:
   # 单机 Docker 环境默认同时执行两个转码任务，避免多个 FFmpeg 进程耗尽内存。
   # 可设置为 2-4，让 RabbitMQ 在任务积压时最多扩展至四个消费者。
   consumer-concurrency: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:2}
+  cover-backfill-initial-delay-milliseconds: ${COVER_BACKFILL_INITIAL_DELAY_MILLISECONDS:60000}
+  cover-backfill-fixed-delay-milliseconds: ${COVER_BACKFILL_FIXED_DELAY_MILLISECONDS:300000}
 
 upload-security:
   # 生产环境可设置为 clamscan 或 clamdscan，并将 required 设为 true 以失败关闭。

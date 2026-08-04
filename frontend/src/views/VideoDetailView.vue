@@ -56,6 +56,8 @@ const expandedReplyIds = ref<string[]>([])
 const repliesByCommentId = ref<Record<string, VideoComment[]>>({})
 const replyContents = ref<Record<string, string>>({})
 const replySubmittingIds = ref<string[]>([])
+const shareDialogVisible = ref(false)
+const wechatQrCanvas = ref<HTMLCanvasElement | null>(null)
 
 const qualityOptions = computed(() => {
   if (!video.value) return []
@@ -172,22 +174,142 @@ async function changeQuality() {
 async function shareVideo() {
   if (!video.value) return
 
-  try {
-    if (navigator.share) {
-      await navigator.share({
-        title: video.value.title,
-        text: `来 VideoNest 看看《${video.value.title}》`,
-        url: window.location.href
-      })
-      return
-    }
+  shareDialogVisible.value = true
+}
 
-    await navigator.clipboard.writeText(window.location.href)
+async function renderWechatQr() {
+  if (!video.value || !wechatQrCanvas.value) return
+
+  try {
+    const { default: QRCode } = await import('qrcode')
+    await QRCode.toCanvas(
+      wechatQrCanvas.value,
+      buildShareUrl(video.value.id),
+      {
+        width: 208,
+        margin: 1,
+        errorCorrectionLevel: 'M',
+        color: { dark: '#18191c', light: '#ffffff' }
+      }
+    )
+  } catch {
+    ElMessage.warning('微信二维码生成失败，请复制链接分享')
+  }
+}
+
+function shareText(): string {
+  return video.value ? `来 VideoNest 看看《${video.value.title}》` : 'VideoNest 视频分享'
+}
+
+function openSharePopup(url: string, name: string) {
+  const width = 720
+  const height = 620
+  const left = Math.max(0, window.screenX + (window.outerWidth - width) / 2)
+  const top = Math.max(0, window.screenY + (window.outerHeight - height) / 2)
+  const popup = window.open(
+    url,
+    name,
+    `popup=yes,width=${width},height=${height},left=${left},top=${top}`
+  )
+
+  if (!popup) {
+    ElMessage.warning('分享窗口被浏览器拦截，请允许本站打开弹窗')
+    return
+  }
+  popup.opener = null
+  popup.focus()
+}
+
+function shareToQQ() {
+  if (!video.value) return
+  const params = new URLSearchParams({
+    url: buildShareUrl(video.value.id),
+    title: video.value.title,
+    summary: shareText(),
+    pics: video.value.coverUrl || ''
+  })
+  openSharePopup(
+    `https://connect.qq.com/widget/shareqq/index.html?${params.toString()}`,
+    'videonest-qq-share'
+  )
+}
+
+function shareToQzone() {
+  if (!video.value) return
+  const params = new URLSearchParams({
+    url: buildShareUrl(video.value.id),
+    title: video.value.title,
+    summary: shareText(),
+    pics: video.value.coverUrl || ''
+  })
+  openSharePopup(
+    `https://sns.qzone.qq.com/cgi-bin/qzshare/cgi_qzshare_onekey?${params.toString()}`,
+    'videonest-qzone-share'
+  )
+}
+
+async function copyShareLink() {
+  if (!video.value) return
+  const shareUrl = buildShareUrl(video.value.id)
+
+  try {
+    if (navigator.clipboard?.writeText && window.isSecureContext) {
+      await navigator.clipboard.writeText(shareUrl)
+    } else {
+      const input = document.createElement('textarea')
+      input.value = shareUrl
+      input.style.position = 'fixed'
+      input.style.opacity = '0'
+      document.body.appendChild(input)
+      input.select()
+      const copied = document.execCommand('copy')
+      input.remove()
+      if (!copied) throw new Error('copy failed')
+    }
     ElMessage.success('视频链接已复制')
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'AbortError') return
+  } catch {
     ElMessage.warning('暂时无法分享，请手动复制浏览器地址')
   }
+}
+
+async function shareWithSystem() {
+  if (!video.value) return
+  if (!navigator.share) {
+    await copyShareLink()
+    return
+  }
+
+  try {
+    await navigator.share({
+      title: video.value.title,
+      text: shareText(),
+      url: buildShareUrl(video.value.id)
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') return
+    ElMessage.warning('系统分享不可用，请选择微信、QQ 或复制链接')
+  }
+}
+
+function buildShareUrl(videoId: number): string {
+  const configuredPublicSiteUrl = import.meta.env.VITE_PUBLIC_SITE_URL?.trim()
+
+  if (configuredPublicSiteUrl) {
+    try {
+      const publicSiteUrl = new URL(configuredPublicSiteUrl)
+      return new URL(
+        `/video/${encodeURIComponent(String(videoId))}`,
+        publicSiteUrl.origin
+      ).toString()
+    } catch {
+      // 配置不合法时继续使用当前访问地址，避免分享功能不可用。
+    }
+  }
+
+  return new URL(
+    `/video/${encodeURIComponent(String(videoId))}`,
+    window.location.origin
+  ).toString()
 }
 
 function handleLoadedMetadata() {
@@ -573,6 +695,8 @@ onBeforeUnmount(() => {
                     ref="player"
                     :poster="video.coverUrl"
                     :src="currentVideoUrl"
+                    preload="metadata"
+                    playsinline
                     controls
                     class="video-player"
                     @loadedmetadata="handleLoadedMetadata"
@@ -613,7 +737,7 @@ onBeforeUnmount(() => {
                   <button class="video-action" @click="shareVideo">
                     <span>↗</span>
                     <strong>分享</strong>
-                    <small>复制链接</small>
+                    <small>微信 / QQ</small>
                   </button>
                 </section>
 
@@ -798,6 +922,50 @@ onBeforeUnmount(() => {
         </template>
       </el-skeleton>
     </section>
+
+    <el-dialog
+      v-model="shareDialogVisible"
+      title="分享视频"
+      width="min(560px, calc(100vw - 28px))"
+      append-to-body
+      class="share-dialog"
+      @opened="renderWechatQr"
+    >
+      <div v-if="video" class="share-panel">
+        <section class="wechat-share-card">
+          <div class="wechat-qr-wrap">
+            <canvas ref="wechatQrCanvas" aria-label="微信分享二维码" />
+          </div>
+          <div>
+            <strong>微信扫码分享</strong>
+            <p>打开微信扫一扫，扫码后在微信内发送给好友或群聊。</p>
+          </div>
+        </section>
+
+        <div class="share-options">
+          <button type="button" class="share-option qq" @click="shareToQQ">
+            <span>QQ</span>
+            <strong>QQ 好友</strong>
+            <small>打开 QQ 登录分享窗口</small>
+          </button>
+          <button type="button" class="share-option qzone" @click="shareToQzone">
+            <span>Q</span>
+            <strong>QQ 空间</strong>
+            <small>打开空间登录分享窗口</small>
+          </button>
+          <button type="button" class="share-option" @click="shareWithSystem">
+            <span>↗</span>
+            <strong>更多方式</strong>
+            <small>调用系统分享面板</small>
+          </button>
+          <button type="button" class="share-option" @click="copyShareLink">
+            <span>⧉</span>
+            <strong>复制链接</strong>
+            <small>兼容非 HTTPS 环境</small>
+          </button>
+        </div>
+      </div>
+    </el-dialog>
   </main>
 </template>
 
@@ -1296,6 +1464,109 @@ h1 {
   color: #f5a623;
 }
 
+.share-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.wechat-share-card {
+  display: grid;
+  grid-template-columns: 136px minmax(0, 1fr);
+  align-items: center;
+  gap: 18px;
+  padding: 18px;
+  border-radius: 14px;
+  background: #f2fbf5;
+}
+
+.wechat-qr-wrap {
+  display: grid;
+  place-items: center;
+  padding: 8px;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 8%);
+}
+
+.wechat-qr-wrap canvas {
+  display: block;
+  width: 120px !important;
+  height: 120px !important;
+}
+
+.wechat-share-card strong {
+  color: #149647;
+  font-size: 17px;
+}
+
+.wechat-share-card p {
+  margin: 8px 0 0;
+  color: var(--vn-text-secondary);
+  line-height: 1.7;
+}
+
+.share-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.share-option {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 13px;
+  border: 1px solid var(--vn-border);
+  border-radius: 11px;
+  background: #fff;
+  color: var(--vn-text);
+  text-align: left;
+  cursor: pointer;
+  transition: .2s;
+}
+
+.share-option:hover {
+  border-color: var(--vn-primary);
+  background: #f7fbff;
+  transform: translateY(-1px);
+}
+
+.share-option > span {
+  grid-row: 1 / 3;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eef1f4;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.share-option.qq > span {
+  background: #e8f5ff;
+  color: #168de2;
+}
+
+.share-option.qzone > span {
+  background: #fff6da;
+  color: #ef9b0f;
+}
+
+.share-option strong {
+  font-size: 14px;
+}
+
+.share-option small {
+  overflow: hidden;
+  color: var(--vn-text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .description-card,
 .comment-section {
   margin-top: 18px;
@@ -1658,6 +1929,15 @@ h1 {
 
   .video-action small {
     display: none;
+  }
+
+  .wechat-share-card {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .share-options {
+    grid-template-columns: 1fr;
   }
 
   .comment-section,

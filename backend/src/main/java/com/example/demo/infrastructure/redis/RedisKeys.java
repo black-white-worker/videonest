@@ -7,10 +7,10 @@ public final class RedisKeys {
 
     /**
      * 视频详情缓存：
-     * videonest:video:detail:100
+     * videonest:video:detail:v2:100
      */
     public static final String VIDEO_DETAIL_PREFIX =
-            "videonest:video:detail:";
+            "videonest:video:detail:v2:";
 
     /**
      * 视频点赞数量缓存：

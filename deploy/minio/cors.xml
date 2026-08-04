@@ -8,6 +8,9 @@
     <AllowedMethod>HEAD</AllowedMethod>
     <AllowedHeader>*</AllowedHeader>
     <ExposeHeader>ETag</ExposeHeader>
+    <ExposeHeader>Accept-Ranges</ExposeHeader>
+    <ExposeHeader>Content-Range</ExposeHeader>
+    <ExposeHeader>Content-Length</ExposeHeader>
     <MaxAgeSeconds>3600</MaxAgeSeconds>
   </CORSRule>
 </CORSConfiguration>

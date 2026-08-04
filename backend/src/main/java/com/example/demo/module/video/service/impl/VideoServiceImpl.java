@@ -378,7 +378,9 @@ public class VideoServiceImpl implements VideoService {
         video.setCategoryId(request.getCategoryId());
         video.setTitle(request.getTitle());
         video.setDescription(request.getDescription());
-        video.setCoverUrl(request.getCoverObjectName());
+        // 原始封面只供异步处理使用，页面永远只读取处理后的缩略图字段。
+        video.setCoverUrl(null);
+        video.setOriginalCoverUrl(request.getCoverObjectName());
         video.setVideoUrl(null);
         video.setOriginalVideoUrl(request.getVideoObjectName());
         video.setDuration(request.getDuration());

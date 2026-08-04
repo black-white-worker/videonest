@@ -26,6 +26,12 @@ public class Video {
 
     private String coverUrl;
 
+    private String originalCoverUrl;
+
+    private String coverListUrl;
+
+    private String coverDetailUrl;
+
     private String videoUrl;
 
     private Integer duration;

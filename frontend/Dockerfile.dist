@@ -1,0 +1,7 @@
+FROM nginx:1.29-alpine
+
+# 前端静态文件由本地 npm 构建；镜像构建阶段不再安装 npm 依赖。
+COPY nginx.conf /etc/nginx/nginx.conf
+COPY dist /usr/share/nginx/html
+
+EXPOSE 80

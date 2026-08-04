@@ -11,13 +11,31 @@ import org.springframework.web.multipart.MultipartFile;
 
 public interface MinioService {
 
+    /**
+     * 生成PUT方式预签名上传URL
+     * 前端拿到URL直接PUT二进制文件上传到MinIO，无需后端中转文件流
+     * @param objectName 文件在桶内唯一名称
+     * @param expiryMinutes 链接有效时长（分钟）
+     * @return 预签名上传地址
+     */
     String createPresignedPutUrl(
             String objectName,
             int expiryMinutes
     );
 
+    /**
+     * 查询文件元数据
+     * @param objectName 对象名称
+     * @return 文件大小、文件content-type封装对象
+     */
     StoredObjectMetadata statObject(String objectName);
 
+    /**
+     * 文件移动
+     * MinIO SDK没有原生move接口，采用复制源文件 + 删除源文件实现移动效果
+     * @param sourceObjectName 源文件名称
+     * @param targetObjectName 目标文件名称
+     */
     void moveObject(String sourceObjectName, String targetObjectName);
 
     /**

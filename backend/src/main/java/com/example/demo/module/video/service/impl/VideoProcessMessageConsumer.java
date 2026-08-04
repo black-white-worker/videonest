@@ -18,6 +18,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
@@ -34,6 +35,9 @@ import java.time.LocalDateTime;
 @Slf4j
 public class VideoProcessMessageConsumer {
 
+    private static final long LIST_COVER_MAX_BYTES = 300L * 1024;
+    private static final long DETAIL_COVER_MAX_BYTES = 800L * 1024;
+
     private final ObjectMapper objectMapper;
     private final VideoMapper videoMapper;
     private final MinioService minioService;
@@ -41,6 +45,7 @@ public class VideoProcessMessageConsumer {
     private final VideoReviewProperties reviewProperties;
     private final DelayedMessagePublisher delayedMessagePublisher;
     private final RedisTemplate<String, Object> redisTemplate;
+    private volatile boolean coverBackfillComplete;
 
     public VideoProcessMessageConsumer(
             ObjectMapper objectMapper,
@@ -98,8 +103,9 @@ public class VideoProcessMessageConsumer {
             Path video480 = workDir.resolve("480p.mp4");
             Path video720 = workDir.resolve("720p.mp4");
             Path video1080 = workDir.resolve("1080p.mp4");
-            boolean shouldGenerateCover = !StringUtils.hasText(video.getCoverUrl());
-            Path cover = workDir.resolve("cover.jpg");
+            Path coverSource = workDir.resolve("cover-source.jpg");
+            Path coverList = workDir.resolve("cover-list-400.jpg");
+            Path coverDetail = workDir.resolve("cover-detail-1080.jpg");
 
             transcode(
                     source,
@@ -116,30 +122,36 @@ public class VideoProcessMessageConsumer {
                     video1080,
                     new TranscodeProfile(1080, 21, "5000k", "10000k", "160k")
             );
-            if (shouldGenerateCover) {
-                generateCover(source, cover);
-            }
+            prepareCoverSource(source, video, coverSource);
+            generateCoverVariant(
+                    coverSource, coverList, 400, LIST_COVER_MAX_BYTES
+            );
+            generateCoverVariant(
+                    coverSource, coverDetail, 1080, DETAIL_COVER_MAX_BYTES
+            );
 
             String basePath = "processed/" + video.getId();
             String video480Name = basePath + "/480p.mp4";
             String video720Name = basePath + "/720p.mp4";
             String video1080Name = basePath + "/1080p.mp4";
-            String coverName = "cover/auto/" + video.getId() + ".jpg";
+            String coverBasePath = "cover/processed/" + video.getId();
+            String coverListName = coverBasePath + "/list-400.jpg";
+            String coverDetailName = coverBasePath + "/detail-1080.jpg";
 
             minioService.uploadFile(video480, video480Name, "video/mp4");
             minioService.uploadFile(video720, video720Name, "video/mp4");
             minioService.uploadFile(video1080, video1080Name, "video/mp4");
-            if (shouldGenerateCover) {
-                minioService.uploadFile(cover, coverName, "image/jpeg");
-            }
+            minioService.uploadFile(coverList, coverListName, "image/jpeg");
+            minioService.uploadFile(coverDetail, coverDetailName, "image/jpeg");
 
             video.setVideo480pUrl(video480Name);
             video.setVideo720pUrl(video720Name);
             video.setVideo1080pUrl(video1080Name);
             video.setVideoUrl(video720Name);
-            if (shouldGenerateCover) {
-                video.setCoverUrl(coverName);
-            }
+            // cover_url 保留为兼容字段，但同样只指向处理后的详情缩略图。
+            video.setCoverUrl(coverDetailName);
+            video.setCoverListUrl(coverListName);
+            video.setCoverDetailUrl(coverDetailName);
             video.setStatus("PENDING");
             video.setProcessError(null);
             video.setReviewDeadline(
@@ -227,6 +239,124 @@ public class VideoProcessMessageConsumer {
                 "-i", source.toString(), "-frames:v", "1", "-q:v", "2",
                 cover.toString()
         ));
+    }
+
+    private void prepareCoverSource(Path videoSource, Video video, Path coverSource)
+            throws IOException, InterruptedException {
+        String originalCover = StringUtils.hasText(video.getOriginalCoverUrl())
+                ? video.getOriginalCoverUrl()
+                : legacyOriginalCover(video.getCoverUrl());
+        if (StringUtils.hasText(originalCover)) {
+            try (InputStream inputStream = minioService.download(originalCover)) {
+                Files.copy(inputStream, coverSource);
+            }
+            return;
+        }
+        generateCover(videoSource, coverSource);
+    }
+
+    private String legacyOriginalCover(String coverObjectName) {
+        if (!StringUtils.hasText(coverObjectName)
+                || coverObjectName.startsWith("http://")
+                || coverObjectName.startsWith("https://")
+                || coverObjectName.startsWith("cover/processed/")) {
+            return null;
+        }
+        return coverObjectName;
+    }
+
+    private void generateCoverVariant(
+            Path source,
+            Path output,
+            int maxWidth,
+            long maxBytes
+    ) throws IOException, InterruptedException {
+        int quality = 3;
+        do {
+            runFfmpeg(List.of(
+                    properties.getFfmpegPath(), "-y", "-i", source.toString(),
+                    "-frames:v", "1", "-an", "-map_metadata", "-1",
+                    "-vf", "scale=min(" + maxWidth + "\\,iw):-2",
+                    "-q:v", Integer.toString(quality),
+                    output.toString()
+            ));
+            if (Files.size(output) <= maxBytes) {
+                return;
+            }
+            quality += 2;
+        } while (quality <= 15);
+
+        throw new VideoProcessingException(
+                "COVER_SIZE",
+                "封面缩略图压缩后仍超过 " + maxBytes + " 字节"
+        );
+    }
+
+    /**
+     * 为升级前已经入库的用户封面补齐缩略图。批量任务只读取私有原图，
+     * 生成结果仍写入公开的 processed 前缀；多实例重复执行也是幂等的。
+     */
+    @Scheduled(
+            initialDelayString = "${video-process.cover-backfill-initial-delay-milliseconds:60000}",
+            fixedDelayString = "${video-process.cover-backfill-fixed-delay-milliseconds:300000}"
+    )
+    public void backfillLegacyCoverThumbnails() {
+        if (coverBackfillComplete) {
+            return;
+        }
+        List<Video> videos = videoMapper.selectCoverThumbnailBackfillBatch(10);
+        if (videos.isEmpty()) {
+            coverBackfillComplete = true;
+            log.info("历史封面缩略图补齐完成");
+            return;
+        }
+        for (Video video : videos) {
+            String originalCover = StringUtils.hasText(video.getOriginalCoverUrl())
+                    ? video.getOriginalCoverUrl()
+                    : legacyOriginalCover(video.getCoverUrl());
+            if (!StringUtils.hasText(originalCover)) {
+                continue;
+            }
+
+            Path workDir = null;
+            try {
+                workDir = Files.createTempDirectory(
+                        "videonest-cover-backfill-" + video.getId() + "-"
+                );
+                Path source = workDir.resolve("cover-source.jpg");
+                Path listCover = workDir.resolve("list-400.jpg");
+                Path detailCover = workDir.resolve("detail-1080.jpg");
+                try (InputStream inputStream = minioService.download(originalCover)) {
+                    Files.copy(inputStream, source);
+                }
+                generateCoverVariant(source, listCover, 400, LIST_COVER_MAX_BYTES);
+                generateCoverVariant(source, detailCover, 1080, DETAIL_COVER_MAX_BYTES);
+
+                String basePath = "cover/processed/" + video.getId();
+                String listObjectName = basePath + "/list-400.jpg";
+                String detailObjectName = basePath + "/detail-1080.jpg";
+                minioService.uploadFile(listCover, listObjectName, "image/jpeg");
+                minioService.uploadFile(detailCover, detailObjectName, "image/jpeg");
+
+                Video update = new Video();
+                update.setId(video.getId());
+                update.setOriginalCoverUrl(originalCover);
+                update.setCoverUrl(detailObjectName);
+                update.setCoverListUrl(listObjectName);
+                update.setCoverDetailUrl(detailObjectName);
+                videoMapper.updateById(update);
+                redisTemplate.delete(RedisKeys.videoDetail(video.getId()));
+                log.info("历史封面缩略图补齐成功，videoId={}", video.getId());
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("历史封面缩略图补齐任务被中断，videoId={}", video.getId());
+                return;
+            } catch (Exception e) {
+                log.error("历史封面缩略图补齐失败，videoId={}", video.getId(), e);
+            } finally {
+                deleteDirectory(workDir);
+            }
+        }
     }
 
     private void runFfmpeg(List<String> command)

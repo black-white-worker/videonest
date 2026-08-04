@@ -101,6 +101,25 @@ docker compose -f docker-compose.yml -f docker-compose.benchmark.yml up -d --bui
 docker compose down
 ```
 
+### 本地打包、服务器只复制产物
+
+适用于不希望服务器下载 Maven/npm 依赖的部署方式。本地 PowerShell 执行：
+
+```powershell
+.\scripts\package-deploy.ps1 -PublicSiteUrl "https://video.example.com"
+scp .\videonest-deploy.tar.gz ubuntu@服务器IP:/tmp/
+```
+
+服务器解压后，使用产物构建覆盖文件启动；后端镜像只复制 Jar，前端镜像只复制 `dist`：
+
+```bash
+cd /opt/videonest
+tar -xzf /tmp/videonest-deploy.tar.gz -C /opt/videonest
+sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --build
+```
+
+该模式复用服务器已有的 `videonest-backend:latest` 运行镜像（其中包含 FFmpeg），因此部署构建不会再下载 Maven、npm 或 Alpine 的 FFmpeg 包。
+
 ### 服务地址
 
 | 服务 | 地址 |

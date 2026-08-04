@@ -1,7 +1,9 @@
-ARG BACKEND_BASE_IMAGE=videonest-backend-base:java21-ffmpeg
-FROM ${BACKEND_BASE_IMAGE}
-
+ARG BACKEND_RUNTIME_IMAGE=videonest-backend:latest
+# 复用服务器上现有的后端运行镜像（已安装 FFmpeg），避免再次访问 Alpine 海外仓库。
+FROM ${BACKEND_RUNTIME_IMAGE}
 WORKDIR /app
+
+# 构建产物由本地 Maven 生成；镜像构建阶段只复制 Jar，不下载 Maven/npm/FFmpeg。
 COPY target/*.jar app.jar
 
 EXPOSE 8080

@@ -32,4 +32,7 @@ public class MinioProperties {
 
     // 默认存储桶名称
     private String bucketName;
+
+    // 公开读取的对象前缀。只有处理后的媒体资源应暴露给浏览器。
+    private String publicReadPrefixes = "processed/,cover/processed/";
 }

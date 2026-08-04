@@ -3,3 +3,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile.jar
+      args:
+        BACKEND_RUNTIME_IMAGE: ${BACKEND_RUNTIME_IMAGE:-videonest-backend:latest}
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dist
