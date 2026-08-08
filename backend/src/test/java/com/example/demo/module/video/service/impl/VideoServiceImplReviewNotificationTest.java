@@ -47,6 +47,9 @@ class VideoServiceImplReviewNotificationTest {
     private HotRankService hotRankService;
 
     @Mock
+    private HotVideoCacheService hotVideoCacheService;
+
+    @Mock
     private VideoViewCountService videoViewCountService;
 
     @Mock
@@ -73,6 +76,7 @@ class VideoServiceImplReviewNotificationTest {
                 videoCategoryMapper,
                 minioService,
                 hotRankService,
+                hotVideoCacheService,
                 videoViewCountService,
                 redisTemplate,
                 stringRedisTemplate,

@@ -9,6 +9,9 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 
+/**
+ * 视频分类控制器
+ */
 @RestController
 @RequestMapping("/api/categories")
 public class VideoCategoryController {

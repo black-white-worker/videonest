@@ -7,6 +7,10 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 视频分类实体类
+ * 对应数据库表 video_category
+ */
 @Data
 @TableName("video_category")
 public class VideoCategory {
@@ -16,6 +20,7 @@ public class VideoCategory {
 
     private String name;
 
+    // 排序号，sort_num数据库字段，数字越小越靠前，用于前台分类展示顺序
     private Integer sortNum;
 
     private Integer status;

@@ -28,6 +28,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 public class GlobalExceptionHandler {
 
     /**捕获自定义业务异常 BusinessException*/
+    //@ExceptionHandler(BusinessException.class)表示专门用来捕获项目中抛出的 BusinessException 业务异常。
     @ExceptionHandler(BusinessException.class)
     public ApiResponse<Void> handleBusinessException(BusinessException e) {
         //fail为ApiResponse自定义的方法

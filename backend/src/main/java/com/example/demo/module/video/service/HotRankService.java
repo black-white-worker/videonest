@@ -13,4 +13,9 @@ public interface HotRankService {
     void addCommentScore(Long videoId);
 
     List<Long> getTopVideoIds(int limit);
+
+    /**
+     * 合并最近 24 小时分桶并原子更新当前热榜，供后台任务调用。
+     */
+    List<Long> refreshCurrentRank();
 }

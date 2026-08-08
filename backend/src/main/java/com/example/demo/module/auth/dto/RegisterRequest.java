@@ -5,6 +5,11 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 用户注册请求DTO
+ * 接收前端POST提交注册接口的表单/json参数
+ * 使用Jakarta Validation做后端参数校验，controller方法参数上加 @Valid 才会触发校验
+ */
 @Data
 public class RegisterRequest {
 

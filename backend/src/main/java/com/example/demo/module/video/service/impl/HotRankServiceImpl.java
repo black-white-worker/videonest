@@ -1,6 +1,7 @@
 package com.example.demo.module.video.service.impl;
 
 import com.example.demo.infrastructure.redis.RedisKeys;
+import com.example.demo.module.video.config.HotRankProperties;
 import com.example.demo.module.video.service.HotRankService;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -21,15 +22,18 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class HotRankServiceImpl implements HotRankService {
 
-    private static final int WINDOW_HOURS = 24;
-    private static final double HALF_LIFE_HOURS = 6D;
     private static final DateTimeFormatter BUCKET_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHH");
 
     private final StringRedisTemplate stringRedisTemplate;
+    private final HotRankProperties properties;
 
-    public HotRankServiceImpl(StringRedisTemplate stringRedisTemplate) {
+    public HotRankServiceImpl(
+            StringRedisTemplate stringRedisTemplate,
+            HotRankProperties properties
+    ) {
         this.stringRedisTemplate = stringRedisTemplate;
+        this.properties = properties;
     }
 
     @Override
@@ -59,52 +63,109 @@ public class HotRankServiceImpl implements HotRankService {
         }
 
         try {
-            LocalDateTime currentHour = LocalDateTime.now()
-                    .truncatedTo(ChronoUnit.HOURS);
-            Map<Long, Double> decayedScores = new HashMap<>();
-            int candidatesPerBucket = Math.max(limit * 5, 50);
-
-            for (int age = 0; age < WINDOW_HOURS; age++) {
-                LocalDateTime bucketHour = currentHour.minusHours(age);
-                double weight = Math.exp(
-                        -Math.log(2D) * age / HALF_LIFE_HOURS
-                );
-                Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> tuples =
-                        stringRedisTemplate.opsForZSet().reverseRangeWithScores(
-                                bucketKey(bucketHour),
-                                0,
-                                candidatesPerBucket - 1
-                        );
-                if (tuples == null) {
-                    continue;
-                }
-                for (var tuple : tuples) {
-                    if (tuple.getValue() == null || tuple.getScore() == null) {
-                        continue;
-                    }
-                    try {
-                        decayedScores.merge(
-                                Long.valueOf(tuple.getValue()),
-                                tuple.getScore() * weight,
-                                Double::sum
-                        );
-                    } catch (NumberFormatException ignored) {
-                        log.warn("忽略热榜中的非法视频 ID: {}", tuple.getValue());
-                    }
-                }
+            Set<String> videoIds = stringRedisTemplate.opsForZSet()
+                    .reverseRange(
+                            RedisKeys.VIDEO_HOT_CURRENT_KEY,
+                            0,
+                            Math.min(limit, properties.getMaxSize()) - 1L
+                    );
+            if (videoIds == null || videoIds.isEmpty()) {
+                return Collections.emptyList();
             }
-
-            return decayedScores.entrySet().stream()
-                    .sorted(Map.Entry.<Long, Double>comparingByValue(
-                            Comparator.reverseOrder()
-                    ).thenComparing(Map.Entry.comparingByKey()))
-                    .limit(limit)
-                    .map(Map.Entry::getKey)
+            return videoIds.stream()
+                    .map(this::parseVideoId)
+                    .filter(java.util.Objects::nonNull)
                     .toList();
         } catch (RuntimeException e) {
-            // 热榜属于可降级数据，Redis 故障不应拖垮视频浏览主链路。
-            log.warn("读取分时热榜失败，将由上层回退到最新视频", e);
+            log.warn("读取预聚合热榜失败，将由上层降级", e);
             return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public List<Long> refreshCurrentRank() {
+        LocalDateTime currentHour = LocalDateTime.now()
+                .truncatedTo(ChronoUnit.HOURS);
+        Map<Long, Double> decayedScores = new HashMap<>();
+        int maxSize = properties.getMaxSize();
+        int candidatesPerBucket = Math.max(maxSize * 5, 50);
+
+        for (int age = 0; age < properties.getWindowHours(); age++) {
+            LocalDateTime bucketHour = currentHour.minusHours(age);
+            double weight = Math.exp(
+                    -Math.log(2D) * age / properties.getHalfLifeHours()
+            );
+            Set<org.springframework.data.redis.core.ZSetOperations.TypedTuple<String>> tuples =
+                    stringRedisTemplate.opsForZSet().reverseRangeWithScores(
+                            bucketKey(bucketHour),
+                            0,
+                            candidatesPerBucket - 1L
+                    );
+            if (tuples == null) {
+                continue;
+            }
+            for (var tuple : tuples) {
+                Long videoId = parseVideoId(tuple.getValue());
+                if (videoId != null && tuple.getScore() != null) {
+                    decayedScores.merge(
+                            videoId,
+                            tuple.getScore() * weight,
+                            Double::sum
+                    );
+                }
+            }
+        }
+
+        List<Map.Entry<Long, Double>> ranking = decayedScores.entrySet().stream()
+                .sorted(Map.Entry.<Long, Double>comparingByValue(
+                        Comparator.reverseOrder()
+                ).thenComparing(Map.Entry.comparingByKey()))
+                .limit(maxSize)
+                .toList();
+        replaceCurrentRank(ranking);
+        return ranking.stream().map(Map.Entry::getKey).toList();
+    }
+
+    private void replaceCurrentRank(List<Map.Entry<Long, Double>> ranking) {
+        if (ranking.isEmpty()) {
+            stringRedisTemplate.delete(RedisKeys.VIDEO_HOT_CURRENT_KEY);
+            return;
+        }
+
+        String temporaryKey = RedisKeys.VIDEO_HOT_CURRENT_KEY
+                + ":tmp:" + java.util.UUID.randomUUID();
+        try {
+            for (Map.Entry<Long, Double> entry : ranking) {
+                stringRedisTemplate.opsForZSet().add(
+                        temporaryKey,
+                        entry.getKey().toString(),
+                        entry.getValue()
+                );
+            }
+            stringRedisTemplate.expire(
+                    temporaryKey,
+                    properties.getCurrentTtlSeconds(),
+                    TimeUnit.SECONDS
+            );
+            stringRedisTemplate.rename(
+                    temporaryKey,
+                    RedisKeys.VIDEO_HOT_CURRENT_KEY
+            );
+        } catch (RuntimeException e) {
+            stringRedisTemplate.delete(temporaryKey);
+            throw e;
+        }
+    }
+
+    private Long parseVideoId(String value) {
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException ignored) {
+            log.warn("忽略热榜中的非法视频 ID: {}", value);
+            return null;
         }
     }
 
@@ -121,7 +182,11 @@ public class HotRankServiceImpl implements HotRankService {
                     score
             );
             // 多保留两个小时，覆盖边界时钟偏差；排名只读取最近 24 个桶。
-            stringRedisTemplate.expire(key, WINDOW_HOURS + 2L, TimeUnit.HOURS);
+            stringRedisTemplate.expire(
+                    key,
+                    properties.getWindowHours() + 2L,
+                    TimeUnit.HOURS
+            );
         } catch (RuntimeException e) {
             log.warn("写入热度桶失败，videoId={}，score={}", videoId, score, e);
         }

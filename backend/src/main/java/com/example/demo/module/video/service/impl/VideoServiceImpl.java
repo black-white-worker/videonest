@@ -45,9 +45,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.time.LocalDateTime;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -69,6 +67,7 @@ public class VideoServiceImpl implements VideoService {
     private final VideoCategoryMapper videoCategoryMapper;
     private final MinioService minioService;
     private final HotRankService hotRankService;
+    private final HotVideoCacheService hotVideoCacheService;
     private final VideoViewCountService videoViewCountService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
@@ -81,6 +80,7 @@ public class VideoServiceImpl implements VideoService {
             VideoCategoryMapper videoCategoryMapper,
             MinioService minioService,
             HotRankService hotRankService,
+            HotVideoCacheService hotVideoCacheService,
             VideoViewCountService videoViewCountService,
             RedisTemplate<String, Object> redisTemplate,
             StringRedisTemplate stringRedisTemplate,
@@ -92,6 +92,7 @@ public class VideoServiceImpl implements VideoService {
         this.videoCategoryMapper = videoCategoryMapper;
         this.minioService = minioService;
         this.hotRankService = hotRankService;
+        this.hotVideoCacheService = hotVideoCacheService;
         this.videoViewCountService = videoViewCountService;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
@@ -321,26 +322,7 @@ public class VideoServiceImpl implements VideoService {
 
     @Override
     public List<VideoListItemVO> listHotVideos(int limit) {
-        List<Long> videoIds = hotRankService.getTopVideoIds(limit);
-
-        if (videoIds.isEmpty()) {
-            List<VideoListItemVO> recent = videoMapper.selectRecentPublished(limit);
-            recent.forEach(video -> video.setCoverUrl(
-                    minioService.getAccessUrl(video.getCoverUrl())
-            ));
-            return recent;
-        }
-
-        Map<Long, VideoListItemVO> videosById = new HashMap<>();
-        for (VideoListItemVO video : videoMapper.selectPublishedListByIds(videoIds)) {
-            video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()));
-            videosById.put(video.getId(), video);
-        }
-
-        return videoIds.stream()
-                .map(videosById::get)
-                .filter(java.util.Objects::nonNull)
-                .toList();
+        return hotVideoCacheService.getHotVideos(limit);
     }
 
     @Override
@@ -494,6 +476,7 @@ public class VideoServiceImpl implements VideoService {
             );
 
         }
+        invalidateHotVideoCardsAfterCommit();
         if ("REJECTED".equals(status)) {
             LoginUser admin = SecurityUtils.getCurrentUser();
             applicationEventPublisher.publishEvent(
@@ -696,6 +679,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        invalidateHotVideoCardsAfterCommit();
         log.info("创作者更新视频成功，videoId={}，userId={}", videoId, currentUser.userId());
 
     }
@@ -729,6 +713,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        invalidateHotVideoCardsAfterCommit();
         publishResourcePurgeEvent(videoId, purgeAfter);
         log.info(
                 "创作者视频已移入回收站，videoId={}，userId={}，purgeAfter={}",
@@ -762,6 +747,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        invalidateHotVideoCardsAfterCommit();
         log.info("管理员更新视频成功，videoId={}", videoId);
 
     }
@@ -786,6 +772,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        invalidateHotVideoCardsAfterCommit();
         publishResourcePurgeEvent(videoId, purgeAfter);
         log.info(
                 "管理员视频已移入回收站，videoId={}，adminId={}，purgeAfter={}",
@@ -798,6 +785,21 @@ public class VideoServiceImpl implements VideoService {
 
     private void deleteVideoDetailCache(Long videoId) {
         redisTemplate.delete(RedisKeys.videoDetail(videoId));
+    }
+
+    private void invalidateHotVideoCardsAfterCommit() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            hotVideoCacheService.invalidateCards();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        hotVideoCacheService.invalidateCards();
+                    }
+                }
+        );
     }
 
     private void publishResourcePurgeEvent(

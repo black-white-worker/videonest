@@ -18,6 +18,7 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import lombok.extern.slf4j.Slf4j;
 
@@ -37,6 +38,13 @@ public class VideoProcessMessageConsumer {
 
     private static final long LIST_COVER_MAX_BYTES = 300L * 1024;
     private static final long DETAIL_COVER_MAX_BYTES = 800L * 1024;
+    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
+            new DefaultRedisScript<>("""
+                    if redis.call('GET', KEYS[1]) == ARGV[1] then
+                        return redis.call('DEL', KEYS[1])
+                    end
+                    return 0
+                    """, Long.class);
 
     private final ObjectMapper objectMapper;
     private final VideoMapper videoMapper;
@@ -45,6 +53,7 @@ public class VideoProcessMessageConsumer {
     private final VideoReviewProperties reviewProperties;
     private final DelayedMessagePublisher delayedMessagePublisher;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final HotVideoCacheService hotVideoCacheService;
     private volatile boolean coverBackfillComplete;
 
     public VideoProcessMessageConsumer(
@@ -54,7 +63,8 @@ public class VideoProcessMessageConsumer {
             VideoProcessProperties properties,
             VideoReviewProperties reviewProperties,
             DelayedMessagePublisher delayedMessagePublisher,
-            RedisTemplate<String, Object> redisTemplate
+            RedisTemplate<String, Object> redisTemplate,
+            HotVideoCacheService hotVideoCacheService
     ) {
         this.objectMapper = objectMapper;
         this.videoMapper = videoMapper;
@@ -63,6 +73,7 @@ public class VideoProcessMessageConsumer {
         this.reviewProperties = reviewProperties;
         this.delayedMessagePublisher = delayedMessagePublisher;
         this.redisTemplate = redisTemplate;
+        this.hotVideoCacheService = hotVideoCacheService;
     }
 
     @RabbitListener(
@@ -80,9 +91,10 @@ public class VideoProcessMessageConsumer {
         }
 
         String lockKey = RedisKeys.videoProcessLock(event.videoId());
+        String lockToken = UUID.randomUUID().toString();
         Boolean locked = redisTemplate.opsForValue().setIfAbsent(
                 lockKey,
-                true,
+                lockToken,
                 properties.getTimeoutSeconds() + 300,
                 TimeUnit.SECONDS
         );
@@ -185,7 +197,18 @@ public class VideoProcessMessageConsumer {
             );
         } finally {
             deleteDirectory(workDir);
-            redisTemplate.delete(lockKey);
+            unlockVideoProcess(lockKey, lockToken, event.videoId());
+        }
+    }
+
+    /**
+     * 仅释放当前消费者持有的锁，避免锁超时并被其他实例重新获取后被误删。
+     */
+    private void unlockVideoProcess(String lockKey, String lockToken, Long videoId) {
+        try {
+            redisTemplate.execute(UNLOCK_SCRIPT, List.of(lockKey), lockToken);
+        } catch (RuntimeException e) {
+            log.warn("释放视频处理锁失败，等待锁自动过期，videoId={}", videoId, e);
         }
     }
 
@@ -346,6 +369,7 @@ public class VideoProcessMessageConsumer {
                 update.setCoverDetailUrl(detailObjectName);
                 videoMapper.updateById(update);
                 redisTemplate.delete(RedisKeys.videoDetail(video.getId()));
+                hotVideoCacheService.invalidateCards();
                 log.info("历史封面缩略图补齐成功，videoId={}", video.getId());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

@@ -64,6 +64,21 @@ public final class RedisKeys {
     public static final String VIDEO_HOT_BUCKET_PREFIX =
             "videonest:video:hot:hour:";
 
+    /**
+     * 后台任务预聚合后的当前热榜，在线请求只读取这个 ZSet。
+     */
+    public static final String VIDEO_HOT_CURRENT_KEY =
+            "videonest:video:hot:current";
+
+    /**
+     * 已经补齐视频信息和访问地址的热榜卡片缓存。
+     */
+    public static final String VIDEO_HOT_CARDS_KEY =
+            "videonest:video:hot:cards:v1";
+
+    public static final String VIDEO_HOT_REFRESH_LOCK =
+            "videonest:lock:video-hot-refresh";
+
     public static final String VIDEO_DETAIL_LOCK_PREFIX =
             "videonest:lock:video-detail:";
 
@@ -78,6 +93,9 @@ public final class RedisKeys {
 
     public static final String UPLOAD_CONFIRMED_PREFIX =
             "videonest:upload:confirmed:";
+
+    public static final String UPLOAD_COMPLETE_LOCK_PREFIX =
+            "videonest:lock:upload-complete:";
 
     public static final String VIDEO_VIEW_TOTAL_PREFIX =
             "videonest:video:view:total:";
@@ -130,6 +148,10 @@ public final class RedisKeys {
 
     public static String confirmedUpload(String objectName) {
         return UPLOAD_CONFIRMED_PREFIX + objectName;
+    }
+
+    public static String uploadCompleteLock(String uploadId) {
+        return UPLOAD_COMPLETE_LOCK_PREFIX + uploadId;
     }
 
 

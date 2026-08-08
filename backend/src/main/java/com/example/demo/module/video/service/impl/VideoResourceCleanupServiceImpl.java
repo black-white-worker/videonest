@@ -15,6 +15,7 @@ import com.example.demo.module.video.vo.DeletedVideoVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,12 +24,21 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
 public class VideoResourceCleanupServiceImpl
         implements VideoResourceCleanupService {
+
+    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
+            new DefaultRedisScript<>("""
+                    if redis.call('GET', KEYS[1]) == ARGV[1] then
+                        return redis.call('DEL', KEYS[1])
+                    end
+                    return 0
+                    """, Long.class);
 
     private final VideoMapper videoMapper;
     private final MinioService minioService;
@@ -62,9 +72,10 @@ public class VideoResourceCleanupServiceImpl
     @Transactional
     public void purgeVideo(Long videoId) {
         String lockKey = RedisKeys.resourcePurgeLock(videoId);
+        String lockToken = UUID.randomUUID().toString();
         Boolean locked = redisTemplate.opsForValue().setIfAbsent(
                 lockKey,
-                true,
+                lockToken,
                 10,
                 TimeUnit.MINUTES
         );
@@ -96,7 +107,7 @@ public class VideoResourceCleanupServiceImpl
             clearVideoCache(videoId);
             log.info("视频及关联资源永久删除成功，videoId={}", videoId);
         } finally {
-            redisTemplate.delete(lockKey);
+            unlock(lockKey, lockToken, "视频资源清理", videoId);
         }
     }
 
@@ -108,9 +119,10 @@ public class VideoResourceCleanupServiceImpl
 
     @Scheduled(fixedDelayString = "${resource-cleanup.fixed-delay-milliseconds:3600000}")
     public void cleanupExpiredResources() {
+        String lockToken = UUID.randomUUID().toString();
         Boolean locked = redisTemplate.opsForValue().setIfAbsent(
                 RedisKeys.RESOURCE_CLEANUP_JOB_LOCK,
-                true,
+                lockToken,
                 Math.max(properties.getFixedDelayMilliseconds(), 60_000),
                 TimeUnit.MILLISECONDS
         );
@@ -136,7 +148,33 @@ public class VideoResourceCleanupServiceImpl
                 log.info("定时资源清理批次执行完成，count={}", videoIds.size());
             }
         } finally {
-            redisTemplate.delete(RedisKeys.RESOURCE_CLEANUP_JOB_LOCK);
+            unlock(
+                    RedisKeys.RESOURCE_CLEANUP_JOB_LOCK,
+                    lockToken,
+                    "定时资源清理",
+                    null
+            );
+        }
+    }
+
+    /**
+     * 仅释放当前实例持有的锁，避免超时锁被其他实例重新获取后遭到误删。
+     */
+    private void unlock(
+            String lockKey,
+            String lockToken,
+            String operation,
+            Long videoId
+    ) {
+        try {
+            redisTemplate.execute(UNLOCK_SCRIPT, List.of(lockKey), lockToken);
+        } catch (RuntimeException e) {
+            log.warn(
+                    "释放{}锁失败，等待锁自动过期，videoId={}",
+                    operation,
+                    videoId,
+                    e
+            );
         }
     }
 

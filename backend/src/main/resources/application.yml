@@ -2,6 +2,12 @@ server:
   port: ${SERVER_PORT:8080}
   # 仅信任容器/内网反向代理转发的客户端地址，供匿名播放限频使用。
   forward-headers-strategy: native
+  tomcat:
+    threads:
+      max: ${TOMCAT_MAX_THREADS:200}
+      min-spare: ${TOMCAT_MIN_SPARE_THREADS:20}
+    accept-count: ${TOMCAT_ACCEPT_COUNT:300}
+    max-connections: ${TOMCAT_MAX_CONNECTIONS:2000}
 
 spring:
   application:
@@ -11,9 +17,16 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:videonest}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:videonest}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:16}
+      minimum-idle: ${DB_POOL_MIN_IDLE:8}
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:2000}
+      validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
+      idle-timeout: ${DB_IDLE_TIMEOUT_MS:600000}
+      max-lifetime: ${DB_MAX_LIFETIME_MS:1800000}
 
   jackson:
     time-zone: Asia/Shanghai
@@ -34,10 +47,16 @@ spring:
       timeout: 3000ms
       lettuce:
         pool:
-          max-active: 8
-          max-idle: 8
-          min-idle: 0
-          max-wait: -1ms
+          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-idle: ${REDIS_POOL_MAX_IDLE:16}
+          min-idle: ${REDIS_POOL_MIN_IDLE:4}
+          max-wait: ${REDIS_POOL_MAX_WAIT:500ms}
+
+  task:
+    scheduling:
+      pool:
+        size: ${SCHEDULING_POOL_SIZE:2}
+      thread-name-prefix: videonest-scheduler-
 
   rabbitmq:
     host: ${RABBITMQ_HOST:127.0.0.1}
@@ -88,7 +107,7 @@ video-process:
   cover-backfill-fixed-delay-milliseconds: ${COVER_BACKFILL_FIXED_DELAY_MILLISECONDS:300000}
 
 upload-security:
-  # 生产环境可设置为 clamscan 或 clamdscan，并将 required 设为 true 以失败关闭。
+
   antivirus-command: ${ANTIVIRUS_COMMAND:}
   antivirus-required: ${ANTIVIRUS_REQUIRED:false}
   scan-timeout-seconds: ${UPLOAD_SCAN_TIMEOUT_SECONDS:120}
@@ -100,6 +119,16 @@ video-view-count:
   redis-ttl-seconds: ${VIDEO_VIEW_COUNT_REDIS_TTL_SECONDS:604800}
   dedup-window-seconds: ${VIDEO_VIEW_DEDUP_WINDOW_SECONDS:1800}
   anonymous-limit-per-minute: ${ANONYMOUS_VIEW_LIMIT_PER_MINUTE:30}
+
+hot-rank:
+  window-hours: ${HOT_RANK_WINDOW_HOURS:24}
+  half-life-hours: ${HOT_RANK_HALF_LIFE_HOURS:6}
+  max-size: ${HOT_RANK_MAX_SIZE:50}
+  initial-delay-milliseconds: ${HOT_RANK_INITIAL_DELAY_MS:5000}
+  refresh-interval-milliseconds: ${HOT_RANK_REFRESH_INTERVAL_MS:45000}
+  current-ttl-seconds: ${HOT_RANK_CURRENT_TTL_SECONDS:180}
+  cards-ttl-seconds: ${HOT_RANK_CARDS_TTL_SECONDS:60}
+  refresh-lock-seconds: ${HOT_RANK_REFRESH_LOCK_SECONDS:40}
 
 video-review:
   timeout-milliseconds: ${VIDEO_REVIEW_TIMEOUT_MILLISECONDS:86400000}
