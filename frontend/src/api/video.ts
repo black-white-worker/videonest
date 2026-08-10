@@ -108,6 +108,10 @@ export interface VideoComment {
   videoId: number
   userId: number
   parentId: string
+  rootId: string
+  replyToUserId?: number
+  replyToUsername?: string
+  replyToNickname?: string
   content: string
   createdAt: string
   username: string

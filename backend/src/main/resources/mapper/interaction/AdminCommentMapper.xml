@@ -4,14 +4,17 @@
     <select id="selectAdminCommentPage" resultType="com.example.demo.module.interaction.vo.AdminCommentVO">
         SELECT vc.id, vc.video_id AS videoId, v.title AS videoTitle,
                vc.user_id AS userId, u.username, u.nickname,
-               vc.parent_id AS parentId, vc.content, vc.status,
+               vc.parent_id AS parentId, vc.root_id AS rootId, vc.content, vc.status,
                vc.created_at AS createdAt, vc.deleted_at AS deletedAt
         FROM video_comment vc
         INNER JOIN sys_user u ON u.id = vc.user_id
         INNER JOIN video v ON v.id = vc.video_id
         WHERE 1 = 1
+        <!-- 动态SQL：status不为null时，拼接状态筛选条件 -->
         <if test="status != null">AND vc.status = #{status}</if>
+        <!-- 动态SQL：videoId不为null时，按视频ID筛选评论 -->
         <if test="videoId != null">AND vc.video_id = #{videoId}</if>
+        <!-- 关键词模糊搜索：keyword非空时执行多字段模糊匹配  %关键词% → 前后都有百分号：全模糊匹配 -->
         <if test="keyword != null and keyword != ''">
             AND (vc.content LIKE CONCAT('%', #{keyword}, '%')
               OR u.username LIKE CONCAT('%', #{keyword}, '%')

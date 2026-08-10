@@ -124,14 +124,17 @@ CREATE TABLE video_comment (
     video_id BIGINT NOT NULL,
     user_id BIGINT NOT NULL,
     parent_id BIGINT NOT NULL DEFAULT 0 COMMENT '0代表一级评论',
+    root_id BIGINT NOT NULL DEFAULT 0 COMMENT '所属一级评论ID；一级评论为0',
     content VARCHAR(500) NOT NULL,
     status TINYINT NOT NULL DEFAULT 1 COMMENT '1正常，0已删除',
     deleted_at DATETIME NULL COMMENT '软删除时间，NULL表示未删除',
+    cascade_deleted_root_id BIGINT NULL COMMENT '因一级评论删除而被级联删除时记录根评论ID',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     KEY idx_video_created (video_id, created_at),
     KEY idx_comment_deleted_at (deleted_at),
-    KEY idx_parent_id (parent_id)
+    KEY idx_parent_id (parent_id),
+    KEY idx_comment_video_root_status_time (video_id, root_id, status, created_at, id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_follow (

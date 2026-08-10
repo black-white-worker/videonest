@@ -106,8 +106,24 @@ docker compose down
 适用于不希望服务器下载 Maven/npm 依赖的部署方式。本地 PowerShell 执行：
 
 ```powershell
+.\scripts\deploy.ps1
+```
+
+该命令会完成后端测试与 Jar 构建、前端生产构建、打包、上传 `.env`、数据库增量迁移以及远程 Compose 重启。远程只重新构建 `backend` 和 `frontend`，RabbitMQ、MySQL、Redis、MinIO 会复用服务器已有镜像。常用参数：
+
+```powershell
+.\scripts\deploy.ps1 `
+  -Server "82.157.205.6" `
+  -RemoteUser "ubuntu" `
+  -RemoteDir "/opt/videonest" `
+  -IdentityFile "C:\keys\server.pem" `
+  -PublicSiteUrl "https://video.example.com"
+```
+
+重复使用已生成的压缩包可加 `-SkipBuild`；紧急部署可用 `-SkipTests`；只有明确不需要执行数据库迁移时才使用 `-SkipMigrations`。也可以只生成部署包：
+
+```powershell
 .\scripts\package-deploy.ps1 -PublicSiteUrl "https://video.example.com"
-scp .\videonest-deploy.tar.gz ubuntu@服务器IP:/tmp/
 ```
 
 服务器解压后，使用产物构建覆盖文件启动；后端镜像只复制 Jar，前端镜像只复制 `dist`：
@@ -132,7 +148,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --buil
 
 使用 `docker-compose.benchmark.yml` 覆盖配置时，MySQL 仅在 Docker 网络内可访问，不会监听宿主机 `3306`。
 
-首次初始化时，Compose 会执行 `sql/SQL.sql`、`sql/2026-07-29-enterprise-reliability.sql` 和 `sql/2026-08-02-hot-upload-query-hardening.sql`。对已有数据库执行增量脚本前请先备份。
+首次初始化时，Compose 会执行 `sql` 目录中已挂载的初始化和增量脚本。一键部署还会幂等执行评论层级迁移；生产部署前仍建议备份数据库。
 
 ## 本地开发
 

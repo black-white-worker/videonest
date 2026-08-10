@@ -1,6 +1,7 @@
 param(
     [string]$OutputPath = ".\videonest-deploy.tar.gz",
-    [string]$PublicSiteUrl
+    [string]$PublicSiteUrl,
+    [switch]$SkipTests
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,8 +13,17 @@ if ($PublicSiteUrl) {
 
 Push-Location $ProjectRoot
 try {
-    mvn -f .\backend\pom.xml clean package -DskipTests
+    $Maven = if (Get-Command mvn.cmd -ErrorAction SilentlyContinue) { "mvn.cmd" } else { "mvn" }
+    $MavenArgs = @("-f", ".\backend\pom.xml", "clean", "package")
+    if ($SkipTests) { $MavenArgs += "-DskipTests" }
+    & $Maven @MavenArgs
     if ($LASTEXITCODE -ne 0) { throw "Backend package failed" }
+
+    if (-not (Test-Path .\frontend\node_modules\.bin\vite.cmd)) {
+        $NpmCache = Join-Path $ProjectRoot "tmp\npm-cache"
+        npm.cmd --prefix .\frontend --cache $NpmCache ci
+        if ($LASTEXITCODE -ne 0) { throw "Frontend dependency install failed" }
+    }
 
     npm.cmd --prefix .\frontend run build
     if ($LASTEXITCODE -ne 0) { throw "Frontend build failed" }
@@ -30,8 +40,7 @@ try {
         sql `
         scripts\check-media-delivery.js `
         docker-compose.yml `
-        docker-compose.jar.yml `
-        .env.example
+        docker-compose.jar.yml
     if ($LASTEXITCODE -ne 0) { throw "Deployment archive failed" }
 
     Write-Host "Deployment archive created: $ResolvedOutputPath"

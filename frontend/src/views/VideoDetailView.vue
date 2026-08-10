@@ -55,6 +55,7 @@ const replyLoadingIds = ref<string[]>([])
 const expandedReplyIds = ref<string[]>([])
 const repliesByCommentId = ref<Record<string, VideoComment[]>>({})
 const replyContents = ref<Record<string, string>>({})
+const replyTargets = ref<Record<string, VideoComment | undefined>>({})
 const replySubmittingIds = ref<string[]>([])
 const shareDialogVisible = ref(false)
 const wechatQrCanvas = ref<HTMLCanvasElement | null>(null)
@@ -531,7 +532,7 @@ async function submitComment() {
   }
 }
 
-async function removeComment(commentId: string) {
+async function removeComment(commentId: string, rootComment?: VideoComment) {
   if (!video.value || !requireLogin()) {
     return
   }
@@ -540,6 +541,10 @@ async function removeComment(commentId: string) {
     commentLoading.value = true
     await deleteComment(video.value.id, commentId)
     await loadComments(video.value.id)
+    if (rootComment && String(rootComment.id) !== String(commentId)) {
+      const result = await getCommentReplies(video.value.id, rootComment.id)
+      repliesByCommentId.value[rootComment.id] = result.records
+    }
     ElMessage.success('评论已删除')
   } catch (error) {
     const message = error instanceof Error ? error.message : '删除评论失败'
@@ -576,8 +581,10 @@ async function submitReply(comment: VideoComment) {
   if (!content) return ElMessage.warning('请输入回复内容')
   try {
     replySubmittingIds.value.push(comment.id)
-    await createComment(video.value.id, content, comment.id)
+    const target = replyTargets.value[comment.id]
+    await createComment(video.value.id, content, target?.id || comment.id)
     replyContents.value[comment.id] = ''
+    replyTargets.value[comment.id] = undefined
     const result = await getCommentReplies(video.value.id, comment.id)
     repliesByCommentId.value[comment.id] = result.records
     if (!isReplyExpanded(comment.id)) expandedReplyIds.value.push(comment.id)
@@ -588,6 +595,14 @@ async function submitReply(comment: VideoComment) {
   } finally {
     replySubmittingIds.value = replySubmittingIds.value.filter(id => id !== comment.id)
   }
+}
+
+function selectReplyTarget(rootComment: VideoComment, target: VideoComment) {
+  replyTargets.value[rootComment.id] = target
+}
+
+function clearReplyTarget(rootCommentId: string) {
+  replyTargets.value[rootCommentId] = undefined
 }
 
 function changeCommentPage(page: number) {
@@ -813,13 +828,24 @@ onBeforeUnmount(() => {
                                     :key="reply.id"
                                     class="reply-item"
                                   >
-                                    <strong>{{ reply.nickname }}</strong>：{{ reply.content }}
+                                    <strong>{{ reply.nickname }}</strong>
+                                    <span v-if="reply.replyToNickname">
+                                      回复 <strong>{{ reply.replyToNickname }}</strong>
+                                    </span>
+                                    ：{{ reply.content }}
+                                    <el-button
+                                      link
+                                      size="small"
+                                      @click="selectReplyTarget(comment, reply)"
+                                    >
+                                      回复
+                                    </el-button>
                                     <el-button
                                       v-if="isMyComment(reply)"
                                       link
                                       type="danger"
                                       size="small"
-                                      @click="removeComment(reply.id)"
+                                      @click="removeComment(reply.id, comment)"
                                     >
                                       删除
                                     </el-button>
@@ -831,11 +857,19 @@ onBeforeUnmount(() => {
                                   />
                                 </template>
                               </el-skeleton>
+                              <div v-if="replyTargets[comment.id]" class="reply-target">
+                                正在回复 {{ replyTargets[comment.id]?.nickname }}
+                                <el-button link size="small" @click="clearReplyTarget(comment.id)">
+                                  取消
+                                </el-button>
+                              </div>
                               <div class="reply-editor">
                                 <el-input
                                   v-model="replyContents[comment.id]"
                                   maxlength="500"
-                                  placeholder="写下你的回复"
+                                  :placeholder="replyTargets[comment.id]
+                                    ? `回复 ${replyTargets[comment.id]?.nickname}`
+                                    : '写下你的回复'"
                                   @keyup.enter="submitReply(comment)"
                                 />
                                 <el-button
@@ -1733,6 +1767,12 @@ h1 {
 
 .reply-item strong {
   color: var(--vn-primary-dark);
+}
+
+.reply-target {
+  margin-top: 10px;
+  color: #61666d;
+  font-size: 13px;
 }
 
 .reply-editor {

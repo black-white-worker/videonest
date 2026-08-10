@@ -151,6 +151,7 @@ export interface AdminComment {
   username: string
   nickname: string
   parentId: string
+  rootId: string
   content: string
   status: number
   createdAt: string

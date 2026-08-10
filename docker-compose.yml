@@ -16,6 +16,7 @@ services:
       - ./sql/2026-07-29-enterprise-reliability.sql:/docker-entrypoint-initdb.d/03-enterprise-reliability.sql:ro
       - ./sql/2026-08-02-hot-upload-query-hardening.sql:/docker-entrypoint-initdb.d/04-hot-upload-query-hardening.sql:ro
       - ./sql/2026-08-04-media-delivery.sql:/docker-entrypoint-initdb.d/05-media-delivery.sql:ro
+      - ./sql/2026-08-11-add-comment-root-id.sql:/docker-entrypoint-initdb.d/06-comment-root-id.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s

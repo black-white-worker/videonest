@@ -4,6 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * 发布评论请求DTO
+ * 接收前端提交新增评论时传递的参数
+ */
 @Data
 public class CommentCreateRequest {
 

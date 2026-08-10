@@ -26,6 +26,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * 前端用户评论业务实现类
+ * 功能：发布评论、回复评论、分页查询评论、分页查看回复、用户/管理员删除评论、评论限流、发布消息通知事件、更新视频热度
+ */
 @Service
 @Slf4j
 public class CommentServiceImpl implements CommentService {
@@ -39,7 +43,6 @@ public class CommentServiceImpl implements CommentService {
     private final StringRedisTemplate stringRedisTemplate;
     private final ApplicationEventPublisher eventPublisher;
 
-    // =========【改动1】构造方法新增 eventPublisher 参数接收注入 =========
     public CommentServiceImpl(
             VideoMapper videoMapper,
             VideoCommentMapper videoCommentMapper,
@@ -54,6 +57,11 @@ public class CommentServiceImpl implements CommentService {
         this.eventPublisher = eventPublisher;
     }
 
+    /**
+     * 创建评论/回复评论核心方法
+     * @param videoId 被评论的视频ID
+     * @param request 前端提交的评论内容、父评论ID等参数
+     */
     @Override
     @Transactional
     public void createComment(
@@ -61,7 +69,9 @@ public class CommentServiceImpl implements CommentService {
             CommentCreateRequest request
     ) {
         LoginUser currentUser = SecurityUtils.getCurrentUser();
+        // 校验视频必须是已发布状态，未发布/下架不能评论
         validatePublishedVideo(videoId);
+        // Redis校验用户评论频率，防止恶意刷屏
         checkRateLimit(currentUser.userId());
 
         Long parentId = request.getParentId() == null
@@ -78,15 +88,17 @@ public class CommentServiceImpl implements CommentService {
                 throw new BusinessException(400, "回复的评论不存在");
             }
 
-            if (parentComment.getParentId() != 0) {
-                throw new BusinessException(400, "暂不支持回复二级评论");
-            }
         }
 
         VideoComment comment = new VideoComment();
         comment.setVideoId(videoId);
         comment.setUserId(currentUser.userId());
         comment.setParentId(parentId);
+        comment.setRootId(parentComment == null
+                ? 0L
+                : (parentComment.getParentId() == 0
+                    ? parentComment.getId()
+                    : parentComment.getRootId()));
         comment.setContent(request.getContent().trim());
         comment.setStatus(1);
 
@@ -183,11 +195,12 @@ public class CommentServiceImpl implements CommentService {
             }
 
             videoCommentMapper.softDeleteById(commentId);
-            videoCommentMapper.softDeleteRepliesByParentId(commentId);
+            videoCommentMapper.softDeleteRepliesByRootId(commentId);
             log.info("管理员删除一级评论及回复成功，commentId={}", commentId);
             return;
         }
 
+        VideoComment comment = videoCommentMapper.selectById(commentId);
         int rows = videoCommentMapper.softDeleteByIdAndUserId(
                 commentId,
                 currentUser.userId()
@@ -198,6 +211,9 @@ public class CommentServiceImpl implements CommentService {
                     404,
                     "评论不存在，或你无权删除该评论"
             );
+        }
+        if (comment != null && comment.getParentId() == 0) {
+            videoCommentMapper.softDeleteRepliesByRootId(commentId);
         }
         log.info("用户删除评论成功，commentId={}，userId={}", commentId, currentUser.userId());
     }
