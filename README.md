@@ -1,5 +1,7 @@
 # VideoNest
 
+后端的 HTTP 状态码、JWT 撤销、认证限流、Flyway 与 Transactional Outbox 设计边界见 [后端可靠性设计](docs/backend-reliability-design.md)。
+
 VideoNest 是一个面向学习、作品展示与小型社区的视频平台。它以 Vue 3 和 Spring Boot 为核心，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。
 
 ![VideoNest 首页](docs/images/home.png)

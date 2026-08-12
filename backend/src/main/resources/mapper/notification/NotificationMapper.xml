@@ -3,10 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.example.demo.module.notification.mapper.NotificationMapper">
+<mapper namespace="com.videonest.module.notification.mapper.NotificationMapper">
 
     <select id="selectNotificationPage"
-            resultType="com.example.demo.module.notification.vo.NotificationVO">
+            resultType="com.videonest.module.notification.vo.NotificationVO">
         SELECT
             n.id,
             n.actor_id AS actorId,

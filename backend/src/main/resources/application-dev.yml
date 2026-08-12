@@ -13,4 +13,4 @@ mybatis-plus:
 
 logging:
   level:
-    com.example.demo: DEBUG
+    com.videonest: DEBUG

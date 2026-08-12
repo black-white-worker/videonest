@@ -3,11 +3,11 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.example.demo.module.interaction.mapper.VideoCommentMapper">
+<mapper namespace="com.videonest.module.interaction.mapper.VideoCommentMapper">
 
     <!-- 一级评论分页 -->
     <select id="selectCommentPage"
-            resultType="com.example.demo.module.interaction.vo.VideoCommentVO">
+            resultType="com.videonest.module.interaction.vo.VideoCommentVO">
         SELECT
         vc.id,
         vc.video_id AS videoId,
@@ -39,7 +39,7 @@
 
     <!-- 某条一级评论下的回复分页 -->
     <select id="selectReplyPage"
-            resultType="com.example.demo.module.interaction.vo.VideoCommentVO">
+            resultType="com.videonest.module.interaction.vo.VideoCommentVO">
         SELECT
         vc.id,
         vc.video_id AS videoId,

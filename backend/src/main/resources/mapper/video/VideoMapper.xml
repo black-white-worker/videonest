@@ -3,10 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.example.demo.module.video.mapper.VideoMapper">
+<mapper namespace="com.videonest.module.video.mapper.VideoMapper">
 
     <select id="selectPublishedPage"
-            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+            resultType="com.videonest.module.video.vo.VideoListItemVO">
 
         SELECT
         v.id,
@@ -49,7 +49,7 @@
     </select>
 
     <select id="selectPublishedListByIds"
-            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+            resultType="com.videonest.module.video.vo.VideoListItemVO">
 
         SELECT
         v.id,
@@ -101,7 +101,7 @@
     </update>
 
     <select id="selectPublishedDetailById"
-            resultType="com.example.demo.module.video.vo.VideoDetailVO">
+            resultType="com.videonest.module.video.vo.VideoDetailVO">
 
         SELECT
         v.id,
@@ -184,7 +184,7 @@
     </insert>
 
     <select id="selectPendingReviewPage"
-            resultType="com.example.demo.module.video.vo.AdminVideoReviewVO">
+            resultType="com.videonest.module.video.vo.AdminVideoReviewVO">
 
         SELECT
         v.id,
@@ -256,7 +256,7 @@
     </update>
 
     <select id="selectCreatorVideoPage"
-            resultType="com.example.demo.module.video.vo.CreatorVideoListVO">
+            resultType="com.videonest.module.video.vo.CreatorVideoListVO">
 
         SELECT
         v.id,
@@ -317,7 +317,7 @@
     </select>
 
     <select id="selectRecentPublished"
-            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+            resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
         COALESCE(
             v.cover_list_url,
@@ -343,7 +343,7 @@
     </select>
 
     <select id="selectMyLikedVideoPage"
-            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+            resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
                COALESCE(
                    v.cover_list_url,
@@ -368,7 +368,7 @@
     </select>
 
     <select id="selectMyFavoritedVideoPage"
-            resultType="com.example.demo.module.video.vo.VideoListItemVO">
+            resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
                COALESCE(
                    v.cover_list_url,
@@ -419,7 +419,7 @@
     </update>
 
     <select id="selectDeletedVideoPage"
-            resultType="com.example.demo.module.video.vo.DeletedVideoVO">
+            resultType="com.videonest.module.video.vo.DeletedVideoVO">
         SELECT v.id,
                v.title,
                v.author_id AS authorId,
@@ -447,7 +447,7 @@
     </select>
 
     <select id="selectDeletedVideoById"
-            resultType="com.example.demo.module.video.entity.Video">
+            resultType="com.videonest.module.video.entity.Video">
         SELECT *
         FROM video
         WHERE id = #{videoId}
@@ -465,7 +465,7 @@
     </select>
 
     <select id="selectCoverThumbnailBackfillBatch"
-            resultType="com.example.demo.module.video.entity.Video">
+            resultType="com.videonest.module.video.entity.Video">
         SELECT *
         FROM video
         WHERE is_deleted = 0

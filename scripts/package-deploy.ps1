@@ -6,6 +6,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
+$PreviousPublicSiteUrl = [Environment]::GetEnvironmentVariable("VITE_PUBLIC_SITE_URL", "Process")
 
 if ($PublicSiteUrl) {
     $env:VITE_PUBLIC_SITE_URL = $PublicSiteUrl
@@ -36,9 +37,6 @@ try {
         frontend\Dockerfile.dist `
         frontend\nginx.conf `
         deploy\rabbitmq\Dockerfile `
-        deploy\minio\cors.xml `
-        sql `
-        scripts\check-media-delivery.js `
         docker-compose.yml `
         docker-compose.jar.yml
     if ($LASTEXITCODE -ne 0) { throw "Deployment archive failed" }
@@ -46,4 +44,9 @@ try {
     Write-Host "Deployment archive created: $ResolvedOutputPath"
 } finally {
     Pop-Location
+    if ($null -eq $PreviousPublicSiteUrl) {
+        Remove-Item Env:\VITE_PUBLIC_SITE_URL -ErrorAction SilentlyContinue
+    } else {
+        $env:VITE_PUBLIC_SITE_URL = $PreviousPublicSiteUrl
+    }
 }

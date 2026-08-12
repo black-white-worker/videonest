@@ -8,4 +8,4 @@ spring:
 logging:
   level:
     root: INFO
-    com.example.demo: INFO
+    com.videonest: INFO

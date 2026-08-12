@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.example.demo.module.interaction.mapper.AdminCommentMapper">
-    <select id="selectAdminCommentPage" resultType="com.example.demo.module.interaction.vo.AdminCommentVO">
+<mapper namespace="com.videonest.module.interaction.mapper.AdminCommentMapper">
+    <select id="selectAdminCommentPage" resultType="com.videonest.module.interaction.vo.AdminCommentVO">
         SELECT vc.id, vc.video_id AS videoId, v.title AS videoTitle,
                vc.user_id AS userId, u.username, u.nickname,
                vc.parent_id AS parentId, vc.root_id AS rootId, vc.content, vc.status,

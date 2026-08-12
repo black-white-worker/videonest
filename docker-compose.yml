@@ -9,14 +9,9 @@ services:
       MYSQL_ROOT_HOST: "%"
       TZ: Asia/Shanghai
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
-      - ./sql/SQL.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./sql/2026-07-29-enterprise-reliability.sql:/docker-entrypoint-initdb.d/03-enterprise-reliability.sql:ro
-      - ./sql/2026-08-02-hot-upload-query-hardening.sql:/docker-entrypoint-initdb.d/04-hot-upload-query-hardening.sql:ro
-      - ./sql/2026-08-04-media-delivery.sql:/docker-entrypoint-initdb.d/05-media-delivery.sql:ro
-      - ./sql/2026-08-11-add-comment-root-id.sql:/docker-entrypoint-initdb.d/06-comment-root-id.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
       interval: 10s
@@ -29,7 +24,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
     healthcheck:
@@ -47,8 +42,8 @@ services:
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USERNAME}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
     healthcheck:
@@ -68,7 +63,7 @@ services:
       MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-*}
     ports:
       - "9000:9000"
-      - "9001:9001"
+      - "127.0.0.1:9001:9001"
     volumes:
       - minio_data:/data
 
@@ -112,6 +107,7 @@ services:
       DB_NAME: ${DB_NAME}
       DB_USERNAME: ${DB_USERNAME}
       DB_PASSWORD: ${DB_PASSWORD}
+      FLYWAY_BASELINE_VERSION: ${FLYWAY_BASELINE_VERSION:-3}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       REDIS_USERNAME: ${REDIS_USERNAME}
@@ -153,7 +149,7 @@ services:
     volumes:
       - backend_logs:/app/logs
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/videos/hot?limit=1"]
       interval: 15s
@@ -172,7 +168,7 @@ services:
       backend:
         condition: service_healthy
     ports:
-      - "80:80"
+      - "${HTTP_PORT:-80}:80"
 
 volumes:
   mysql_data:

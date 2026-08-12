@@ -3,10 +3,10 @@
         PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
         "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 
-<mapper namespace="com.example.demo.module.follow.mapper.UserFollowMapper">
+<mapper namespace="com.videonest.module.follow.mapper.UserFollowMapper">
 
     <select id="selectFollowingPage"
-            resultType="com.example.demo.module.follow.vo.FollowUserVO">
+            resultType="com.videonest.module.follow.vo.FollowUserVO">
         SELECT u.id, u.username, u.nickname, u.role, uf.created_at AS followedAt
         FROM user_follow uf
         INNER JOIN sys_user u ON u.id = uf.followee_id
@@ -16,7 +16,7 @@
     </select>
 
     <select id="selectFollowerPage"
-            resultType="com.example.demo.module.follow.vo.FollowUserVO">
+            resultType="com.videonest.module.follow.vo.FollowUserVO">
         SELECT u.id, u.username, u.nickname, u.role, uf.created_at AS followedAt
         FROM user_follow uf
         INNER JOIN sys_user u ON u.id = uf.follower_id
