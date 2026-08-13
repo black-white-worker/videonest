@@ -15,7 +15,7 @@ import com.videonest.module.interaction.mapper.VideoFavoriteMapper;
 import com.videonest.module.interaction.mapper.VideoCommentMapper;
 import com.videonest.module.interaction.mapper.AdminCommentMapper;
 import com.videonest.infrastructure.mq.mapper.DeadLetterRecordMapper;
-import com.videonest.infrastructure.outbox.OutboxEventMapper;
+import com.videonest.infrastructure.outbox.mapper.OutboxEventMapper;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

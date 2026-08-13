@@ -1,8 +1,11 @@
-package com.videonest.infrastructure.outbox;
+package com.videonest.infrastructure.outbox.service.impl;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.videonest.common.exception.MessagePublishException;
+import com.videonest.infrastructure.outbox.entity.OutboxEvent;
+import com.videonest.infrastructure.outbox.mapper.OutboxEventMapper;
+import com.videonest.infrastructure.outbox.service.TransactionalOutboxService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -10,12 +13,12 @@ import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
-public class TransactionalOutboxService {
+public class TransactionalOutboxServiceImpl implements TransactionalOutboxService {
 
     private final OutboxEventMapper outboxEventMapper;
     private final ObjectMapper objectMapper;
 
-    public TransactionalOutboxService(
+    public TransactionalOutboxServiceImpl(
             OutboxEventMapper outboxEventMapper,
             ObjectMapper objectMapper
     ) {
@@ -23,6 +26,7 @@ public class TransactionalOutboxService {
         this.objectMapper = objectMapper;
     }
 
+    @Override
     @Transactional
     public void append(
             String eventId,

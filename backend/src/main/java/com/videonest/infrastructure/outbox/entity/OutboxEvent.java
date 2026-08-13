@@ -1,4 +1,4 @@
-package com.videonest.infrastructure.outbox;
+package com.videonest.infrastructure.outbox.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;

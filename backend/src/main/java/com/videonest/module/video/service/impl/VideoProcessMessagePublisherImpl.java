@@ -1,7 +1,7 @@
 package com.videonest.module.video.service.impl;
 
 import com.videonest.infrastructure.mq.RabbitMqConfig;
-import com.videonest.infrastructure.outbox.TransactionalOutboxService;
+import com.videonest.infrastructure.outbox.service.TransactionalOutboxService;
 import com.videonest.module.video.event.VideoProcessEvent;
 import com.videonest.module.video.service.VideoProcessMessagePublisher;
 import lombok.extern.slf4j.Slf4j;

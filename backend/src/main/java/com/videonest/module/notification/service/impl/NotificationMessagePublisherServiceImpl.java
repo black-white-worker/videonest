@@ -1,7 +1,7 @@
 package com.videonest.module.notification.service.impl;
 
 import com.videonest.infrastructure.mq.RabbitMqConfig;
-import com.videonest.infrastructure.outbox.TransactionalOutboxService;
+import com.videonest.infrastructure.outbox.service.TransactionalOutboxService;
 import com.videonest.module.notification.event.NotificationDomainEvent;
 import com.videonest.module.notification.service.NotificationMessagePublisherService;
 import org.springframework.context.event.EventListener;

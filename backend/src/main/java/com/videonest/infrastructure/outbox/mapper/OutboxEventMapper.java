@@ -1,6 +1,7 @@
-package com.videonest.infrastructure.outbox;
+package com.videonest.infrastructure.outbox.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.videonest.infrastructure.outbox.entity.OutboxEvent;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;

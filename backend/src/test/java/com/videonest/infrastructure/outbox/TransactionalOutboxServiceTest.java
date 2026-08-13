@@ -1,6 +1,9 @@
 package com.videonest.infrastructure.outbox;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.videonest.infrastructure.outbox.entity.OutboxEvent;
+import com.videonest.infrastructure.outbox.mapper.OutboxEventMapper;
+import com.videonest.infrastructure.outbox.service.impl.TransactionalOutboxServiceImpl;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -13,7 +16,7 @@ class TransactionalOutboxServiceTest {
     @Test
     void appendPersistsPendingEventBeforeMqDelivery() {
         OutboxEventMapper mapper = mock(OutboxEventMapper.class);
-        TransactionalOutboxService service = new TransactionalOutboxService(
+        TransactionalOutboxServiceImpl service = new TransactionalOutboxServiceImpl(
                 mapper,
                 new ObjectMapper()
         );

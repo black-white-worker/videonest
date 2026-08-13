@@ -1,11 +1,13 @@
-package com.videonest.infrastructure.outbox;
+package com.videonest.infrastructure.outbox.service.impl;
 
+import com.videonest.infrastructure.outbox.entity.OutboxEvent;
+import com.videonest.infrastructure.outbox.mapper.OutboxEventMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
@@ -50,24 +52,20 @@ public class OutboxEventDispatcher {
                     },
                     correlationData
             );
-            CorrelationData.Confirm confirm = correlationData.getFuture()
-                    .get(5, TimeUnit.SECONDS);
+            CorrelationData.Confirm confirm = correlationData.getFuture().get(5, TimeUnit.SECONDS);
             if (!confirm.ack()) {
                 throw new IllegalStateException("Broker 未确认消息: " + confirm.reason());
             }
             if (correlationData.getReturned() != null) {
                 throw new IllegalStateException(
-                        "消息无法路由到队列: "
-                                + correlationData.getReturned().getReplyText()
+                        "消息无法路由到队列: " + correlationData.getReturned().getReplyText()
                 );
             }
             outboxEventMapper.markSent(event.getId());
         } catch (Exception e) {
             int retryCount = event.getRetryCount() == null ? 0 : event.getRetryCount();
             long delaySeconds = Math.min(300, 1L << Math.min(retryCount, 8));
-            String error = e.getMessage() == null
-                    ? e.getClass().getSimpleName()
-                    : e.getMessage();
+            String error = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             if (error.length() > 500) {
                 error = error.substring(0, 500);
             }

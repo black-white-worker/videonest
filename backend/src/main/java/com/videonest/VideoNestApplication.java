@@ -7,11 +7,11 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableScheduling
-@MapperScan({
+	@MapperScan({
 		"com.videonest.module.*.mapper",
 		"com.videonest.infrastructure.mq.mapper",
-		"com.videonest.infrastructure.outbox"
-})
+		"com.videonest.infrastructure.outbox.mapper"
+	})
 public class VideoNestApplication {
 
 	public static void main(String[] args) {
