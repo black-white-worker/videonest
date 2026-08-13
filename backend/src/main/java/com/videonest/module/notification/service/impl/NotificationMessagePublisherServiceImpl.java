@@ -39,7 +39,7 @@ public class NotificationMessagePublisherServiceImpl
             // 取出领域事件NotificationDomainEvent内部真正的NotificationEvent事件对象进行序列化
             Object message = domainEvent.notificationEvent();
 
-            // 调用RabbitTemplate发送消息到指定交换机
+            // 发送消息到指定交换机
             outboxService.append(
                     messageId,
                     "NOTIFICATION",
