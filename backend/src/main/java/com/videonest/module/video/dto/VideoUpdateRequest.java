@@ -6,6 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * DTO：视频编辑更新请求
+ * 用户修改已存在视频的元信息（分区、标题、简介、封面等）
+ */
 @Data
 public class VideoUpdateRequest {
 
@@ -20,6 +24,7 @@ public class VideoUpdateRequest {
     @Size(max = 2000, message = "视频简介不能超过 2000 个字符")
     private String description;
 
+    // MinIO对象存储封面对象名
     private String coverObjectName;
 
     private String videoObjectName;

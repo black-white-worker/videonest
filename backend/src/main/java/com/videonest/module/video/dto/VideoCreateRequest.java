@@ -6,6 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * DTO：创建视频请求实体
+ * 接收前端提交创建视频的表单参数，配合Spring Validation做请求参数校验
+ */
 @Data
 public class VideoCreateRequest {
 

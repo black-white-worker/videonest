@@ -2,6 +2,7 @@ package com.videonest.infrastructure.outbox.service;
 
 /**
  * 在当前数据库事务中持久化待投递事件。
+ *
  */
 public interface TransactionalOutboxService {
 

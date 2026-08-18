@@ -4,6 +4,11 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * VO：视频详情视图对象
+ * 使用场景：视频播放页，展示视频信息、多清晰度播放地址、统计数据、作者信息、分区信息
+ * 数据来源：video主表 + user用户表 + category分区表联查组装
+ */
 @Data
 public class VideoDetailVO {
 

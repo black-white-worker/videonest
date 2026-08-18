@@ -99,6 +99,9 @@ public class VideoServiceImpl implements VideoService {
         this.uploadSessionService = uploadSessionService;
     }
 
+    /**
+     * 查询已发布视频分页列表
+     */
     @Override
     public PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId,
@@ -111,11 +114,17 @@ public class VideoServiceImpl implements VideoService {
         );
     }
 
+    /**
+     * 获取已发布视频详情
+     */
     @Override
     public VideoDetailVO getPublishedVideoDetail(Long videoId) {
         return videoDiscoveryService.getPublishedVideoDetail(videoId);
     }
 
+    /**
+     * 记录视频播放埋点
+     */
     @Override
     public com.videonest.module.video.vo.VideoViewReportVO recordView(
             Long videoId,
@@ -128,10 +137,18 @@ public class VideoServiceImpl implements VideoService {
         );
     }
 
+    /**
+     * 获取热门视频列表
+     */
     @Override
     public List<VideoListItemVO> listHotVideos(int limit) {
         return videoDiscoveryService.listHotVideos(limit);
     }
+
+    /**
+     * 创作者投稿创建视频
+     * @ Transactional 当前方法全部运行在事务中，抛出异常全部回滚
+     */
     @Override
     @Transactional
     public VideoCreateVO createVideo(VideoCreateRequest request) {
@@ -153,6 +170,7 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(400, "封面文件路径不合法");
         }
 
+        // 上传会话校验：确认这个文件是当前用户已经完成上传的，防止伪造未上传文件
         uploadSessionService.assertConfirmed(
                 request.getVideoObjectName(), currentUser.userId(), "video"
         );
@@ -162,12 +180,12 @@ public class VideoServiceImpl implements VideoService {
             );
         }
 
+        // 组装Video数据库实
         Video video = new Video();
         video.setAuthorId(currentUser.userId());
         video.setCategoryId(request.getCategoryId());
         video.setTitle(request.getTitle());
         video.setDescription(request.getDescription());
-        // 原始封面只供异步处理使用，页面永远只读取处理后的缩略图字段。
         video.setCoverUrl(null);
         video.setOriginalCoverUrl(request.getCoverObjectName());
         video.setVideoUrl(null);
@@ -180,10 +198,16 @@ public class VideoServiceImpl implements VideoService {
 
         videoMapper.insertCreatorVideo(video);
 
+        /*
+         * markUploadsConsumedAfterCommit：事务提交之后，标记上传会话已消费
+         * 关键点：不能在事务内直接标记，如果事务回滚，上传会话不能被标记消耗
+         * 只有数据库插入成功提交，才标记文件被业务使用
+         */
         markUploadsConsumedAfterCommit(
                 request.getVideoObjectName(), request.getCoverObjectName()
         );
 
+        // 发布事件 VideoProcessEvent，触发异步FFmpeg转码任务，主线程不阻塞
         applicationEventPublisher.publishEvent(
                 new VideoProcessEvent(video.getId(), video.getOriginalVideoUrl())
         );
@@ -197,18 +221,28 @@ public class VideoServiceImpl implements VideoService {
         return new VideoCreateVO(video.getId(), video.getStatus(), video.getRejectReason());
     }
 
+    /**
+     * 在事务提交成功之后执行上传会话标记已消费
+     * 如果当前不在事务中，直接执行；如果在事务，注册回调afterCommit
+     * 避免事务回滚时把上传会话标记为已使用，造成文件无法二次投稿
+     * @param videoObjectName 视频上传会话key
+     * @param coverObjectName 封面上传会话key
+     */
     private void markUploadsConsumedAfterCommit(
             String videoObjectName,
             String coverObjectName
     ) {
+        // 把要执行的逻辑打包成任务，保证数据库事务执行完才跑run是吗
         Runnable consume = () -> {
             uploadSessionService.markConsumed(videoObjectName);
             uploadSessionService.markConsumed(coverObjectName);
         };
+        // 没有事务：直接执行任务
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             consume.run();
             return;
         }
+        // 存在事务：注册事务回调，事务提交成功之后才执行任务
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override
@@ -219,6 +253,9 @@ public class VideoServiceImpl implements VideoService {
         );
     }
 
+    /**
+     * 管理员分页查询待审核视频
+     */
     @Override
     public PageResult<AdminVideoReviewVO> listPendingReviewVideos(
             long page,
@@ -227,6 +264,9 @@ public class VideoServiceImpl implements VideoService {
         return videoReviewService.listPendingReviewVideos(page, size);
     }
 
+    /**
+     * 执行视频审核动作 pass/reject
+     */
     @Override
     public void reviewVideo(
             Long videoId,
@@ -235,21 +275,34 @@ public class VideoServiceImpl implements VideoService {
     ) {
         videoReviewService.reviewVideo(videoId, action, rejectReason);
     }
+
+    /**
+     * 获取创作者个人主页信息
+     */
     @Override
     public CreatorProfileVO getCreatorProfile() {
         return creatorVideoQueryService.getCreatorProfile();
     }
 
+    /**
+     * 查询我点赞过的视频
+     */
     @Override
     public PageResult<VideoListItemVO> listMyLikedVideos(long page, long size) {
         return creatorVideoQueryService.listMyLikedVideos(page, size);
     }
 
+    /**
+     * 查询我收藏的视频
+     */
     @Override
     public PageResult<VideoListItemVO> listMyFavoritedVideos(long page, long size) {
         return creatorVideoQueryService.listMyFavoritedVideos(page, size);
     }
 
+    /**
+     * 分页查询创作者自己所有稿件
+     */
     @Override
     public PageResult<CreatorVideoListVO> listCreatorVideos(
             long page,
@@ -257,6 +310,13 @@ public class VideoServiceImpl implements VideoService {
     ) {
         return creatorVideoQueryService.listCreatorVideos(page, size);
     }
+
+    /**
+     * 更新视频请求参数校验，创作者更新、管理员更新共用这套校验逻辑
+     * 1.校验分类有效启用
+     * 2.校验封面路径前缀
+     * 3.校验视频路径前缀
+     */
     private void validateVideoUpdateRequest(VideoUpdateRequest request) {
         VideoCategory category =
                 videoCategoryMapper.selectById(request.getCategoryId());
@@ -277,6 +337,13 @@ public class VideoServiceImpl implements VideoService {
         }
     }
 
+    /**
+     * 构建待更新的Video实体，复用给创作者更新、管理员更新
+     * @param videoId 待更新视频ID
+     * @param request 前端更新请求
+     * @param existed 数据库原有视频实体
+     * @return 组装好用于update的Video对象
+     */
     private Video buildUpdatedVideo(
             Long videoId,
             VideoUpdateRequest request,
@@ -292,12 +359,15 @@ public class VideoServiceImpl implements VideoService {
                         ? null
                         : request.getDescription().trim()
         );
+        // 如果前端传入封面则使用新封面，否则保留数据库旧值
         video.setCoverUrl(StringUtils.hasText(request.getCoverObjectName())
                 ? request.getCoverObjectName()
                 : existed.getCoverUrl());
+        // 如果前端传入视频文件则使用新，保留旧值
         video.setVideoUrl(StringUtils.hasText(request.getVideoObjectName())
                 ? request.getVideoObjectName()
                 : existed.getVideoUrl());
+        // 时长null则沿用旧时长
         video.setDuration(request.getDuration() == null
                 ? existed.getDuration()
                 : request.getDuration());
@@ -305,6 +375,9 @@ public class VideoServiceImpl implements VideoService {
         return video;
     }
 
+    /**
+     * 创作者修改自己视频
+     */
     @Override
     @Transactional
     public void updateCreatorVideo(
@@ -323,6 +396,7 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(403, "无权编辑其他用户的视频");
         }
 
+        // 参数校验
         validateVideoUpdateRequest(request);
 
         Video video = buildUpdatedVideo(videoId, request, existed);
@@ -333,12 +407,22 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(400, "视频更新失败");
         }
 
+        /*
+         * 单个视频详情缓存：事务还未提交就先删除，靠查询时重新生成。
+         * 热门聚合列表缓存：一定要等事务 commit 完成后才删除，之后再重新生成，
+         * 避免删完缓存立刻被并发请求加载到未提交的脏数据。
+         */
+        // 删除Redis视频详情缓存，让下一次请求重新查库
         deleteVideoDetailCache(videoId);
+        // 事务提交之后失效热门视频缓存
         invalidateHotVideoCardsAfterCommit();
         log.info("创作者更新视频成功，videoId={}，userId={}", videoId, currentUser.userId());
 
     }
 
+    /**
+     * 创作者删除自己视频：软删除，不是直接物理删除
+     */
     @Override
     @Transactional
     public void deleteCreatorVideo(Long videoId) {
@@ -354,6 +438,7 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(403, "无权删除其他用户的视频");
         }
 
+        // 获取配置，计算真正物理清理资源的时间点
         LocalDateTime purgeAfter = LocalDateTime.now().plusDays(
                 resourceCleanupProperties.getRetentionDays()
         );
@@ -367,6 +452,7 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(400, "视频删除失败");
         }
 
+        // 清除详情缓存，失效热门缓存
         deleteVideoDetailCache(videoId);
         invalidateHotVideoCardsAfterCommit();
         publishResourcePurgeEvent(videoId, purgeAfter);
@@ -379,6 +465,9 @@ public class VideoServiceImpl implements VideoService {
 
     }
 
+    /**
+     * 管理员更新任意视频，没有作者权限校验
+     */
     @Override
     @Transactional
     public void updateAdminVideo(
@@ -391,6 +480,7 @@ public class VideoServiceImpl implements VideoService {
             throw new BusinessException(404, "视频不存在");
         }
 
+        // 参数校验和创作者共用
         validateVideoUpdateRequest(request);
 
         Video video = buildUpdatedVideo(videoId, request, existed);
@@ -407,6 +497,9 @@ public class VideoServiceImpl implements VideoService {
 
     }
 
+    /**
+     * 管理员软删除任意视频
+     */
     @Override
     @Transactional
     public void deleteAdminVideo(Long videoId) {
@@ -438,15 +531,24 @@ public class VideoServiceImpl implements VideoService {
 
     }
 
+    /**
+     * 删除视频详情Redis缓存
+     */
     private void deleteVideoDetailCache(Long videoId) {
         redisTemplate.delete(RedisKeys.videoDetail(videoId));
     }
 
+    /**
+     * 事务提交成功之后，失效热门视频缓存
+     * 只有数据库修改成功，才清理缓存；事务回滚则不清理缓存
+     */
     private void invalidateHotVideoCardsAfterCommit() {
+        // 没有事务，直接执行失效热门缓存
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             hotVideoCacheService.invalidateCards();
             return;
         }
+        // 有事务，只有事务成功commit提交完成，才执行失效缓存
         TransactionSynchronizationManager.registerSynchronization(
                 new TransactionSynchronization() {
                     @Override
@@ -457,6 +559,11 @@ public class VideoServiceImpl implements VideoService {
         );
     }
 
+    /**
+     * 发布资源延迟清理事件
+     * @param videoId 视频id
+     * @param purgeAfter 计划清理时间
+     */
     private void publishResourcePurgeEvent(
             Long videoId,
             LocalDateTime purgeAfter
@@ -465,6 +572,7 @@ public class VideoServiceImpl implements VideoService {
                 Duration.between(LocalDateTime.now(), purgeAfter).toMillis(),
                 0
         );
+        // 发布领域事件，事件监听会做延迟任务调度，到期删除MinIO上视频、封面文件
         applicationEventPublisher.publishEvent(
                 new ResourcePurgeDomainEvent(
                         new ResourcePurgeEvent(videoId),

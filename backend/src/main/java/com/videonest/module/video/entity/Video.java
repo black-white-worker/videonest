@@ -24,12 +24,15 @@ public class Video {
 
     private String description;
 
+    // 对外展示的封面图访问地址（经过处理后的封面）
     private String coverUrl;
 
     private String originalCoverUrl;
 
+    // 列表页专用封面地址，首页/分类列表缩略小封面
     private String coverListUrl;
 
+    // 详情页专用封面地址，视频播放页大图封面
     private String coverDetailUrl;
 
     private String videoUrl;
@@ -72,10 +75,13 @@ public class Video {
 
     private Long deletedBy;
 
+    // 彻底删除时间点：软删除之后，到达这个时间，后台定时任务执行purge彻底删除资源文件+数据库记录
     private LocalDateTime purgeAfter;
 
+    // 彻底删除任务重试次数；删除对象存储资源失败时，记录重试多少次
     private Integer purgeAttempts;
 
+    // 彻底删除报错信息，清除文件失败保存错误日志
     private String purgeError;
 
     private LocalDateTime reviewDeadline;

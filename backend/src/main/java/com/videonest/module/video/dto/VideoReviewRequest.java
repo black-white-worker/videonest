@@ -4,6 +4,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
+/**
+ * DTO：视频审核请求对象
+ * 用于管理员调用审核接口，提交审核动作：通过 / 驳回视频
+ */
 @Data
 public class VideoReviewRequest {
 

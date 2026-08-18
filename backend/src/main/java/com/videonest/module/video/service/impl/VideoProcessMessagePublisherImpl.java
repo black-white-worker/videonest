@@ -8,6 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+/**
+ * 实现方案：Outbox事务消息模式，不是直接发RabbitMQ
+ * 把消息写入outbox数据库表，而不是直接调用MQ发送API
+ * 优势：保证业务数据库操作和消息投递原子性；避免业务库成功，MQ发送失败导致消息丢失
+ */
 @Service
 @Slf4j
 public class VideoProcessMessagePublisherImpl
@@ -19,9 +24,13 @@ public class VideoProcessMessagePublisherImpl
         this.outboxService = outboxService;
     }
 
+    /**
+     * 发布视频处理事件
+     * @param event 视频处理事件对象，携带视频业务参数
+     */
     @Override
-    @EventListener
     public void publish(VideoProcessEvent event) {
+        // 向outbox消息表插入一条待发送消息
         outboxService.append(
                 null,
                 "VIDEO_PROCESS",

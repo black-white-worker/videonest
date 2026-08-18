@@ -5,6 +5,13 @@
 
 <mapper namespace="com.videonest.module.video.mapper.VideoMapper">
 
+    <!--
+   功能：分页查询**已发布**的公开视频列表
+   返回：VideoListItemVO 视频列表项VO
+   逻辑：关联用户表、分类表；支持分类筛选、关键词标题模糊搜索；按发布时间倒序
+   过滤条件：状态=已发布、未删除
+   -->
+    <!-- SQL 先把整条记录查出来，COALESCE 在本行多个封面字段中挑选第一个不为null作为最终返回的 coverUrl， -->
     <select id="selectPublishedPage"
             resultType="com.videonest.module.video.vo.VideoListItemVO">
 
@@ -48,6 +55,12 @@
         ORDER BY v.publish_time DESC, v.id DESC
     </select>
 
+    <!--
+    功能：根据一批视频ID，批量查询已发布视频列表
+    返回：VideoListItemVO
+    使用场景：比如根据推荐ID列表、收藏/点赞拿到的videoId批量拿视频基础信息
+    过滤：必须已发布、未删除
+    -->
     <select id="selectPublishedListByIds"
             resultType="com.videonest.module.video.vo.VideoListItemVO">
 
@@ -80,11 +93,21 @@
         WHERE v.status = 'PUBLISHED'
         AND v.is_deleted = 0
         AND v.id IN
+
+        <!-- 循环集合，动态拼接 SQL 片段；这里专门用来生成IN(值1,值2,值3)条件，做批量 ID 查询 -->
+        <!-- MyBatis 内部用 foreach 拼接 IN 条件，只发一条 SQL 给数据库，一次性把全部数据拿回来 -->
         <foreach collection="videoIds" item="videoId" open="(" separator="," close=")">
             #{videoId}
         </foreach>
     </select>
 
+    <!--
+    increaseViewCounts
+    功能：批量增加视频播放量
+    参数deltas：key=videoId，value=增加的数值
+    case id when 批量更新多条记录，一条SQL完成多视频view_count自增，减少数据库IO
+    使用场景：播放统计，避免循环单条update
+    -->
     <update id="increaseViewCounts">
         UPDATE video
         SET view_count = view_count + CASE id
@@ -100,6 +123,12 @@
         </foreach>
     </update>
 
+    <!--
+    功能：查询单个已发布视频详情
+    返回VideoDetailVO，包含多清晰度视频地址、作者信息、分类信息
+    过滤：必须已发布、未删除
+    场景：用户点击视频播放页
+    -->
     <select id="selectPublishedDetailById"
             resultType="com.videonest.module.video.vo.VideoDetailVO">
 
@@ -144,6 +173,12 @@
     </select>
 
 
+    <!--
+   insertCreatorVideo
+   功能：创作者上传视频，插入视频记录
+   useGeneratedKeys="true" keyProperty="id"：数据库自增主键回填到实体id字段
+   场景：上传视频提交，生成video数据库记录
+   -->
     <insert id="insertCreatorVideo"
             useGeneratedKeys="true"
             keyProperty="id">
@@ -183,6 +218,12 @@
         )
     </insert>
 
+    <!--
+   功能：管理员后台分页查询待审核视频列表
+   返回AdminVideoReviewVO审核视图对象
+   过滤条件：状态PENDING待审核、未删除
+   LEFT JOIN用户和分类，防止关联数据丢失；按创建时间升序，优先处理最早提交的审核
+   -->
     <select id="selectPendingReviewPage"
             resultType="com.videonest.module.video.vo.AdminVideoReviewVO">
 
@@ -236,6 +277,11 @@
         ORDER BY v.create_time ASC
     </select>
 
+    <!--
+    功能：管理员审核视频接口
+    参数：videoId视频id、status审核后状态(PUBLISHED发布 / 其他驳回)、rejectReason驳回原因
+    逻辑：审核通过时设置publish_time为当前时间；更新update_time；只能修改状态为PENDING的视频
+    -->
     <update id="reviewVideo">
         UPDATE video
         SET
@@ -255,6 +301,12 @@
         AND is_deleted = 0
     </update>
 
+    <!--
+    功能：创作者个人中心查询自己上传的所有视频分页
+    返回CreatorVideoListVO，包含状态、驳回原因、处理错误、审核截止时间等创作者可见信息
+    查询条件：authorId当前作者id、未删除；左连分类；按创建时间倒序
+    场景：创作者后台，查看自己全部作品（待审核、已发布、驳回、处理失败全部展示）
+    -->
     <select id="selectCreatorVideoPage"
             resultType="com.videonest.module.video.vo.CreatorVideoListVO">
 
@@ -308,6 +360,10 @@
         ORDER BY v.create_time DESC, v.id DESC
     </select>
 
+    <!--
+    功能：获取单个已发布视频播放量
+    场景：简单获取播放数字，不需要完整VO对象
+    -->
     <select id="selectPublishedViewCountById" resultType="java.lang.Long">
         SELECT view_count
         FROM video
@@ -316,6 +372,12 @@
           AND is_deleted = 0
     </select>
 
+    <!--
+    selectRecentPublished
+    功能：查询最新发布N条视频，limit限制数量
+    返回VideoListItemVO
+    场景：首页最新推荐，取少量最新视频
+    -->
     <select id="selectRecentPublished"
             resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
@@ -329,10 +391,15 @@
                 THEN v.cover_url
             END
         ) AS coverUrl,
-               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
-               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
-               v.author_id AS authorId, u.nickname AS authorNickname,
-               v.category_id AS categoryId, c.name AS categoryName
+        v.duration,
+        v.view_count AS viewCount,
+        v.like_count AS likeCount,
+        v.favorite_count AS favoriteCount,
+        v.publish_time AS publishTime,
+        v.author_id AS authorId,
+        u.nickname AS authorNickname,
+        v.category_id AS categoryId,
+        c.name AS categoryName
         FROM video v
         INNER JOIN sys_user u ON u.id = v.author_id
         INNER JOIN video_category c ON c.id = v.category_id
@@ -342,6 +409,12 @@
         LIMIT #{limit}
     </select>
 
+    <!--
+    selectMyLikedVideoPage
+    功能：查询当前用户点赞过的视频分页
+    关联video_like点赞表；只查询已发布未删除视频；按点赞记录id倒序，最新点赞排在前面
+    场景：个人中心-我的点赞列表
+    -->
     <select id="selectMyLikedVideoPage"
             resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
@@ -355,10 +428,15 @@
                        THEN v.cover_url
                    END
                ) AS coverUrl,
-               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
-               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
-               v.author_id AS authorId, u.nickname AS authorNickname,
-               v.category_id AS categoryId, c.name AS categoryName
+            v.duration,
+            v.view_count AS viewCount,
+            v.like_count AS likeCount,
+            v.favorite_count AS favoriteCount,
+            v.publish_time AS publishTime,
+            v.author_id AS authorId,
+            u.nickname AS authorNickname,
+            v.category_id AS categoryId,
+            c.name AS categoryName
         FROM video_like vl
         INNER JOIN video v ON vl.video_id = v.id AND v.status = 'PUBLISHED' AND v.is_deleted = 0
         INNER JOIN sys_user u ON v.author_id = u.id
@@ -367,6 +445,11 @@
         ORDER BY vl.id DESC
     </select>
 
+    <!--
+    功能：查询当前用户收藏的视频分页
+    关联video_favorite收藏表；只查询已发布未删除视频；按收藏记录id倒序
+    场景：个人中心-我的收藏列表
+    -->
     <select id="selectMyFavoritedVideoPage"
             resultType="com.videonest.module.video.vo.VideoListItemVO">
         SELECT v.id, v.title, v.description,
@@ -380,10 +463,14 @@
                        THEN v.cover_url
                    END
                ) AS coverUrl,
-               v.duration, v.view_count AS viewCount, v.like_count AS likeCount,
-               v.favorite_count AS favoriteCount, v.publish_time AS publishTime,
-               v.author_id AS authorId, u.nickname AS authorNickname,
-               v.category_id AS categoryId, c.name AS categoryName
+                v.duration,
+                v.view_count AS viewCount, v.like_count AS likeCount,
+                v.favorite_count AS favoriteCount,
+                v.publish_time AS publishTime,
+                v.author_id AS authorId,
+                u.nickname AS authorNickname,
+                v.category_id AS categoryId,
+        c.name AS categoryName
         FROM video_favorite vf
         INNER JOIN video v ON vf.video_id = v.id AND v.status = 'PUBLISHED' AND v.is_deleted = 0
         INNER JOIN sys_user u ON v.author_id = u.id
@@ -392,6 +479,12 @@
         ORDER BY vf.id DESC
     </select>
 
+    <!--
+    updateVideoById
+    功能：更新视频基础信息
+    更新分类、标题、简介、封面、视频地址、时长，更新update_time；只能更新未删除视频
+    场景：创作者编辑视频信息
+    -->
     <update id="updateVideoById">
         UPDATE video
         SET
@@ -406,6 +499,10 @@
         AND is_deleted = 0
     </update>
 
+    <!--
+    功能：视频软删除
+    场景：用户删除视频、管理员删除视频；软删除保留记录，后续定时任务做物理删除
+    -->
     <update id="softDeleteVideo">
         UPDATE video
         SET is_deleted = 1,
@@ -418,6 +515,11 @@
           AND is_deleted = 0
     </update>
 
+    <!--
+    功能：管理员分页查询已经软删除的视频列表
+    返回DeletedVideoVO，包含删除时间、删除人、物理清理时间、清理失败信息
+    LEFT JOIN用户表获取作者昵称；按删除时间倒序
+    -->
     <select id="selectDeletedVideoPage"
             resultType="com.videonest.module.video.vo.DeletedVideoVO">
         SELECT v.id,
@@ -446,6 +548,12 @@
         ORDER BY v.deleted_at DESC, v.id DESC
     </select>
 
+    <!--
+   selectDeletedVideoById
+   功能：根据id查询单条软删除完整video实体
+   返回完整Video实体对象
+   场景：定时清理任务拿到待清理视频完整数据
+   -->
     <select id="selectDeletedVideoById"
             resultType="com.videonest.module.video.entity.Video">
         SELECT *
@@ -454,6 +562,13 @@
           AND is_deleted = 1
     </select>
 
+    <!--
+    selectDuePurgeVideoIds
+    功能：定时任务查询到达清理时间，需要物理删除的视频ID列表
+    条件：软删除标记、purge_after不为空、purge_after小于等于当前时间；limit批量拉取
+    &lt;=是mybatis转义小于等于符号
+    场景：后台定时任务，批量获取待物理清理视频id
+    -->
     <select id="selectDuePurgeVideoIds" resultType="java.lang.Long">
         SELECT id
         FROM video
@@ -464,6 +579,11 @@
         LIMIT #{limit}
     </select>
 
+    <!--
+    功能：批量查询需要补全封面缩略图的视频
+    查询条件：未删除，非处理中，list/detail封面字段缺失；原始封面为cover目录，还没有处理完成
+    limit批量，用于后台异步补封面任务
+    -->
     <select id="selectCoverThumbnailBackfillBatch"
             resultType="com.videonest.module.video.entity.Video">
         SELECT *
@@ -480,6 +600,12 @@
         LIMIT #{limit}
     </select>
 
+    <!--
+    功能：物理清理视频失败时更新记录
+    purge_attempts清理失败次数+1，记录错误日志，更新修改时间
+    条件：视频必须是软删除状态
+    场景：定时任务清理对象存储资源失败，记录失败次数，避免无限重试
+    -->
     <update id="incrementPurgeFailure">
         UPDATE video
         SET purge_attempts = purge_attempts + 1,
@@ -489,6 +615,11 @@
           AND is_deleted = 1
     </update>
 
+    <!--
+    功能：标记视频转码处理失败
+    将状态设置PROCESS_FAILED，记录process_error错误信息；只能修改PROCESSING处理中的视频
+    场景：上传后后台转码任务异常回调，标记处理失败
+    -->
     <update id="markProcessFailed">
         UPDATE video
         SET status = 'PROCESS_FAILED',
@@ -499,6 +630,11 @@
           AND is_deleted = 0
     </update>
 
+    <!--
+    功能：标记视频审核超时已通知
+    review_timeout_notified置1，保证只发送一次超时通知；仅PENDING待审核视频，未通知过的才更新
+    场景：定时任务检测审核超时，发送通知后打上标记，防止重复推送消息
+    -->
     <update id="markReviewTimedOut">
         UPDATE video
         SET review_timeout_notified = 1,
@@ -509,26 +645,52 @@
           AND review_timeout_notified = 0
     </update>
 
+    <!--
+    功能：物理删除该视频全部点赞记录
+    场景：视频物理删除时，清理关联子表数据
+    -->
     <delete id="hardDeleteVideoLikes">
         DELETE FROM video_like WHERE video_id = #{videoId}
     </delete>
 
+    <!--
+    功能：物理删除该视频全部收藏记录
+    场景：视频物理删除，清理收藏关联表
+    -->
     <delete id="hardDeleteVideoFavorites">
         DELETE FROM video_favorite WHERE video_id = #{videoId}
     </delete>
 
+    <!--
+    功能：物理删除视频全部评论
+    场景：物理删除视频，连带清理评论数据
+    -->
     <delete id="hardDeleteVideoComments">
         DELETE FROM video_comment WHERE video_id = #{videoId}
     </delete>
 
+    <!--
+   功能：物理删除该视频相关通知消息
+   场景：视频物理删除，清理notification通知表中关联记录
+   -->
     <delete id="hardDeleteVideoNotifications">
         DELETE FROM notification WHERE video_id = #{videoId}
     </delete>
 
+    <!--
+    功能：真正物理删除video主表记录
+    限制：只允许is_deleted=1软删除过的数据做物理删除，防止误删正常数据
+    场景：定时任务到期清理，执行真正删除
+    -->
     <delete id="hardDeleteVideo">
         DELETE FROM video WHERE id = #{videoId} AND is_deleted = 1
     </delete>
 
+    <!--
+   功能：视频点赞数增减
+   GREATEST(...,0) 保证like_count不会变成负数
+   delta可以+1（点赞）、-1（取消点赞）；仅已发布未删除视频
+   -->
     <update id="changeLikeCount">
         UPDATE video
         SET like_count = GREATEST(like_count + #{delta}, 0)
@@ -537,6 +699,11 @@
         AND is_deleted = 0
     </update>
 
+    <!--
+    功能：视频收藏数增减
+    GREATEST保证不会负数；delta +1收藏，-1取消收藏
+    仅已发布未删除视频
+    -->
     <update id="changeFavoriteCount">
         UPDATE video
         SET favorite_count = GREATEST(favorite_count + #{delta}, 0)

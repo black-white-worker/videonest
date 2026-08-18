@@ -103,7 +103,9 @@ auth-rate-limit:
   register-window-seconds: ${REGISTER_RATE_LIMIT_WINDOW_SECONDS:3600}
 
 outbox:
+  # 开启Outbox可靠消息机制
   enabled: ${OUTBOX_ENABLED:true}
+  # 定时任务扫描outbox表的执行间隔，单位毫秒
   dispatch-interval-milliseconds: ${OUTBOX_DISPATCH_INTERVAL_MILLISECONDS:1000}
 
 minio:
