@@ -153,9 +153,7 @@ const avatarText = computed(() => displayName.value.trim().slice(0, 1).toUpperCa
   --admin-muted: #61666d;
   --admin-faint: #9499a0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 88% 8%, rgb(0 174 236 / 7%), transparent 25rem),
-    #f5f7fa;
+  background: radial-gradient(circle at 88% 8%, rgb(0 174 236 / 7%), transparent 25rem), #f5f7fa;
   color: var(--admin-ink);
 }
 
@@ -207,7 +205,7 @@ button {
   margin-left: 11px;
   font-size: 20px;
   font-weight: 800;
-  letter-spacing: -.3px;
+  letter-spacing: -0.3px;
 }
 
 .brand-divider {
@@ -242,7 +240,9 @@ button {
   background: transparent;
   color: var(--admin-muted);
   cursor: pointer;
-  transition: color .2s ease, background .2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease;
 }
 
 .site-link:hover {
@@ -358,7 +358,10 @@ button {
   color: var(--admin-muted);
   text-align: left;
   cursor: pointer;
-  transition: color .2s ease, background .2s ease, transform .2s ease;
+  transition:
+    color 0.2s ease,
+    background 0.2s ease,
+    transform 0.2s ease;
 }
 
 .nav-item:hover {
@@ -381,7 +384,7 @@ button {
   background: #f2f4f7;
   font-size: 12px;
   font-weight: 700;
-  transition: background .2s ease;
+  transition: background 0.2s ease;
 }
 
 .nav-item.active .nav-icon {
@@ -419,7 +422,9 @@ button {
   background: var(--admin-accent);
   opacity: 0;
   transform: translateX(3px);
-  transition: opacity .2s ease, transform .2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
 }
 
 .nav-item.active .nav-indicator {
@@ -511,7 +516,7 @@ button {
   margin: 0;
   font-size: clamp(25px, 2.2vw, 32px);
   font-weight: 750;
-  letter-spacing: -.7px;
+  letter-spacing: -0.7px;
   line-height: 1.2;
 }
 

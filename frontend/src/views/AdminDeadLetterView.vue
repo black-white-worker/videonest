@@ -153,7 +153,12 @@ onMounted(loadRecords)
               <span class="business-id">{{ row.businessId || '-' }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="queueName" label="死信队列" min-width="230" show-overflow-tooltip />
+          <el-table-column
+            prop="queueName"
+            label="死信队列"
+            min-width="230"
+            show-overflow-tooltip
+          />
           <el-table-column label="失败原因" min-width="250">
             <template #default="{ row }">
               <p class="failure-reason">{{ row.failureReason || '-' }}</p>
@@ -165,10 +170,22 @@ onMounted(loadRecords)
           <el-table-column label="状态" width="105">
             <template #default="{ row }">
               <el-tag
-                :type="row.status === 'PENDING' ? 'danger' : row.status === 'RETRIED' ? 'success' : 'info'"
+                :type="
+                  row.status === 'PENDING'
+                    ? 'danger'
+                    : row.status === 'RETRIED'
+                      ? 'success'
+                      : 'info'
+                "
                 effect="light"
               >
-                {{ row.status === 'PENDING' ? '待处理' : row.status === 'RETRIED' ? '已重投' : '已忽略' }}
+                {{
+                  row.status === 'PENDING'
+                    ? '待处理'
+                    : row.status === 'RETRIED'
+                      ? '已重投'
+                      : '已忽略'
+                }}
               </el-tag>
             </template>
           </el-table-column>
@@ -189,20 +206,10 @@ onMounted(loadRecords)
           <el-table-column label="操作" width="150" fixed="right">
             <template #default="{ row }">
               <template v-if="row.status === 'PENDING'">
-                <el-button
-                  link
-                  type="primary"
-                  :loading="handlingId === row.id"
-                  @click="retry(row)"
-                >
+                <el-button link type="primary" :loading="handlingId === row.id" @click="retry(row)">
                   重投
                 </el-button>
-                <el-button
-                  link
-                  type="danger"
-                  :loading="handlingId === row.id"
-                  @click="ignore(row)"
-                >
+                <el-button link type="danger" :loading="handlingId === row.id" @click="ignore(row)">
                   忽略
                 </el-button>
               </template>

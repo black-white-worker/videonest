@@ -2,7 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { getCategories, getHotVideos, getVideoList, type VideoCategory, type VideoListItem } from '../api/video'
+import {
+  getCategories,
+  getHotVideos,
+  getVideoList,
+  type VideoCategory,
+  type VideoListItem
+} from '../api/video'
 import { getUnreadNotificationCount } from '../api/notification'
 import SiteHeader from '../components/SiteHeader.vue'
 
@@ -28,19 +34,22 @@ interface WallpaperSlide {
 
 const wallpaperSlides: WallpaperSlide[] = [
   {
-    imageUrl: 'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=2400&q=88',
+    imageUrl:
+      'https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=2400&q=88',
     eyebrow: 'VIDEONEST · 灵感正在发生',
     title: '在光影之间，遇见新的故事',
     description: '每日轮换的网络风景壁纸，让内容发现从第一眼开始。'
   },
   {
-    imageUrl: 'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=2400&q=88',
+    imageUrl:
+      'https://images.unsplash.com/photo-1470770841072-f978cf4d019e?auto=format&fit=crop&w=2400&q=88',
     eyebrow: 'DISCOVER · 去更远的地方',
     title: '世界很大，镜头替你先出发',
     description: '汇集创作者的新鲜表达，也收藏属于你的片刻共鸣。'
   },
   {
-    imageUrl: 'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=2400&q=88',
+    imageUrl:
+      'https://images.unsplash.com/photo-1501785888041-af3ef285b470?auto=format&fit=crop&w=2400&q=88',
     eyebrow: 'TRENDING · 此刻全站热门',
     title: '跟上热度，也保留自己的方向',
     description: '热门内容持续更新，发现正在被大家讨论的作品。'
@@ -52,8 +61,10 @@ let wallpaperTimer: number | undefined
 const user = computed(() => {
   try {
     const value = localStorage.getItem('userInfo')
-    return value ? JSON.parse(value) as { nickname: string; role: 'USER' | 'ADMIN' } : null
-  } catch { return null }
+    return value ? (JSON.parse(value) as { nickname: string; role: 'USER' | 'ADMIN' }) : null
+  } catch {
+    return null
+  }
 })
 
 const activeWallpaper = computed(() => wallpaperSlides[activeWallpaperIndex.value])
@@ -62,48 +73,99 @@ const sectionTitle = computed(() => {
   if (keyword.value.trim()) return `“${keyword.value.trim()}”的搜索结果`
   if (isHotMode.value) return '全站热门'
   if (selectedCategoryId.value === undefined) return '为你推荐'
-  return categories.value.find(item => item.id === selectedCategoryId.value)?.name || '分区视频'
+  return categories.value.find((item) => item.id === selectedCategoryId.value)?.name || '分区视频'
 })
 
 async function loadCategories() {
-  try { categoryLoading.value = true; categories.value = await getCategories() }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '获取视频分区失败') }
-  finally { categoryLoading.value = false }
+  try {
+    categoryLoading.value = true
+    categories.value = await getCategories()
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取视频分区失败')
+  } finally {
+    categoryLoading.value = false
+  }
 }
 
 async function loadVideos() {
   try {
     videoLoading.value = true
-    const result = await getVideoList({ categoryId: selectedCategoryId.value, keyword: keyword.value.trim() || undefined, page: currentPage.value, size: pageSize.value })
+    const result = await getVideoList({
+      categoryId: selectedCategoryId.value,
+      keyword: keyword.value.trim() || undefined,
+      page: currentPage.value,
+      size: pageSize.value
+    })
     videos.value = result.records
     total.value = result.total
-  } catch (error) { ElMessage.error(error instanceof Error ? error.message : '获取视频列表失败') }
-  finally { videoLoading.value = false }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取视频列表失败')
+  } finally {
+    videoLoading.value = false
+  }
 }
 
 async function loadHotVideos() {
-  try { videoLoading.value = true; videos.value = await getHotVideos(pageSize.value); total.value = videos.value.length }
-  catch (error) { ElMessage.error(error instanceof Error ? error.message : '获取热门视频失败') }
-  finally { videoLoading.value = false }
+  try {
+    videoLoading.value = true
+    videos.value = await getHotVideos(pageSize.value)
+    total.value = videos.value.length
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '获取热门视频失败')
+  } finally {
+    videoLoading.value = false
+  }
 }
 
 function selectCategory(categoryId?: number) {
-  isHotMode.value = false; keyword.value = ''; selectedCategoryId.value = categoryId; currentPage.value = 1; loadVideos()
+  isHotMode.value = false
+  keyword.value = ''
+  selectedCategoryId.value = categoryId
+  currentPage.value = 1
+  loadVideos()
 }
 function selectHotVideos() {
-  isHotMode.value = true; keyword.value = ''; selectedCategoryId.value = undefined; currentPage.value = 1; loadHotVideos()
+  isHotMode.value = true
+  keyword.value = ''
+  selectedCategoryId.value = undefined
+  currentPage.value = 1
+  loadHotVideos()
 }
 function searchVideos() {
-  isHotMode.value = false; selectedCategoryId.value = undefined; currentPage.value = 1; loadVideos()
+  isHotMode.value = false
+  selectedCategoryId.value = undefined
+  currentPage.value = 1
+  loadVideos()
 }
-function handlePageChange(page: number) { currentPage.value = page; loadVideos(); window.scrollTo({ top: 0, behavior: 'smooth' }) }
-function formatDuration(seconds: number) { return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}` }
-function formatNumber(value: number) { return value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value) }
-function formatDate(value: string) { return value ? new Date(value).toLocaleDateString('zh-CN') : '' }
-function logout() { localStorage.removeItem('token'); localStorage.removeItem('userInfo'); ElMessage.success('已退出登录'); router.push('/login') }
-function goVideoDetail(videoId: number) { router.push(`/video/${videoId}`) }
-function showWallpaper(index: number) { activeWallpaperIndex.value = (index + wallpaperSlides.length) % wallpaperSlides.length }
-function nextWallpaper() { showWallpaper(activeWallpaperIndex.value + 1) }
+function handlePageChange(page: number) {
+  currentPage.value = page
+  loadVideos()
+  window.scrollTo({ top: 0, behavior: 'smooth' })
+}
+function formatDuration(seconds: number) {
+  return `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`
+}
+function formatNumber(value: number) {
+  return value >= 10000 ? `${(value / 10000).toFixed(1)}万` : String(value)
+}
+function formatDate(value: string) {
+  return value ? new Date(value).toLocaleDateString('zh-CN') : ''
+}
+function logout() {
+  localStorage.removeItem('token')
+  localStorage.removeItem('userInfo')
+  ElMessage.success('已退出登录')
+  router.push('/login')
+}
+function goVideoDetail(videoId: number) {
+  router.push(`/video/${videoId}`)
+}
+function showWallpaper(index: number) {
+  activeWallpaperIndex.value = (index + wallpaperSlides.length) % wallpaperSlides.length
+}
+function nextWallpaper() {
+  showWallpaper(activeWallpaperIndex.value + 1)
+}
 function restartWallpaperTimer() {
   if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   wallpaperTimer = window.setInterval(nextWallpaper, 8000)
@@ -115,14 +177,23 @@ function handleUserCommand(command: string) {
   }
   router.push(command)
 }
-async function loadUnreadNotificationCount() { if (!localStorage.getItem('token')) return; try { unreadNotificationCount.value = await getUnreadNotificationCount() } catch { unreadNotificationCount.value = 0 } }
+async function loadUnreadNotificationCount() {
+  if (!localStorage.getItem('token')) return
+  try {
+    unreadNotificationCount.value = await getUnreadNotificationCount()
+  } catch {
+    unreadNotificationCount.value = 0
+  }
+}
 onMounted(async () => {
   restartWallpaperTimer()
   await loadCategories()
   await loadVideos()
   await loadUnreadNotificationCount()
 })
-onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer) })
+onBeforeUnmount(() => {
+  if (wallpaperTimer) window.clearInterval(wallpaperTimer)
+})
 </script>
 
 <template>
@@ -181,9 +252,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
             + 投稿
           </el-button>
         </template>
-        <el-button v-else type="primary" round @click="router.push('/login')">
-          登录
-        </el-button>
+        <el-button v-else type="primary" round @click="router.push('/login')"> 登录 </el-button>
       </template>
     </SiteHeader>
 
@@ -211,7 +280,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
               :key="index"
               :class="{ active: activeWallpaperIndex === index }"
               :aria-label="`切换到第 ${index + 1} 张壁纸`"
-              @click="showWallpaper(index); restartWallpaperTimer()"
+              @click="(showWallpaper(index), restartWallpaperTimer())"
             />
           </div>
         </div>
@@ -282,7 +351,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
               @keyup.enter="goVideoDetail(video.id)"
             >
               <div class="cover-box">
-                <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy">
+                <img :src="video.coverUrl" :alt="video.title" class="cover" loading="lazy" />
                 <div class="cover-gradient" />
                 <div class="cover-meta">
                   <span>▶ {{ formatNumber(video.viewCount) }}</span>
@@ -460,7 +529,12 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(90deg, rgb(10 19 45 / 90%) 0%, rgb(10 19 45 / 65%) 48%, rgb(10 19 45 / 22%) 100%),
+    linear-gradient(
+      90deg,
+      rgb(10 19 45 / 90%) 0%,
+      rgb(10 19 45 / 65%) 48%,
+      rgb(10 19 45 / 22%) 100%
+    ),
     linear-gradient(0deg, var(--vn-page) 0, transparent 22%);
 }
 
@@ -596,7 +670,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   background: #f6f7f8;
   color: var(--vn-text-secondary);
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .category-button:hover,
@@ -631,7 +705,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
 .section-title h2 {
   margin: 4px 0 0;
   font-size: 25px;
-  letter-spacing: -.5px;
+  letter-spacing: -0.5px;
 }
 
 .section-title > span {
@@ -664,7 +738,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   height: 100%;
   display: block;
   object-fit: cover;
-  transition: transform .35s ease;
+  transition: transform 0.35s ease;
 }
 
 .cover-gradient {
@@ -701,7 +775,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   line-height: 22px;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
-  transition: color .2s;
+  transition: color 0.2s;
 }
 
 .video-card:hover h3,
@@ -842,10 +916,6 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
     line-height: 20px;
   }
 }
-</style>
-
-<style scoped>
-/* 首页采用独立网络壁纸横幅，视频封面只出现在内容榜单。 */
 .wallpaper-hero {
   height: clamp(330px, 30vw, 440px);
   padding-top: 72px;
@@ -853,7 +923,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   background-image: var(--hero-cover);
   background-position: center;
   background-size: cover;
-  transition: background-image .45s ease;
+  transition: background-image 0.45s ease;
 }
 
 .wallpaper-hero .hero__veil {
@@ -932,7 +1002,9 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   border-radius: 999px;
   background: rgb(255 255 255 / 52%);
   cursor: pointer;
-  transition: width .2s, background .2s;
+  transition:
+    width 0.2s,
+    background 0.2s;
 }
 
 .wallpaper-dots button.active {
@@ -972,7 +1044,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   height: 100%;
   display: block;
   object-fit: cover;
-  transition: transform .45s ease;
+  transition: transform 0.45s ease;
 }
 
 .rank-featured-card:hover img,
@@ -998,7 +1070,7 @@ onBeforeUnmount(() => { if (wallpaperTimer) window.clearInterval(wallpaperTimer)
   justify-content: center;
   border-radius: 7px;
   font-weight: 900;
-  letter-spacing: .4px;
+  letter-spacing: 0.4px;
 }
 
 .rank-number {

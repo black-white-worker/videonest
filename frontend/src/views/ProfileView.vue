@@ -1,11 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import {
-  ElMessage,
-  ElMessageBox,
-  type FormInstance,
-  type FormRules
-} from 'element-plus'
+import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import {
   deleteCreatorVideo,
@@ -18,12 +13,7 @@ import {
   type CreatorVideo
 } from '../api/creator'
 import { getCategories, type VideoCategory, type VideoListItem } from '../api/video'
-import {
-  getMyFollowers,
-  getMyFollowing,
-  unfollowUser,
-  type FollowUser
-} from '../api/follow'
+import { getMyFollowers, getMyFollowing, unfollowUser, type FollowUser } from '../api/follow'
 import SiteHeader from '../components/SiteHeader.vue'
 
 const router = useRouter()
@@ -48,7 +38,8 @@ const interactionPage = ref(1)
 const interactionSize = ref(8)
 const interactionTotal = ref(0)
 const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>('submissions')
-const profileCoverUrl = 'https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=2200&q=88'
+const profileCoverUrl =
+  'https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=2200&q=88'
 
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -111,9 +102,7 @@ async function loadProfile() {
     profileLoading.value = true
     profile.value = await getCreatorProfile()
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '获取个人信息失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '获取个人信息失败')
   } finally {
     profileLoading.value = false
   }
@@ -131,9 +120,7 @@ async function loadVideos() {
     videos.value = result.records
     total.value = result.total
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '获取我的投稿失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '获取我的投稿失败')
   } finally {
     videoLoading.value = false
   }
@@ -241,9 +228,7 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60)
   const remainSeconds = seconds % 60
 
-  return `${String(minutes).padStart(2, '0')}:${String(
-    remainSeconds
-  ).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(remainSeconds).padStart(2, '0')}`
 }
 
 function openEditDialog(video: CreatorVideo) {
@@ -287,9 +272,7 @@ async function submitEdit() {
 
     await Promise.all([loadVideos(), loadProfile()])
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '更新视频失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '更新视频失败')
   } finally {
     editLoading.value = false
   }
@@ -320,9 +303,7 @@ async function handleDelete(video: CreatorVideo) {
   } catch (error) {
     // 点击取消不提示错误
     if (error !== 'cancel' && error !== 'close') {
-      ElMessage.error(
-        error instanceof Error ? error.message : '删除视频失败'
-      )
+      ElMessage.error(error instanceof Error ? error.message : '删除视频失败')
     }
   }
 }
@@ -416,7 +397,9 @@ onMounted(() => {
             @click="activeCenterSection = 'submissions'"
           >
             <span>▣</span>
-            <div><strong>投稿管理</strong><small>{{ total }} 个稿件</small></div>
+            <div>
+              <strong>投稿管理</strong><small>{{ total }} 个稿件</small>
+            </div>
           </button>
           <button
             :class="{ active: activeCenterSection === 'interactions' }"
@@ -440,252 +423,241 @@ onMounted(() => {
         </aside>
 
         <div class="center-content">
-      <section v-show="activeCenterSection === 'follows'" class="follow-section">
-        <div class="section-title">
-          <div>
-            <h2>我的关注</h2>
-            <p>管理你关注的创作者和粉丝</p>
-          </div>
-          <el-button :loading="followLoading" @click="loadFollowUsers">刷新</el-button>
-        </div>
-
-        <el-tabs
-          :model-value="followTab"
-          @tab-change="changeFollowTab($event as 'following' | 'followers')"
-        >
-          <el-tab-pane label="我的关注" name="following" />
-          <el-tab-pane label="我的粉丝" name="followers" />
-        </el-tabs>
-
-        <el-skeleton :loading="followLoading" animated :rows="3">
-          <template #default>
-            <div v-if="followUsers.length" class="follow-list">
-              <article v-for="user in followUsers" :key="user.id" class="follow-user">
-                <div class="follow-avatar">{{ user.nickname.slice(0, 1).toUpperCase() }}</div>
-                <div class="follow-user-info">
-                  <strong>{{ user.nickname }}</strong>
-                  <span>@{{ user.username }} · {{ formatDate(user.followedAt) }}</span>
-                </div>
-                <el-button
-                  v-if="followTab === 'following'"
-                  plain
-                  @click="removeFollowing(user)"
-                >取消关注</el-button>
-              </article>
-            </div>
-            <el-empty v-else :description="followTab === 'following' ? '你还没有关注任何用户' : '暂时还没有粉丝'" />
-          </template>
-        </el-skeleton>
-
-        <div v-if="followTotal > followSize" class="pagination">
-          <el-pagination
-            v-model:current-page="followPage"
-            :page-size="followSize"
-            :total="followTotal"
-            layout="prev, pager, next"
-            background
-            @current-change="loadFollowUsers"
-          />
-        </div>
-      </section>
-
-      <section v-show="activeCenterSection === 'interactions'" class="interaction-section">
-        <div class="section-title">
-          <div>
-            <h2>我的互动</h2>
-            <p>查看你收藏和点赞过的已发布视频</p>
-          </div>
-          <el-button :loading="interactionLoading" @click="loadInteractionVideos">刷新</el-button>
-        </div>
-
-        <el-tabs :model-value="interactionTab" @tab-change="changeInteractionTab($event as 'favorites' | 'likes')">
-          <el-tab-pane label="我的收藏" name="favorites" />
-          <el-tab-pane label="我的点赞" name="likes" />
-        </el-tabs>
-
-        <el-skeleton :loading="interactionLoading" animated :count="4">
-          <template #default>
-            <div v-if="interactionVideos.length" class="interaction-grid">
-              <article v-for="video in interactionVideos" :key="video.id" class="interaction-card" @click="router.push(`/video/${video.id}`)">
-                <div class="interaction-cover"><img :src="video.coverUrl" :alt="video.title" loading="lazy"><span>{{ formatDuration(video.duration) }}</span></div>
-                <h3 :title="video.title">{{ video.title }}</h3>
-                <p>{{ video.authorNickname }} · {{ video.categoryName }}</p>
-              </article>
-            </div>
-            <el-empty v-else :description="interactionTab === 'favorites' ? '你还没有收藏视频' : '你还没有点赞视频'" />
-          </template>
-        </el-skeleton>
-        <div v-if="interactionTotal > interactionSize" class="pagination">
-          <el-pagination v-model:current-page="interactionPage" :page-size="interactionSize" :total="interactionTotal" layout="prev, pager, next" background @current-change="loadInteractionVideos" />
-        </div>
-      </section>
-
-      <section v-show="activeCenterSection === 'submissions'" class="submission-section">
-        <div class="section-title">
-          <div>
-            <h2>我的投稿</h2>
-            <p>共 {{ total }} 个视频投稿</p>
-          </div>
-
-          <el-button :loading="videoLoading" @click="loadVideos">
-            刷新
-          </el-button>
-        </div>
-
-        <el-skeleton :loading="videoLoading" animated :count="4">
-          <template #default>
-            <div v-if="videos.length > 0" class="video-list">
-              <article
-                v-for="video in videos"
-                :key="video.id"
-                class="video-card"
-              >
-                <div class="cover-box">
-                   <img
-                     v-if="video.coverUrl"
-                     :src="video.coverUrl"
-                     :alt="video.title"
-                     loading="lazy"
-                   />
-                  <span v-else class="processing-cover">处理中</span>
-
-                  <span class="duration">
-                    {{ formatDuration(video.duration) }}
-                  </span>
-                </div>
-
-                <div class="video-content">
-                  <div class="title-row">
-                    <h3>{{ video.title }}</h3>
-
-                    <el-tag :type="getStatusType(video.status)">
-                      {{ getStatusText(video.status) }}
-                    </el-tag>
-                    <el-tag
-                      v-if="video.reviewTimeoutNotified === 1"
-                      type="danger"
-                    >
-                      审核已超时
-                    </el-tag>
-                  </div>
-
-                  <p class="description">
-                    {{ video.description || '暂无视频简介。' }}
-                  </p>
-
-                  <div class="meta">
-                    <span>分区：{{ video.categoryName }}</span>
-                    <span>投稿时间：{{ formatDate(video.createTime) }}</span>
-
-                    <span v-if="video.status === 'PUBLISHED'">
-                      播放：{{ video.viewCount }}
-                    </span>
-                  </div>
-
-                  <div
-                    v-if="video.status === 'REJECTED' && video.rejectReason"
-                    class="reject-reason"
-                  >
-                    <strong>驳回原因：</strong>
-                    {{ video.rejectReason }}
-                  </div>
-
-                  <div
-                    v-if="video.status === 'PROCESS_FAILED' && video.processError"
-                    class="reject-reason"
-                  >
-                    <strong>转码失败：</strong>
-                    {{ video.processError }}
-                  </div>
-
-                  <div
-                    v-if="video.reviewTimeoutNotified === 1"
-                    class="reject-reason"
-                  >
-                    <strong>审核提醒：</strong>
-                    等待审核已超时，管理员会尽快处理。
-                  </div>
-
-                  <div class="video-actions">
-                    <el-button
-                      v-if="video.status === 'PUBLISHED'"
-                      type="primary"
-                      plain
-                      size="small"
-                      @click="router.push(`/video/${video.id}`)"
-                    >
-                      查看视频
-                    </el-button>
-
-                    <el-button size="small" @click="openEditDialog(video)">
-                      编辑信息
-                    </el-button>
-
-                    <el-button
-                      type="danger"
-                      plain
-                      size="small"
-                      @click="handleDelete(video)"
-                    >
-                      删除
-                    </el-button>
-                  </div>
-                </div>
-              </article>
+          <section v-show="activeCenterSection === 'follows'" class="follow-section">
+            <div class="section-title">
+              <div>
+                <h2>我的关注</h2>
+                <p>管理你关注的创作者和粉丝</p>
+              </div>
+              <el-button :loading="followLoading" @click="loadFollowUsers">刷新</el-button>
             </div>
 
-            <el-empty
-              v-else
-              description="你还没有投稿，去发布第一个视频吧"
+            <el-tabs
+              :model-value="followTab"
+              @tab-change="changeFollowTab($event as 'following' | 'followers')"
             >
-              <el-button type="primary" @click="router.push('/upload')">
-                去投稿
-              </el-button>
-            </el-empty>
-          </template>
-        </el-skeleton>
+              <el-tab-pane label="我的关注" name="following" />
+              <el-tab-pane label="我的粉丝" name="followers" />
+            </el-tabs>
 
-        <div v-if="total > pageSize" class="pagination">
-          <el-pagination
-            v-model:current-page="currentPage"
-            :page-size="pageSize"
-            :total="total"
-            layout="prev, pager, next"
-            background
-            @current-change="handlePageChange"
-          />
-        </div>
-      </section>
+            <el-skeleton :loading="followLoading" animated :rows="3">
+              <template #default>
+                <div v-if="followUsers.length" class="follow-list">
+                  <article v-for="user in followUsers" :key="user.id" class="follow-user">
+                    <div class="follow-avatar">{{ user.nickname.slice(0, 1).toUpperCase() }}</div>
+                    <div class="follow-user-info">
+                      <strong>{{ user.nickname }}</strong>
+                      <span>@{{ user.username }} · {{ formatDate(user.followedAt) }}</span>
+                    </div>
+                    <el-button v-if="followTab === 'following'" plain @click="removeFollowing(user)"
+                      >取消关注</el-button
+                    >
+                  </article>
+                </div>
+                <el-empty
+                  v-else
+                  :description="
+                    followTab === 'following' ? '你还没有关注任何用户' : '暂时还没有粉丝'
+                  "
+                />
+              </template>
+            </el-skeleton>
+
+            <div v-if="followTotal > followSize" class="pagination">
+              <el-pagination
+                v-model:current-page="followPage"
+                :page-size="followSize"
+                :total="followTotal"
+                layout="prev, pager, next"
+                background
+                @current-change="loadFollowUsers"
+              />
+            </div>
+          </section>
+
+          <section v-show="activeCenterSection === 'interactions'" class="interaction-section">
+            <div class="section-title">
+              <div>
+                <h2>我的互动</h2>
+                <p>查看你收藏和点赞过的已发布视频</p>
+              </div>
+              <el-button :loading="interactionLoading" @click="loadInteractionVideos"
+                >刷新</el-button
+              >
+            </div>
+
+            <el-tabs
+              :model-value="interactionTab"
+              @tab-change="changeInteractionTab($event as 'favorites' | 'likes')"
+            >
+              <el-tab-pane label="我的收藏" name="favorites" />
+              <el-tab-pane label="我的点赞" name="likes" />
+            </el-tabs>
+
+            <el-skeleton :loading="interactionLoading" animated :count="4">
+              <template #default>
+                <div v-if="interactionVideos.length" class="interaction-grid">
+                  <article
+                    v-for="video in interactionVideos"
+                    :key="video.id"
+                    class="interaction-card"
+                    @click="router.push(`/video/${video.id}`)"
+                  >
+                    <div class="interaction-cover">
+                      <img :src="video.coverUrl" :alt="video.title" loading="lazy" /><span>{{
+                        formatDuration(video.duration)
+                      }}</span>
+                    </div>
+                    <h3 :title="video.title">{{ video.title }}</h3>
+                    <p>{{ video.authorNickname }} · {{ video.categoryName }}</p>
+                  </article>
+                </div>
+                <el-empty
+                  v-else
+                  :description="
+                    interactionTab === 'favorites' ? '你还没有收藏视频' : '你还没有点赞视频'
+                  "
+                />
+              </template>
+            </el-skeleton>
+            <div v-if="interactionTotal > interactionSize" class="pagination">
+              <el-pagination
+                v-model:current-page="interactionPage"
+                :page-size="interactionSize"
+                :total="interactionTotal"
+                layout="prev, pager, next"
+                background
+                @current-change="loadInteractionVideos"
+              />
+            </div>
+          </section>
+
+          <section v-show="activeCenterSection === 'submissions'" class="submission-section">
+            <div class="section-title">
+              <div>
+                <h2>我的投稿</h2>
+                <p>共 {{ total }} 个视频投稿</p>
+              </div>
+
+              <el-button :loading="videoLoading" @click="loadVideos"> 刷新 </el-button>
+            </div>
+
+            <el-skeleton :loading="videoLoading" animated :count="4">
+              <template #default>
+                <div v-if="videos.length > 0" class="video-list">
+                  <article v-for="video in videos" :key="video.id" class="video-card">
+                    <div class="cover-box">
+                      <img
+                        v-if="video.coverUrl"
+                        :src="video.coverUrl"
+                        :alt="video.title"
+                        loading="lazy"
+                      />
+                      <span v-else class="processing-cover">处理中</span>
+
+                      <span class="duration">
+                        {{ formatDuration(video.duration) }}
+                      </span>
+                    </div>
+
+                    <div class="video-content">
+                      <div class="title-row">
+                        <h3>{{ video.title }}</h3>
+
+                        <el-tag :type="getStatusType(video.status)">
+                          {{ getStatusText(video.status) }}
+                        </el-tag>
+                        <el-tag v-if="video.reviewTimeoutNotified === 1" type="danger">
+                          审核已超时
+                        </el-tag>
+                      </div>
+
+                      <p class="description">
+                        {{ video.description || '暂无视频简介。' }}
+                      </p>
+
+                      <div class="meta">
+                        <span>分区：{{ video.categoryName }}</span>
+                        <span>投稿时间：{{ formatDate(video.createTime) }}</span>
+
+                        <span v-if="video.status === 'PUBLISHED'">
+                          播放：{{ video.viewCount }}
+                        </span>
+                      </div>
+
+                      <div
+                        v-if="video.status === 'REJECTED' && video.rejectReason"
+                        class="reject-reason"
+                      >
+                        <strong>驳回原因：</strong>
+                        {{ video.rejectReason }}
+                      </div>
+
+                      <div
+                        v-if="video.status === 'PROCESS_FAILED' && video.processError"
+                        class="reject-reason"
+                      >
+                        <strong>转码失败：</strong>
+                        {{ video.processError }}
+                      </div>
+
+                      <div v-if="video.reviewTimeoutNotified === 1" class="reject-reason">
+                        <strong>审核提醒：</strong>
+                        等待审核已超时，管理员会尽快处理。
+                      </div>
+
+                      <div class="video-actions">
+                        <el-button
+                          v-if="video.status === 'PUBLISHED'"
+                          type="primary"
+                          plain
+                          size="small"
+                          @click="router.push(`/video/${video.id}`)"
+                        >
+                          查看视频
+                        </el-button>
+
+                        <el-button size="small" @click="openEditDialog(video)">
+                          编辑信息
+                        </el-button>
+
+                        <el-button type="danger" plain size="small" @click="handleDelete(video)">
+                          删除
+                        </el-button>
+                      </div>
+                    </div>
+                  </article>
+                </div>
+
+                <el-empty v-else description="你还没有投稿，去发布第一个视频吧">
+                  <el-button type="primary" @click="router.push('/upload')"> 去投稿 </el-button>
+                </el-empty>
+              </template>
+            </el-skeleton>
+
+            <div v-if="total > pageSize" class="pagination">
+              <el-pagination
+                v-model:current-page="currentPage"
+                :page-size="pageSize"
+                :total="total"
+                layout="prev, pager, next"
+                background
+                @current-change="handlePageChange"
+              />
+            </div>
+          </section>
         </div>
       </div>
     </section>
 
-    <el-dialog
-      v-model="editDialogVisible"
-      title="编辑视频信息"
-      width="520px"
-      destroy-on-close
-    >
-      <el-form
-        ref="editFormRef"
-        :model="editForm"
-        :rules="editRules"
-        label-position="top"
-      >
+    <el-dialog v-model="editDialogVisible" title="编辑视频信息" width="520px" destroy-on-close>
+      <el-form ref="editFormRef" :model="editForm" :rules="editRules" label-position="top">
         <el-form-item label="视频标题" prop="title">
-          <el-input
-            v-model="editForm.title"
-            maxlength="100"
-            show-word-limit
-          />
+          <el-input v-model="editForm.title" maxlength="100" show-word-limit />
         </el-form-item>
 
         <el-form-item label="视频分区" prop="categoryId">
-          <el-select
-            v-model="editForm.categoryId"
-            placeholder="请选择视频分区"
-            class="full-width"
-          >
+          <el-select v-model="editForm.categoryId" placeholder="请选择视频分区" class="full-width">
             <el-option
               v-for="category in categories"
               :key="category.id"
@@ -708,17 +680,9 @@ onMounted(() => {
       </el-form>
 
       <template #footer>
-        <el-button @click="editDialogVisible = false">
-          取消
-        </el-button>
+        <el-button @click="editDialogVisible = false"> 取消 </el-button>
 
-        <el-button
-          type="primary"
-          :loading="editLoading"
-          @click="submitEdit"
-        >
-          保存修改
-        </el-button>
+        <el-button type="primary" :loading="editLoading" @click="submitEdit"> 保存修改 </el-button>
       </template>
     </el-dialog>
   </main>
@@ -864,13 +828,51 @@ onMounted(() => {
   gap: 18px;
 }
 
-.interaction-card { min-width: 0; cursor: pointer; }
-.interaction-cover { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 8px; background: #e5e7eb; }
-.interaction-cover img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s; }
-.interaction-card:hover img { transform: scale(1.05); }
-.interaction-cover span { position: absolute; right: 6px; bottom: 6px; padding: 2px 5px; border-radius: 4px; background: rgb(0 0 0 / 65%); color: #fff; font-size: 12px; }
-.interaction-card h3 { overflow: hidden; margin: 9px 0 5px; font-size: 15px; white-space: nowrap; text-overflow: ellipsis; }
-.interaction-card p { overflow: hidden; margin: 0; color: #9499a0; font-size: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.interaction-card {
+  min-width: 0;
+  cursor: pointer;
+}
+.interaction-cover {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  border-radius: 8px;
+  background: #e5e7eb;
+}
+.interaction-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.25s;
+}
+.interaction-card:hover img {
+  transform: scale(1.05);
+}
+.interaction-cover span {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 65%);
+  color: #fff;
+  font-size: 12px;
+}
+.interaction-card h3 {
+  overflow: hidden;
+  margin: 9px 0 5px;
+  font-size: 15px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.interaction-card p {
+  overflow: hidden;
+  margin: 0;
+  color: #9499a0;
+  font-size: 13px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
 
 .follow-list {
   display: flex;
@@ -1077,16 +1079,18 @@ onMounted(() => {
     padding: 20px;
   }
 
-  .interaction-section { padding: 20px; }
-  .interaction-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 12px; }
+  .interaction-section {
+    padding: 20px;
+  }
+  .interaction-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px 12px;
+  }
 
   .video-card {
     grid-template-columns: 1fr;
   }
 }
-</style>
-
-<style scoped>
 .profile-page {
   min-height: 100vh;
   background: var(--vn-page);
@@ -1126,7 +1130,7 @@ onMounted(() => {
 }
 
 .profile-card::after {
-  content: "VIDEONEST SPACE";
+  content: 'VIDEONEST SPACE';
   position: absolute;
   right: 28px;
   bottom: 14px;
@@ -1231,7 +1235,7 @@ onMounted(() => {
   color: var(--vn-text-secondary);
   text-align: left;
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .center-sidebar > button:hover,
@@ -1387,7 +1391,9 @@ onMounted(() => {
   border: 1px solid var(--vn-border-light);
   border-radius: 11px;
   background: #fafbfc;
-  transition: border-color .2s, transform .2s;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .submission-section .video-card:hover {
@@ -1480,10 +1486,6 @@ onMounted(() => {
     grid-template-columns: 1fr;
   }
 }
-</style>
-
-<style scoped>
-/* 个人空间参考内容站主页：横幅身份区 + 横向内容导航。 */
 .profile-space-banner {
   min-height: 270px;
   padding: 128px 34px 28px;

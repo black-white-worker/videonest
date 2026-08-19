@@ -1,15 +1,18 @@
 <script setup lang="ts">
 import { useRouter } from 'vue-router'
 
-withDefaults(defineProps<{
-  maxWidth?: string
-  elevated?: boolean
-  overlay?: boolean
-}>(), {
-  maxWidth: '1360px',
-  elevated: true,
-  overlay: false
-})
+withDefaults(
+  defineProps<{
+    maxWidth?: string
+    elevated?: boolean
+    overlay?: boolean
+  }>(),
+  {
+    maxWidth: '1360px',
+    elevated: true,
+    overlay: false
+  }
+)
 
 const router = useRouter()
 </script>
@@ -123,7 +126,7 @@ const router = useRouter()
 .site-brand__name {
   font-size: 22px;
   font-weight: 800;
-  letter-spacing: -.5px;
+  letter-spacing: -0.5px;
 }
 
 .site-header__nav {
@@ -158,7 +161,9 @@ const router = useRouter()
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
-  transition: color .2s, background .2s;
+  transition:
+    color 0.2s,
+    background 0.2s;
 }
 
 :slotted(.site-nav-link:hover) {

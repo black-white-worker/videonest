@@ -15,9 +15,7 @@ export interface FollowUser {
 }
 
 export async function getFollowStatus(userId: number): Promise<FollowStatus> {
-  const response = await request.get<ApiResponse<FollowStatus>>(
-    `/users/${userId}/follow/status`
-  )
+  const response = await request.get<ApiResponse<FollowStatus>>(`/users/${userId}/follow/status`)
   return response.data.data
 }
 
@@ -30,17 +28,15 @@ export async function unfollowUser(userId: number): Promise<void> {
 }
 
 export async function getMyFollowing(params: { page: number; size: number }) {
-  const response = await request.get<ApiResponse<PageResult<FollowUser>>>(
-    '/users/me/following',
-    { params }
-  )
+  const response = await request.get<ApiResponse<PageResult<FollowUser>>>('/users/me/following', {
+    params
+  })
   return response.data.data
 }
 
 export async function getMyFollowers(params: { page: number; size: number }) {
-  const response = await request.get<ApiResponse<PageResult<FollowUser>>>(
-    '/users/me/followers',
-    { params }
-  )
+  const response = await request.get<ApiResponse<PageResult<FollowUser>>>('/users/me/followers', {
+    params
+  })
   return response.data.data
 }

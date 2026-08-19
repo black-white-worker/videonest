@@ -12,7 +12,6 @@ export interface CreatorProfile {
   pendingVideoCount: number
   publishedVideoCount: number
   rejectedVideoCount: number
-  
 }
 
 export interface CreatorVideo {
@@ -51,9 +50,7 @@ export interface UpdateVideoRequest {
 }
 
 export async function getCreatorProfile(): Promise<CreatorProfile> {
-  const response = await request.get<ApiResponse<CreatorProfile>>(
-    '/creator/profile'
-  )
+  const response = await request.get<ApiResponse<CreatorProfile>>('/creator/profile')
 
   return response.data.data
 }
@@ -62,18 +59,14 @@ export async function getCreatorVideos(params: {
   page: number
   size: number
 }): Promise<PageResult<CreatorVideo>> {
-  const response = await request.get<ApiResponse<PageResult<CreatorVideo>>>(
-    '/creator/videos',
-    { params }
-  )
+  const response = await request.get<ApiResponse<PageResult<CreatorVideo>>>('/creator/videos', {
+    params
+  })
 
   return response.data.data
 }
 
-export async function updateCreatorVideo(
-  videoId: number,
-  data: UpdateVideoRequest
-): Promise<void> {
+export async function updateCreatorVideo(videoId: number, data: UpdateVideoRequest): Promise<void> {
   await request.put(`/creator/videos/${videoId}`, data)
 }
 
@@ -81,12 +74,24 @@ export async function deleteCreatorVideo(videoId: number): Promise<void> {
   await request.delete(`/creator/videos/${videoId}`)
 }
 
-export async function getMyLikedVideos(params: { page: number; size: number }): Promise<PageResult<VideoListItem>> {
-  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>('/creator/videos/liked', { params })
+export async function getMyLikedVideos(params: {
+  page: number
+  size: number
+}): Promise<PageResult<VideoListItem>> {
+  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>(
+    '/creator/videos/liked',
+    { params }
+  )
   return response.data.data
 }
 
-export async function getMyFavoriteVideos(params: { page: number; size: number }): Promise<PageResult<VideoListItem>> {
-  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>('/creator/videos/favorites', { params })
+export async function getMyFavoriteVideos(params: {
+  page: number
+  size: number
+}): Promise<PageResult<VideoListItem>> {
+  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>(
+    '/creator/videos/favorites',
+    { params }
+  )
   return response.data.data
 }

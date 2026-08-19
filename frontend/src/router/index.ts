@@ -67,7 +67,7 @@ const router = createRouter({
   ]
 })
 
-router.afterEach(to => {
+router.afterEach((to) => {
   document.title = `${String(to.meta.title || '视频社区')} - VideoNest`
 })
 

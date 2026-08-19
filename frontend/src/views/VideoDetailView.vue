@@ -86,13 +86,11 @@ const qualityOptions = computed(() => {
 })
 
 const currentQualityOption = computed(() =>
-  qualityOptions.value.find(option => option.value === selectedQuality.value)
+  qualityOptions.value.find((option) => option.value === selectedQuality.value)
 )
 
-const currentVideoUrl = computed(() =>
-  currentQualityOption.value?.url
-    || video.value?.videoUrl
-    || ''
+const currentVideoUrl = computed(
+  () => currentQualityOption.value?.url || video.value?.videoUrl || ''
 )
 
 const playbackMediaInfoText = computed(() => {
@@ -101,11 +99,12 @@ const playbackMediaInfoText = computed(() => {
   }
 
   const { width, height, averageBitrate } = playbackMediaInfo.value
-  const bitrateText = averageBitrate === null
-    ? '平均总码率未知'
-    : averageBitrate >= 1_000_000
-      ? `平均总码率 ${(averageBitrate / 1_000_000).toFixed(2)} Mbps`
-      : `平均总码率 ${Math.round(averageBitrate / 1000)} kbps`
+  const bitrateText =
+    averageBitrate === null
+      ? '平均总码率未知'
+      : averageBitrate >= 1_000_000
+        ? `平均总码率 ${(averageBitrate / 1_000_000).toFixed(2)} Mbps`
+        : `平均总码率 ${Math.round(averageBitrate / 1000)} kbps`
 
   return `当前实际 ${width} × ${height} · ${bitrateText}`
 })
@@ -138,11 +137,10 @@ async function loadVideoDetail() {
   try {
     loading.value = true
     video.value = await getVideoDetail(id)
-    selectedQuality.value = qualityOptions.value.find(
-      option => option.value === '720p' && option.url
-    )?.value
-      || qualityOptions.value.find(option => option.url)?.value
-      || '720p'
+    selectedQuality.value =
+      qualityOptions.value.find((option) => option.value === '720p' && option.url)?.value ||
+      qualityOptions.value.find((option) => option.url)?.value ||
+      '720p'
   } catch (error) {
     const message = error instanceof Error ? error.message : '获取视频详情失败'
     ElMessage.error(message)
@@ -153,11 +151,7 @@ async function loadVideoDetail() {
   }
 
   // 点赞、关注和评论加载失败不应影响播放器打开。
-  await Promise.allSettled([
-    loadInteractionStatus(id),
-    loadFollowStatus(),
-    loadComments(id)
-  ])
+  await Promise.allSettled([loadInteractionStatus(id), loadFollowStatus(), loadComments(id)])
 }
 
 async function changeQuality() {
@@ -183,16 +177,12 @@ async function renderWechatQr() {
 
   try {
     const { default: QRCode } = await import('qrcode')
-    await QRCode.toCanvas(
-      wechatQrCanvas.value,
-      buildShareUrl(video.value.id),
-      {
-        width: 208,
-        margin: 1,
-        errorCorrectionLevel: 'M',
-        color: { dark: '#18191c', light: '#ffffff' }
-      }
-    )
+    await QRCode.toCanvas(wechatQrCanvas.value, buildShareUrl(video.value.id), {
+      width: 208,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#18191c', light: '#ffffff' }
+    })
   } catch {
     ElMessage.warning('微信二维码生成失败，请复制链接分享')
   }
@@ -307,23 +297,19 @@ function buildShareUrl(videoId: number): string {
     }
   }
 
-  return new URL(
-    `/video/${encodeURIComponent(String(videoId))}`,
-    window.location.origin
-  ).toString()
+  return new URL(`/video/${encodeURIComponent(String(videoId))}`, window.location.origin).toString()
 }
 
 function handleLoadedMetadata() {
   const currentPlayer = player.value
   if (!currentPlayer) return
 
-  const duration = Number.isFinite(currentPlayer.duration) && currentPlayer.duration > 0
-    ? currentPlayer.duration
-    : video.value?.duration || 0
+  const duration =
+    Number.isFinite(currentPlayer.duration) && currentPlayer.duration > 0
+      ? currentPlayer.duration
+      : video.value?.duration || 0
   const sizeBytes = currentQualityOption.value?.sizeBytes
-  const averageBitrate = sizeBytes && duration > 0
-    ? sizeBytes * 8 / duration
-    : null
+  const averageBitrate = sizeBytes && duration > 0 ? (sizeBytes * 8) / duration : null
 
   playbackMediaInfo.value = {
     width: currentPlayer.videoWidth,
@@ -359,9 +345,7 @@ function handlePause() {
 }
 
 async function reportViewWhenEligible() {
-  const activeMilliseconds = playStartedAt === null
-    ? 0
-    : performance.now() - playStartedAt
+  const activeMilliseconds = playStartedAt === null ? 0 : performance.now() - playStartedAt
   if (viewReported || watchedMilliseconds + activeMilliseconds < 5000 || !video.value) {
     return
   }
@@ -419,11 +403,7 @@ async function toggleFollow() {
 async function loadComments(videoId: number) {
   try {
     commentLoading.value = true
-    const result = await getComments(
-      videoId,
-      commentPage.value,
-      commentSize.value
-    )
+    const result = await getComments(videoId, commentPage.value, commentSize.value)
     comments.value = result.records
     commentTotal.value = result.total
   } catch (error) {
@@ -560,7 +540,7 @@ function isReplyExpanded(commentId: string) {
 
 async function toggleReplies(comment: VideoComment) {
   if (isReplyExpanded(comment.id)) {
-    expandedReplyIds.value = expandedReplyIds.value.filter(id => id !== comment.id)
+    expandedReplyIds.value = expandedReplyIds.value.filter((id) => id !== comment.id)
     return
   }
   try {
@@ -571,7 +551,7 @@ async function toggleReplies(comment: VideoComment) {
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '获取回复失败')
   } finally {
-    replyLoadingIds.value = replyLoadingIds.value.filter(id => id !== comment.id)
+    replyLoadingIds.value = replyLoadingIds.value.filter((id) => id !== comment.id)
   }
 }
 
@@ -593,7 +573,7 @@ async function submitReply(comment: VideoComment) {
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '回复发布失败')
   } finally {
-    replySubmittingIds.value = replySubmittingIds.value.filter(id => id !== comment.id)
+    replySubmittingIds.value = replySubmittingIds.value.filter((id) => id !== comment.id)
   }
 }
 
@@ -637,11 +617,11 @@ function canDeleteComment(comment: VideoComment): boolean {
 
   try {
     const currentUser = JSON.parse(userInfo)
-    return currentUser.userId === comment.userId ||
-      (
-        String(currentUser.role).trim().toUpperCase() === 'ADMIN' &&
-        String(comment.parentId) === '0'
-      )
+    return (
+      currentUser.userId === comment.userId ||
+      (String(currentUser.role).trim().toUpperCase() === 'ADMIN' &&
+        String(comment.parentId) === '0')
+    )
   } catch {
     return false
   }
@@ -783,11 +763,7 @@ onBeforeUnmount(() => {
                       show-word-limit
                       placeholder="发一条友善的评论吧"
                     />
-                    <el-button
-                      type="primary"
-                      :loading="commentSubmitting"
-                      @click="submitComment"
-                    >
+                    <el-button type="primary" :loading="commentSubmitting" @click="submitComment">
                       发布
                     </el-button>
                   </div>
@@ -795,11 +771,7 @@ onBeforeUnmount(() => {
                   <el-skeleton :loading="commentLoading" animated :rows="4">
                     <template #default>
                       <div v-if="comments.length" class="comment-list">
-                        <article
-                          v-for="comment in comments"
-                          :key="comment.id"
-                          class="comment-item"
-                        >
+                        <article v-for="comment in comments" :key="comment.id" class="comment-item">
                           <div class="comment-avatar">
                             {{ comment.nickname.slice(0, 1) }}
                           </div>
@@ -809,7 +781,11 @@ onBeforeUnmount(() => {
                             <div class="comment-meta">
                               <span>{{ formatDate(comment.createdAt) }}</span>
                               <el-button link @click="toggleReplies(comment)">
-                                {{ isReplyExpanded(comment.id) ? '收起回复' : `回复${comment.replyCount ? ` (${comment.replyCount})` : ''}` }}
+                                {{
+                                  isReplyExpanded(comment.id)
+                                    ? '收起回复'
+                                    : `回复${comment.replyCount ? ` (${comment.replyCount})` : ''}`
+                                }}
                               </el-button>
                               <el-button
                                 v-if="canDeleteComment(comment)"
@@ -821,7 +797,11 @@ onBeforeUnmount(() => {
                               </el-button>
                             </div>
                             <div v-if="isReplyExpanded(comment.id)" class="reply-area">
-                              <el-skeleton :loading="replyLoadingIds.includes(comment.id)" animated :rows="2">
+                              <el-skeleton
+                                :loading="replyLoadingIds.includes(comment.id)"
+                                animated
+                                :rows="2"
+                              >
                                 <template #default>
                                   <div
                                     v-for="reply in repliesByCommentId[comment.id] || []"
@@ -867,9 +847,11 @@ onBeforeUnmount(() => {
                                 <el-input
                                   v-model="replyContents[comment.id]"
                                   maxlength="500"
-                                  :placeholder="replyTargets[comment.id]
-                                    ? `回复 ${replyTargets[comment.id]?.nickname}`
-                                    : '写下你的回复'"
+                                  :placeholder="
+                                    replyTargets[comment.id]
+                                      ? `回复 ${replyTargets[comment.id]?.nickname}`
+                                      : '写下你的回复'
+                                  "
                                   @keyup.enter="submitReply(comment)"
                                 />
                                 <el-button
@@ -1305,16 +1287,85 @@ h1 {
   }
 }
 /* 企业后台式的信息卡片、内容层级与播放器视觉。 */
-.detail-page{background:var(--vn-page);color:var(--vn-text)}
-.header{height:68px;background:rgb(255 255 255 / 94%);border-color:var(--vn-border);position:sticky;top:0;z-index:10;backdrop-filter:blur(14px)}
-.header-content,.container{width:min(1120px,calc(100% - 48px))}.logo{color:#172b4d;letter-spacing:-.4px}.logo-icon{border-radius:9px;background:linear-gradient(135deg,#1677ff,#5b9cff);box-shadow:0 4px 10px rgb(22 119 255 / 25%)}
-.container{padding-top:34px}.video-player-box{border-radius:var(--vn-radius);box-shadow:0 14px 34px rgb(16 24 40 / 16%)}
-.video-info,.comment-section{padding:28px 32px;border:1px solid var(--vn-border);border-radius:var(--vn-radius);box-shadow:var(--vn-shadow)}
-.video-info h1{color:#172b4d;font-size:28px}.statistics,.comment-header span,.comment-meta{color:var(--vn-text-muted)}.avatar{border-radius:12px;background:linear-gradient(135deg,#1677ff,#5b9cff)}.description p{color:var(--vn-text-secondary)}.reply-area{background:#f8fafc;border:1px solid #edf0f5}
-@media (max-width:700px){.header{height:60px}.header-content,.container{width:min(100% - 28px,1120px)}.container{padding-top:22px}.video-info,.comment-section{padding:20px}.video-info h1{font-size:22px}}
-</style>
-
-<style scoped>
+.detail-page {
+  background: var(--vn-page);
+  color: var(--vn-text);
+}
+.header {
+  height: 68px;
+  background: rgb(255 255 255 / 94%);
+  border-color: var(--vn-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  backdrop-filter: blur(14px);
+}
+.header-content,
+.container {
+  width: min(1120px, calc(100% - 48px));
+}
+.logo {
+  color: #172b4d;
+  letter-spacing: -0.4px;
+}
+.logo-icon {
+  border-radius: 9px;
+  background: linear-gradient(135deg, #1677ff, #5b9cff);
+  box-shadow: 0 4px 10px rgb(22 119 255 / 25%);
+}
+.container {
+  padding-top: 34px;
+}
+.video-player-box {
+  border-radius: var(--vn-radius);
+  box-shadow: 0 14px 34px rgb(16 24 40 / 16%);
+}
+.video-info,
+.comment-section {
+  padding: 28px 32px;
+  border: 1px solid var(--vn-border);
+  border-radius: var(--vn-radius);
+  box-shadow: var(--vn-shadow);
+}
+.video-info h1 {
+  color: #172b4d;
+  font-size: 28px;
+}
+.statistics,
+.comment-header span,
+.comment-meta {
+  color: var(--vn-text-muted);
+}
+.avatar {
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1677ff, #5b9cff);
+}
+.description p {
+  color: var(--vn-text-secondary);
+}
+.reply-area {
+  background: #f8fafc;
+  border: 1px solid #edf0f5;
+}
+@media (max-width: 700px) {
+  .header {
+    height: 60px;
+  }
+  .header-content,
+  .container {
+    width: min(100% - 28px, 1120px);
+  }
+  .container {
+    padding-top: 22px;
+  }
+  .video-info,
+  .comment-section {
+    padding: 20px;
+  }
+  .video-info h1 {
+    font-size: 22px;
+  }
+}
 .detail-page {
   min-height: 100vh;
   background: var(--vn-page);
@@ -1368,7 +1419,7 @@ h1 {
   color: var(--vn-text);
   font-size: clamp(22px, 2.1vw, 30px);
   line-height: 1.35;
-  letter-spacing: -.6px;
+  letter-spacing: -0.6px;
 }
 
 .statistics {
@@ -1465,7 +1516,7 @@ h1 {
   color: var(--vn-text-secondary);
   text-align: left;
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .video-action:hover {
@@ -1558,7 +1609,7 @@ h1 {
   color: var(--vn-text);
   text-align: left;
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .share-option:hover {

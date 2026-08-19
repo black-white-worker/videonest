@@ -15,12 +15,9 @@ app.config.errorHandler = (error, _instance, info) => {
   })
 }
 
-window.addEventListener('unhandledrejection', event => {
+window.addEventListener('unhandledrejection', (event) => {
   logger.error('browser.unhandled.rejection', {
-    message:
-      event.reason instanceof Error
-        ? event.reason.message
-        : String(event.reason)
+    message: event.reason instanceof Error ? event.reason.message : String(event.reason)
   })
 })
 

@@ -3,11 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import AdminShell from '../components/AdminShell.vue'
-import {
-  getPendingVideos,
-  reviewVideo,
-  type AdminVideoReview
-} from '../api/admin'
+import { getPendingVideos, reviewVideo, type AdminVideoReview } from '../api/admin'
 
 const router = useRouter()
 
@@ -66,18 +62,13 @@ async function loadVideos() {
     videos.value = result.records
     total.value = result.total
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '获取待审核视频失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '获取待审核视频失败')
   } finally {
     loading.value = false
   }
 }
 
-async function handleReview(
-  video: AdminVideoReview,
-  action: 'APPROVE' | 'REJECT'
-) {
+async function handleReview(video: AdminVideoReview, action: 'APPROVE' | 'REJECT') {
   const isApprove = action === 'APPROVE'
   const actionText = isApprove ? '通过' : '驳回'
 
@@ -136,9 +127,7 @@ async function handleReview(
       return
     }
 
-    ElMessage.error(
-      error instanceof Error ? error.message : '审核操作失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '审核操作失败')
   } finally {
     reviewingId.value = null
   }
@@ -153,9 +142,7 @@ function formatDuration(seconds: number) {
   const minutes = Math.floor(seconds / 60)
   const remainSeconds = seconds % 60
 
-  return `${String(minutes).padStart(2, '0')}:${String(
-    remainSeconds
-  ).padStart(2, '0')}`
+  return `${String(minutes).padStart(2, '0')}:${String(remainSeconds).padStart(2, '0')}`
 }
 
 function formatDate(value: string) {
@@ -185,9 +172,7 @@ onMounted(() => {
           <i></i>
           {{ total }} 个待处理
         </span>
-        <el-button :loading="loading" @click="loadVideos">
-          刷新列表
-        </el-button>
+        <el-button :loading="loading" @click="loadVideos"> 刷新列表 </el-button>
       </div>
     </template>
 
@@ -205,7 +190,9 @@ onMounted(() => {
           <span class="stat-icon warning">时</span>
           <div>
             <small>本页超时提醒</small>
-            <strong>{{ videos.filter((video) => video.reviewTimeoutNotified === 1).length }}</strong>
+            <strong>{{
+              videos.filter((video) => video.reviewTimeoutNotified === 1).length
+            }}</strong>
             <p>建议优先完成审核</p>
           </div>
         </article>
@@ -232,11 +219,7 @@ onMounted(() => {
       <el-skeleton :loading="loading" animated :count="4">
         <template #default>
           <div v-if="videos.length > 0" class="video-list">
-            <article
-              v-for="video in videos"
-              :key="video.id"
-              class="video-card"
-            >
+            <article v-for="video in videos" :key="video.id" class="video-card">
               <div class="cover-column">
                 <div class="cover-box">
                   <img :src="video.coverUrl" :alt="video.title" />
@@ -252,11 +235,7 @@ onMounted(() => {
                 <div class="video-title-row">
                   <h3>{{ video.title }}</h3>
                   <el-tag type="warning" effect="light">待审核</el-tag>
-                  <el-tag
-                    v-if="video.reviewTimeoutNotified === 1"
-                    type="danger"
-                    effect="dark"
-                  >
+                  <el-tag v-if="video.reviewTimeoutNotified === 1" type="danger" effect="dark">
                     审核已超时
                   </el-tag>
                 </div>
@@ -283,11 +262,7 @@ onMounted(() => {
                     预览视频
                     <span class="preview-hint">展开播放器检查投稿内容</span>
                   </summary>
-                  <video
-                    :src="video.videoUrl"
-                    controls
-                    preload="metadata"
-                  />
+                  <video :src="video.videoUrl" controls preload="metadata" />
                 </details>
 
                 <div class="actions">
@@ -508,7 +483,7 @@ onMounted(() => {
   gap: 22px;
   padding: 22px;
   border-bottom: 1px solid #eef0f3;
-  transition: background .2s ease;
+  transition: background 0.2s ease;
 }
 
 .video-card:last-child {
@@ -544,7 +519,7 @@ onMounted(() => {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transition: transform .3s ease;
+  transition: transform 0.3s ease;
 }
 
 .video-card:hover .cover-box img {

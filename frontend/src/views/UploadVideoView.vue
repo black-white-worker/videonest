@@ -31,12 +31,8 @@ const rules: FormRules = {
     { required: true, message: '请输入视频标题', trigger: 'blur' },
     { max: 100, message: '标题不能超过 100 个字符', trigger: 'blur' }
   ],
-  categoryId: [
-    { required: true, message: '请选择投稿分区', trigger: 'change' }
-  ],
-  description: [
-    { max: 2000, message: '简介不能超过 2000 个字符', trigger: 'blur' }
-  ]
+  categoryId: [{ required: true, message: '请选择投稿分区', trigger: 'change' }],
+  description: [{ max: 2000, message: '简介不能超过 2000 个字符', trigger: 'blur' }]
 }
 
 const durationText = computed(() => {
@@ -65,9 +61,7 @@ async function loadCategories() {
     categoryLoading.value = true
     categories.value = await getCategories()
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '获取视频分区失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '获取视频分区失败')
   } finally {
     categoryLoading.value = false
   }
@@ -107,9 +101,7 @@ async function handleCoverChange(event: Event) {
     ElMessage.success('封面上传成功')
   } catch (error) {
     form.coverObjectName = ''
-    ElMessage.error(
-      error instanceof Error ? error.message : '封面上传失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '封面上传失败')
   } finally {
     coverUploading.value = false
     input.value = ''
@@ -150,9 +142,7 @@ async function handleVideoChange(event: Event) {
     form.videoObjectName = ''
     form.duration = 0
 
-    ElMessage.error(
-      error instanceof Error ? error.message : '视频上传失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '视频上传失败')
   } finally {
     videoUploading.value = false
     input.value = ''
@@ -195,9 +185,7 @@ async function submit() {
     ElMessage.success('投稿已提交，等待管理员审核')
     router.push('/profile')
   } catch (error) {
-    ElMessage.error(
-      error instanceof Error ? error.message : '投稿提交失败'
-    )
+    ElMessage.error(error instanceof Error ? error.message : '投稿提交失败')
   } finally {
     submitting.value = false
   }
@@ -237,7 +225,10 @@ onBeforeUnmount(() => {
         <ol class="publish-steps">
           <li :class="{ complete: Boolean(form.videoObjectName) }">
             <span>1</span>
-            <div><strong>上传视频</strong><small>{{ form.videoObjectName ? '已完成' : '等待上传' }}</small></div>
+            <div>
+              <strong>上传视频</strong
+              ><small>{{ form.videoObjectName ? '已完成' : '等待上传' }}</small>
+            </div>
           </li>
           <li :class="{ complete: Boolean(form.title && form.categoryId) }">
             <span>2</span>
@@ -245,7 +236,10 @@ onBeforeUnmount(() => {
           </li>
           <li :class="{ complete: Boolean(form.coverObjectName) }">
             <span>3</span>
-            <div><strong>设置封面</strong><small>{{ form.coverObjectName ? '已完成' : '16:9 更吸引观众' }}</small></div>
+            <div>
+              <strong>设置封面</strong
+              ><small>{{ form.coverObjectName ? '已完成' : '16:9 更吸引观众' }}</small>
+            </div>
           </li>
         </ol>
         <div class="publish-guide">
@@ -261,12 +255,7 @@ onBeforeUnmount(() => {
           <p>上传完成后将自动转码并进入审核，审核通过后会展示在主站。</p>
         </div>
 
-        <el-form
-          ref="formRef"
-          :model="form"
-          :rules="rules"
-          label-position="top"
-        >
+        <el-form ref="formRef" :model="form" :rules="rules" label-position="top">
           <section class="form-section video-file-section">
             <div class="form-section__title">
               <div>
@@ -284,7 +273,13 @@ onBeforeUnmount(() => {
               />
               <span class="dropzone-icon">{{ form.videoObjectName ? '✓' : '↑' }}</span>
               <strong>{{ form.videoObjectName ? '视频上传完成' : '点击选择视频文件' }}</strong>
-              <p>{{ form.videoObjectName ? `已识别时长 ${durationText}` : '选择后将立即上传，请保持页面开启' }}</p>
+              <p>
+                {{
+                  form.videoObjectName
+                    ? `已识别时长 ${durationText}`
+                    : '选择后将立即上传，请保持页面开启'
+                }}
+              </p>
               <span class="dropzone-action">
                 {{ form.videoObjectName ? '重新选择视频' : '选择文件' }}
               </span>
@@ -354,11 +349,7 @@ onBeforeUnmount(() => {
                 <span class="required-badge">必填</span>
               </div>
               <div class="cover-upload">
-                <img
-                  v-if="coverPreviewUrl"
-                  :src="coverPreviewUrl"
-                  alt="封面预览"
-                />
+                <img v-if="coverPreviewUrl" :src="coverPreviewUrl" alt="封面预览" />
                 <div v-else class="cover-placeholder">
                   <span>▧</span>
                   <strong>16:9 封面</strong>
@@ -565,9 +556,6 @@ onBeforeUnmount(() => {
     flex: 1;
   }
 }
-</style>
-
-<style scoped>
 .upload-page {
   min-height: 100vh;
   background: var(--vn-page);
@@ -631,7 +619,7 @@ onBeforeUnmount(() => {
 }
 
 .publish-steps li:not(:last-child)::after {
-  content: "";
+  content: '';
   position: absolute;
   top: 30px;
   left: 14px;
@@ -709,7 +697,7 @@ onBeforeUnmount(() => {
 .heading h1 {
   margin: 5px 0 6px;
   font-size: 28px;
-  letter-spacing: -.7px;
+  letter-spacing: -0.7px;
 }
 
 .heading p {
@@ -769,11 +757,9 @@ onBeforeUnmount(() => {
   overflow: hidden;
   border: 1px dashed #a9dff2;
   border-radius: 12px;
-  background:
-    radial-gradient(circle at 50% 0%, rgb(94 216 255 / 17%), transparent 42%),
-    #f8fcfe;
+  background: radial-gradient(circle at 50% 0%, rgb(94 216 255 / 17%), transparent 42%), #f8fcfe;
   cursor: pointer;
-  transition: .2s;
+  transition: 0.2s;
 }
 
 .video-dropzone:hover {

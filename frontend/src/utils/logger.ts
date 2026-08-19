@@ -1,8 +1,7 @@
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
-const configuredLevel = (
-  import.meta.env.VITE_LOG_LEVEL || (import.meta.env.DEV ? 'debug' : 'warn')
-) as LogLevel
+const configuredLevel = (import.meta.env.VITE_LOG_LEVEL ||
+  (import.meta.env.DEV ? 'debug' : 'warn')) as LogLevel
 
 const levelWeight: Record<LogLevel, number> = {
   debug: 10,
@@ -11,11 +10,7 @@ const levelWeight: Record<LogLevel, number> = {
   error: 40
 }
 
-function write(
-  level: LogLevel,
-  event: string,
-  context?: Record<string, unknown>
-) {
+function write(level: LogLevel, event: string, context?: Record<string, unknown>) {
   if (levelWeight[level] < levelWeight[configuredLevel]) return
 
   const entry = {
@@ -37,12 +32,8 @@ function write(
 }
 
 export const logger = {
-  debug: (event: string, context?: Record<string, unknown>) =>
-    write('debug', event, context),
-  info: (event: string, context?: Record<string, unknown>) =>
-    write('info', event, context),
-  warn: (event: string, context?: Record<string, unknown>) =>
-    write('warn', event, context),
-  error: (event: string, context?: Record<string, unknown>) =>
-    write('error', event, context)
+  debug: (event: string, context?: Record<string, unknown>) => write('debug', event, context),
+  info: (event: string, context?: Record<string, unknown>) => write('info', event, context),
+  warn: (event: string, context?: Record<string, unknown>) => write('warn', event, context),
+  error: (event: string, context?: Record<string, unknown>) => write('error', event, context)
 }

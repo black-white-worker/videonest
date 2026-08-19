@@ -1,8 +1,4 @@
-import axios, {
-  type AxiosError,
-  type AxiosResponse,
-  type InternalAxiosRequestConfig
-} from 'axios'
+import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { logger } from '../utils/logger'
 
 interface ApiError {
@@ -25,10 +21,7 @@ const request = axios.create({
       }
 
       try {
-        const safeData = data.replace(
-          /"(id|parentId)"\s*:\s*(-?\d{16,})/g,
-          '"$1":"$2"'
-        )
+        const safeData = data.replace(/"(id|parentId)"\s*:\s*(-?\d{16,})/g, '"$1":"$2"')
         return JSON.parse(safeData)
       } catch {
         return data
@@ -37,22 +30,20 @@ const request = axios.create({
   ]
 })
 
-request.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('token')
+request.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  const token = localStorage.getItem('token')
 
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
-
-    ;(config as TimedRequestConfig).requestStartedAt = performance.now()
-    logger.info('api.request.started', {
-      method: config.method?.toUpperCase(),
-      url: config.url
-    })
-    return config
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`
   }
-)
+
+  ;(config as TimedRequestConfig).requestStartedAt = performance.now()
+  logger.info('api.request.started', {
+    method: config.method?.toUpperCase(),
+    url: config.url
+  })
+  return config
+})
 
 request.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -80,9 +71,7 @@ request.interceptors.response.use(
   },
   (error: AxiosError<ApiError>) => {
     const config = error.config as TimedRequestConfig | undefined
-    const message =
-      error.response?.data?.message ||
-      '网络异常，请检查 Spring Boot 后端是否已经启动'
+    const message = error.response?.data?.message || '网络异常，请检查 Spring Boot 后端是否已经启动'
 
     logger.error('api.request.failed', {
       method: config?.method?.toUpperCase(),

@@ -56,9 +56,7 @@ export interface PageResult<T> {
 }
 
 export async function getCategories(): Promise<VideoCategory[]> {
-  const response = await request.get<ApiResponse<VideoCategory[]>>(
-    '/categories'
-  )
+  const response = await request.get<ApiResponse<VideoCategory[]>>('/categories')
 
   return response.data.data
 }
@@ -69,18 +67,13 @@ export async function getVideoList(params: {
   page: number
   size: number
 }): Promise<PageResult<VideoListItem>> {
-  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>(
-    '/videos',
-    { params }
-  )
+  const response = await request.get<ApiResponse<PageResult<VideoListItem>>>('/videos', { params })
 
   return response.data.data
 }
 
 export async function getVideoDetail(id: number): Promise<VideoDetail> {
-  const response = await request.get<ApiResponse<VideoDetail>>(
-    `/videos/${id}`
-  )
+  const response = await request.get<ApiResponse<VideoDetail>>(`/videos/${id}`)
 
   return response.data.data
 }
@@ -89,10 +82,12 @@ export async function reportVideoView(id: number): Promise<{
   accepted: boolean
   viewCount: number
 }> {
-  const response = await request.post<ApiResponse<{
-    accepted: boolean
-    viewCount: number
-  }>>(`/videos/${id}/views`)
+  const response = await request.post<
+    ApiResponse<{
+      accepted: boolean
+      viewCount: number
+    }>
+  >(`/videos/${id}/views`)
   return response.data.data
 }
 
@@ -127,9 +122,7 @@ export async function getHotVideos(limit = 12): Promise<VideoListItem[]> {
   return response.data.data
 }
 
-export async function getInteractionStatus(
-  videoId: number
-): Promise<InteractionStatus> {
+export async function getInteractionStatus(videoId: number): Promise<InteractionStatus> {
   const response = await request.get<ApiResponse<InteractionStatus>>(
     `/videos/${videoId}/interaction`
   )
@@ -190,9 +183,6 @@ export async function getCommentReplies(
   return response.data.data
 }
 
-export async function deleteComment(
-  videoId: number,
-  commentId: string
-): Promise<void> {
+export async function deleteComment(videoId: number, commentId: string): Promise<void> {
   await request.delete(`/videos/${videoId}/comments/${commentId}`)
 }

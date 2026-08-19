@@ -40,13 +40,10 @@ export async function reviewVideo(
   action: 'APPROVE' | 'REJECT',
   rejectReason?: string
 ): Promise<void> {
-  await request.post<ApiResponse<null>>(
-    `/admin/videos/${videoId}/review`,
-    {
-      action,
-      rejectReason
-    }
-  )
+  await request.post<ApiResponse<null>>(`/admin/videos/${videoId}/review`, {
+    action,
+    rejectReason
+  })
 }
 
 export interface AdminUpdateVideoRequest {
@@ -62,10 +59,9 @@ export async function getAllVideos(params: {
   page: number
   size: number
 }): Promise<PageResult<AdminVideoReview>> {
-  const response = await request.get<ApiResponse<PageResult<AdminVideoReview>>>(
-    '/admin/videos',
-    { params }
-  )
+  const response = await request.get<ApiResponse<PageResult<AdminVideoReview>>>('/admin/videos', {
+    params
+  })
 
   return response.data.data
 }
@@ -158,8 +154,15 @@ export interface AdminComment {
   deletedAt?: string
 }
 
-export async function getAdminComments(params: { page: number; size: number; keyword?: string; status?: number }): Promise<PageResult<AdminComment>> {
-  const response = await request.get<ApiResponse<PageResult<AdminComment>>>('/admin/comments', { params })
+export async function getAdminComments(params: {
+  page: number
+  size: number
+  keyword?: string
+  status?: number
+}): Promise<PageResult<AdminComment>> {
+  const response = await request.get<ApiResponse<PageResult<AdminComment>>>('/admin/comments', {
+    params
+  })
   return response.data.data
 }
 

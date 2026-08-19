@@ -3,11 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import {
-  getNotifications,
-  markNotificationRead,
-  type NotificationItem
-} from '../api/notification'
+import { getNotifications, markNotificationRead, type NotificationItem } from '../api/notification'
 import SiteHeader from '../components/SiteHeader.vue'
 
 const router = useRouter()
@@ -17,9 +13,7 @@ const page = ref(1)
 const size = ref(20)
 const total = ref(0)
 
-const unreadCount = computed(
-  () => notifications.value.filter(item => item.isRead === 0).length
-)
+const unreadCount = computed(() => notifications.value.filter((item) => item.isRead === 0).length)
 
 function requireLogin() {
   if (localStorage.getItem('token')) return true
@@ -30,11 +24,11 @@ function requireLogin() {
 
 function getTypeText(item: NotificationItem) {
   if (item.type === 'LIKE') return `${item.actorNickname || `用户 ${item.actorId}`} 点赞了你的视频`
-  if (item.type === 'FAVORITE') return `${item.actorNickname || `用户 ${item.actorId}`} 收藏了你的视频`
+  if (item.type === 'FAVORITE')
+    return `${item.actorNickname || `用户 ${item.actorId}`} 收藏了你的视频`
   if (item.type === 'REVIEW_TIMEOUT') return '你的视频等待审核已超时'
-  if (item.type === 'VIDEO_REJECTED') return item.videoTitle
-    ? `你的视频《${item.videoTitle}》审核未通过`
-    : '你的视频审核未通过'
+  if (item.type === 'VIDEO_REJECTED')
+    return item.videoTitle ? `你的视频《${item.videoTitle}》审核未通过` : '你的视频审核未通过'
   const actor = item.actorNickname || `用户 ${item.actorId}`
   const map = {
     FOLLOW: `${actor} 关注了你`,
@@ -183,7 +177,9 @@ onMounted(() => {
                     <span v-if="item.isRead === 0" class="unread-badge">未读</span>
                   </div>
                   <p v-if="item.content">
-                    {{ item.type === 'VIDEO_REJECTED' ? `驳回原因：${item.content}` : item.content }}
+                    {{
+                      item.type === 'VIDEO_REJECTED' ? `驳回原因：${item.content}` : item.content
+                    }}
                   </p>
                   <time>{{ formatDate(item.createTime) }}</time>
                 </div>
@@ -210,33 +206,150 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.notification-page { min-height: 100vh; background: #f6f7f8; color: #18191c; }
-.header { height: 64px; background: #fff; border-bottom: 1px solid #e7e7e7; }
-.header-content, .container { width: min(900px, calc(100% - 48px)); margin: 0 auto; }
-.header-content { height: 100%; display: flex; align-items: center; justify-content: space-between; }
-.logo { border: 0; background: transparent; color: #1677ff; font-size: 22px; font-weight: 700; cursor: pointer; }
-.container { padding: 32px 0 48px; }
-.title-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
-.title-row h1 { margin: 0 0 7px; font-size: 25px; }
-.title-row p { margin: 0; color: #9499a0; font-size: 14px; }
-.notification-list { overflow: hidden; border-radius: 12px; background: #fff; }
-.notification-item { position: relative; display: flex; align-items: center; gap: 14px; padding: 20px 22px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
-.notification-item:last-child { border-bottom: 0; }
-.notification-item:hover { background: #fafcff; }
-.notification-item.unread { background: #f3f8ff; }
-.notification-dot { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: transparent; }
-.unread .notification-dot { background: #1677ff; }
-.notification-content { min-width: 0; flex: 1; }
-.notification-title { display: flex; align-items: center; gap: 9px; }
-.notification-title strong { font-size: 15px; }
-.notification-content p { overflow: hidden; margin: 8px 0; color: #61666d; text-overflow: ellipsis; white-space: nowrap; }
-.notification-content span { color: #9499a0; font-size: 13px; }
-.arrow { color: #9499a0; }
-.pagination { display: flex; justify-content: center; margin-top: 26px; }
-@media (max-width: 650px) { .header-content, .container { width: min(100% - 28px, 900px); } .notification-item { padding: 16px; } }
-</style>
+.notification-page {
+  min-height: 100vh;
+  background: #f6f7f8;
+  color: #18191c;
+}
 
-<style scoped>
+.header {
+  height: 64px;
+  background: #fff;
+  border-bottom: 1px solid #e7e7e7;
+}
+
+.header-content,
+.container {
+  width: min(900px, calc(100% - 48px));
+  margin: 0 auto;
+}
+
+.header-content {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logo {
+  border: 0;
+  background: transparent;
+  color: #1677ff;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.container {
+  padding: 32px 0 48px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.title-row h1 {
+  margin: 0 0 7px;
+  font-size: 25px;
+}
+
+.title-row p {
+  margin: 0;
+  color: #9499a0;
+  font-size: 14px;
+}
+
+.notification-list {
+  overflow: hidden;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.notification-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 20px 22px;
+  border-bottom: 1px solid #f0f0f0;
+  cursor: pointer;
+}
+
+.notification-item:last-child {
+  border-bottom: 0;
+}
+
+.notification-item:hover {
+  background: #fafcff;
+}
+
+.notification-item.unread {
+  background: #f3f8ff;
+}
+
+.notification-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: transparent;
+}
+
+.unread .notification-dot {
+  background: #1677ff;
+}
+
+.notification-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.notification-title {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.notification-title strong {
+  font-size: 15px;
+}
+
+.notification-content p {
+  overflow: hidden;
+  margin: 8px 0;
+  color: #61666d;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notification-content span {
+  color: #9499a0;
+  font-size: 13px;
+}
+
+.arrow {
+  color: #9499a0;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 26px;
+}
+
+@media (max-width: 650px) {
+  .header-content,
+  .container {
+    width: min(100% - 28px, 900px);
+  }
+
+  .notification-item {
+    padding: 16px;
+  }
+}
 .notification-page {
   min-height: 100vh;
   background: var(--vn-page);
@@ -380,7 +493,7 @@ onMounted(() => {
   outline: none;
   background: #fff;
   cursor: pointer;
-  transition: background .2s;
+  transition: background 0.2s;
 }
 
 .notification-item:last-child {
@@ -394,7 +507,7 @@ onMounted(() => {
 }
 
 .notification-item.unread::before {
-  content: "";
+  content: '';
   position: absolute;
   top: 18px;
   bottom: 18px;

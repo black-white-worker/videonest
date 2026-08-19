@@ -29,19 +29,13 @@ export interface CreateVideoResult {
   status: string
 }
 
-async function uploadFile(
-  type: 'cover' | 'video',
-  file: File
-): Promise<UploadResult> {
-  const credential = await request.post<ApiResponse<UploadPresignResult>>(
-    '/files/presign',
-    {
-      type,
-      fileName: file.name,
-      contentType: file.type,
-      size: file.size
-    }
-  )
+async function uploadFile(type: 'cover' | 'video', file: File): Promise<UploadResult> {
+  const credential = await request.post<ApiResponse<UploadPresignResult>>('/files/presign', {
+    type,
+    fileName: file.name,
+    contentType: file.type,
+    size: file.size
+  })
   const upload = credential.data.data
   const putResponse = await fetch(upload.uploadUrl, {
     method: upload.method,
@@ -63,17 +57,12 @@ export function uploadVideo(file: File): Promise<UploadResult> {
   return uploadFile('video', file)
 }
 
-export async function createVideo(
-  data: CreateVideoRequest
-): Promise<CreateVideoResult> {
-  const response = await request.post<ApiResponse<CreateVideoResult>>(
-    '/creator/videos',
-    data
-  )
+export async function createVideo(data: CreateVideoRequest): Promise<CreateVideoResult> {
+  const response = await request.post<ApiResponse<CreateVideoResult>>('/creator/videos', data)
 
   return response.data.data
 }
 
 export function uploadCover(file: File): Promise<string> {
-  return uploadFile('cover', file).then(result => result.objectName)
+  return uploadFile('cover', file).then((result) => result.objectName)
 }

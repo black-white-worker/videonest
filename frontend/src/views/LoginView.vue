@@ -45,11 +45,7 @@ async function handleLogin() {
 }
 
 async function handleRegister() {
-  if (
-    !registerForm.username ||
-    !registerForm.password ||
-    !registerForm.nickname
-  ) {
+  if (!registerForm.username || !registerForm.password || !registerForm.nickname) {
     ElMessage.warning('请填写完整注册信息')
     return
   }
@@ -107,7 +103,11 @@ async function handleRegister() {
         </div>
         <div class="auth-heading">
           <h2>{{ activeTab === 'login' ? '欢迎回来' : '加入 VideoNest' }}</h2>
-          <p>{{ activeTab === 'login' ? '登录后继续探索感兴趣的内容' : '创建账号，开启你的视频旅程' }}</p>
+          <p>
+            {{
+              activeTab === 'login' ? '登录后继续探索感兴趣的内容' : '创建账号，开启你的视频旅程'
+            }}
+          </p>
         </div>
 
         <el-tabs v-model="activeTab" stretch class="auth-tabs">
@@ -202,7 +202,7 @@ async function handleRegister() {
   position: relative;
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(420px, 1.08fr) minmax(420px, .92fr);
+  grid-template-columns: minmax(420px, 1.08fr) minmax(420px, 0.92fr);
   overflow: hidden;
   background: #fff;
 }
@@ -363,7 +363,7 @@ async function handleRegister() {
 .auth-heading h2 {
   margin: 0 0 8px;
   font-size: 30px;
-  letter-spacing: -.8px;
+  letter-spacing: -0.8px;
 }
 
 .auth-heading p,
@@ -402,8 +402,7 @@ async function handleRegister() {
   .auth-page {
     grid-template-columns: 1fr;
     background:
-      radial-gradient(circle at 10% 8%, rgb(118 223 255 / 20%), transparent 35%),
-      var(--vn-page);
+      radial-gradient(circle at 10% 8%, rgb(118 223 255 / 20%), transparent 35%), var(--vn-page);
   }
 
   .brand-panel {

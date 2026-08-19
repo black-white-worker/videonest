@@ -3,11 +3,7 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import AdminShell from '../components/AdminShell.vue'
-import {
-  getDeletedVideos,
-  purgeDeletedVideo,
-  type DeletedVideo
-} from '../api/admin'
+import { getDeletedVideos, purgeDeletedVideo, type DeletedVideo } from '../api/admin'
 
 const router = useRouter()
 const videos = ref<DeletedVideo[]>([])

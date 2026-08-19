@@ -3,7 +3,12 @@ import { onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import AdminShell from '../components/AdminShell.vue'
-import { deleteAdminComment, getAdminComments, restoreAdminComment, type AdminComment } from '../api/admin'
+import {
+  deleteAdminComment,
+  getAdminComments,
+  restoreAdminComment,
+  type AdminComment
+} from '../api/admin'
 
 const router = useRouter()
 const comments = ref<AdminComment[]>([])
@@ -29,7 +34,12 @@ function ensureAdmin() {
 async function loadComments() {
   try {
     loading.value = true
-    const result = await getAdminComments({ page: page.value, size: size.value, keyword: keyword.value.trim() || undefined, status: status.value === '' ? undefined : Number(status.value) })
+    const result = await getAdminComments({
+      page: page.value,
+      size: size.value,
+      keyword: keyword.value.trim() || undefined,
+      status: status.value === '' ? undefined : Number(status.value)
+    })
     comments.value = result.records
     total.value = result.total
   } catch (error) {
@@ -41,13 +51,18 @@ async function loadComments() {
 
 async function removeComment(comment: AdminComment) {
   try {
-    await ElMessageBox.confirm(`确定删除这条评论吗？${comment.parentId === '0' ? '其下回复也会一并删除。' : ''}`, '删除评论', { type: 'warning' })
+    await ElMessageBox.confirm(
+      `确定删除这条评论吗？${comment.parentId === '0' ? '其下回复也会一并删除。' : ''}`,
+      '删除评论',
+      { type: 'warning' }
+    )
     loading.value = true
     await deleteAdminComment(comment.id)
     ElMessage.success('评论已移入回收站')
     await loadComments()
   } catch (error) {
-    if (error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '删除失败')
+    if (error !== 'cancel' && error !== 'close')
+      ElMessage.error(error instanceof Error ? error.message : '删除失败')
   } finally {
     loading.value = false
   }
@@ -63,7 +78,10 @@ async function restoreComment(comment: AdminComment) {
   }
 }
 
-function search() { page.value = 1; loadComments() }
+function search() {
+  page.value = 1
+  loadComments()
+}
 function goBack() {
   if (window.history.length > 1) {
     router.back()
@@ -71,8 +89,12 @@ function goBack() {
   }
   router.push('/')
 }
-function formatDate(value?: string) { return value ? new Date(value).toLocaleString('zh-CN') : '-' }
-onMounted(() => { if (ensureAdmin()) loadComments() })
+function formatDate(value?: string) {
+  return value ? new Date(value).toLocaleString('zh-CN') : '-'
+}
+onMounted(() => {
+  if (ensureAdmin()) loadComments()
+})
 </script>
 
 <template>
@@ -101,7 +123,9 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
         <div class="overview-detail">
           <span>
             <small>内容范围</small>
-            <strong>{{ status === '1' ? '正常评论' : status === '0' ? '已删除评论' : '全部评论' }}</strong>
+            <strong>{{
+              status === '1' ? '正常评论' : status === '0' ? '已删除评论' : '全部评论'
+            }}</strong>
           </span>
           <span>
             <small>当前页码</small>
@@ -138,12 +162,7 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
       </header>
 
       <div class="table-wrap">
-        <el-table
-          :data="comments"
-          v-loading="loading"
-          empty-text="暂无评论"
-          row-key="id"
-        >
+        <el-table :data="comments" v-loading="loading" empty-text="暂无评论" row-key="id">
           <el-table-column label="评论内容" min-width="300">
             <template #default="{ row }">
               <div class="comment-cell">
@@ -168,7 +187,12 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="videoTitle" label="所属视频" min-width="190" show-overflow-tooltip />
+          <el-table-column
+            prop="videoTitle"
+            label="所属视频"
+            min-width="190"
+            show-overflow-tooltip
+          />
           <el-table-column label="状态" width="100">
             <template #default="{ row }">
               <el-tag :type="row.status === 1 ? 'success' : 'info'" effect="light">
@@ -184,17 +208,10 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
           </el-table-column>
           <el-table-column label="操作" width="110" fixed="right">
             <template #default="{ row }">
-              <el-button
-                v-if="row.status === 1"
-                link
-                type="danger"
-                @click="removeComment(row)"
-              >
+              <el-button v-if="row.status === 1" link type="danger" @click="removeComment(row)">
                 删除
               </el-button>
-              <el-button v-else link type="primary" @click="restoreComment(row)">
-                恢复
-              </el-button>
+              <el-button v-else link type="primary" @click="restoreComment(row)"> 恢复 </el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -238,9 +255,7 @@ onMounted(() => { if (ensureAdmin()) loadComments() })
   padding: 18px 22px;
   border: 1px solid #dceff7;
   border-radius: 13px;
-  background:
-    linear-gradient(110deg, #fff 40%, rgb(232 248 255 / 72%)),
-    #fff;
+  background: linear-gradient(110deg, #fff 40%, rgb(232 248 255 / 72%)), #fff;
   box-shadow: 0 5px 18px rgb(0 0 0 / 2%);
 }
 

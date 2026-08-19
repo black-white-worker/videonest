@@ -30,10 +30,7 @@ export async function register(data: RegisterRequest): Promise<void> {
 }
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
-  const response = await request.post<ApiResponse<LoginResponse>>(
-    '/auth/login',
-    data
-  )
+  const response = await request.post<ApiResponse<LoginResponse>>('/auth/login', data)
 
   return response.data.data
 }
