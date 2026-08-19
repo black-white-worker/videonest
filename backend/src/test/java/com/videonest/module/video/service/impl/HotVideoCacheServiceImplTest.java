@@ -20,6 +20,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -63,10 +65,15 @@ class HotVideoCacheServiceImplTest {
         );
 
         List<VideoListItemVO> result = service.getHotVideos(1);
+        List<VideoListItemVO> secondResult = service.getHotVideos(1);
 
         assertEquals(List.of(9L), result.stream()
                 .map(VideoListItemVO::getId)
                 .toList());
+        assertEquals(List.of(9L), secondResult.stream()
+                .map(VideoListItemVO::getId)
+                .toList());
+        verify(valueOperations, times(1)).get(RedisKeys.VIDEO_HOT_CARDS_KEY);
         verifyNoInteractions(hotRankService, videoMapper, minioService);
     }
 }

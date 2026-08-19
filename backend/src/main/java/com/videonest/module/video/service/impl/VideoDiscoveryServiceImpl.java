@@ -11,6 +11,7 @@ import com.videonest.module.video.service.HotRankService;
 import com.videonest.module.video.service.HotVideoCacheService;
 import com.videonest.module.video.service.VideoDiscoveryService;
 import com.videonest.module.video.service.VideoViewCountService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.videonest.module.video.vo.VideoDetailVO;
 import com.videonest.module.video.vo.VideoListItemVO;
 import com.videonest.module.video.vo.VideoViewReportVO;
@@ -64,8 +65,10 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     private final HotRankService hotRankService;
     private final HotVideoCacheService hotVideoCacheService;
     private final VideoViewCountService videoViewCountService;
+    private final VideoListCacheService videoListCacheService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
+    private final Object firstPageRebuildMonitor = new Object();
 
     public VideoDiscoveryServiceImpl(
             VideoMapper videoMapper,
@@ -73,6 +76,7 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
             HotRankService hotRankService,
             HotVideoCacheService hotVideoCacheService,
             VideoViewCountService videoViewCountService,
+            VideoListCacheService videoListCacheService,
             RedisTemplate<String, Object> redisTemplate,
             StringRedisTemplate stringRedisTemplate
     ) {
@@ -81,6 +85,7 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
         this.hotRankService = hotRankService;
         this.hotVideoCacheService = hotVideoCacheService;
         this.videoViewCountService = videoViewCountService;
+        this.videoListCacheService = videoListCacheService;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
     }
@@ -96,17 +101,49 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     public PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId, String keyword, long page, long size
     ) {
+        String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
+        boolean cacheable = page == 1 && normalizedKeyword == null;
+        if (cacheable) {
+            PageResult<VideoListItemVO> cached = videoListCacheService.getFirstPage(
+                    categoryId, size
+            );
+            if (cached != null) {
+                return cached;
+            }
+            synchronized (firstPageRebuildMonitor) {
+                cached = videoListCacheService.getFirstPage(categoryId, size);
+                if (cached != null) {
+                    return cached;
+                }
+                PageResult<VideoListItemVO> rebuilt = queryPublishedVideos(
+                        categoryId, null, page, size
+                );
+                videoListCacheService.putFirstPage(categoryId, size, rebuilt);
+                return rebuilt;
+            }
+        }
+
+        return queryPublishedVideos(categoryId, normalizedKeyword, page, size);
+    }
+
+    private PageResult<VideoListItemVO> queryPublishedVideos(
+            Long categoryId, String keyword, long page, long size
+    ) {
         Page<VideoListItemVO> pageRequest = new Page<>(page, size);
+        pageRequest.setSearchCount(false);
+        long total = videoMapper.countPublishedVideos(categoryId, keyword);
         IPage<VideoListItemVO> pageData = videoMapper.selectPublishedPage(
                 pageRequest,
                 categoryId,
-                StringUtils.hasText(keyword) ? keyword.trim() : null
+                keyword
         );
+        pageData.setTotal(total);
         // 遍历列表，把数据库存储的MinIO对象名，转换为带签名的临时访问url
         pageData.getRecords().forEach(video ->
                 video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()))
         );
-        return PageResult.of(pageData);
+        PageResult<VideoListItemVO> result = PageResult.of(pageData);
+        return result;
     }
 
     /**
@@ -150,14 +187,9 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     public VideoViewReportVO recordView(
             Long videoId, String viewerKey, String ipHash, boolean anonymous
     ) {
-        // 查询数据库中持久化的播放基数
-        Long persistedCount = videoMapper.selectPublishedViewCountById(videoId);
-        if (persistedCount == null) {
-            throw new BusinessException(404, "视频不存在");
-        }
         // Redis集合做播放去重，判断本次播放是否有效
         VideoViewCountService.ViewRecordResult result = videoViewCountService.recordView(
-                videoId, persistedCount, viewerKey, ipHash, anonymous
+                videoId, viewerKey, ipHash, anonymous
         );
         // 如果是有效播放，给视频增加热度分数，用于热门榜单计算
         if (result.accepted()) {

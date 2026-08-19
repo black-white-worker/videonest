@@ -2,7 +2,12 @@
 const http = require('node:http');
 const { performance } = require('node:perf_hooks');
 
-const [baseUrlText = 'http://127.0.0.1', concurrencyText = '100', durationText = '60'] = process.argv.slice(2);
+const [
+  baseUrlText = 'http://127.0.0.1',
+  concurrencyText = '100',
+  durationText = '60',
+  commentVideoIdText = '1'
+] = process.argv.slice(2);
 const baseUrl = new URL(baseUrlText);
 const concurrency = Number.parseInt(concurrencyText, 10);
 const durationMs = Number.parseInt(durationText, 10) * 1000;
@@ -11,7 +16,7 @@ const scenarios = [
   { name: 'hot', path: '/api/videos/hot?limit=10', weight: 35 },
   { name: 'video-list', path: '/api/videos?page=1&size=12', weight: 35 },
   { name: 'categories', path: '/api/categories', weight: 15 },
-  { name: 'comments', path: '/api/videos/1/comments?page=1&size=10', weight: 15 }
+  { name: 'comments', path: `/api/videos/${encodeURIComponent(commentVideoIdText)}/comments?page=1&size=10`, weight: 15 }
 ];
 
 if (!Number.isInteger(concurrency) || concurrency < 1 || !Number.isFinite(durationMs) || durationMs < 1000) {

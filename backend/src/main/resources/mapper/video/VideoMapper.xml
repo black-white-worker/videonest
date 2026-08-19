@@ -18,7 +18,6 @@
         SELECT
         v.id,
         v.title,
-        v.description,
         COALESCE(
             v.cover_list_url,
             v.cover_detail_url,
@@ -53,6 +52,20 @@
         </if>
 
         ORDER BY v.publish_time DESC, v.id DESC
+    </select>
+
+    <!-- COUNT 只访问 video 表，避免分页插件对展示 JOIN 做无意义统计。 -->
+    <select id="countPublishedVideos" resultType="long">
+        SELECT COUNT(*)
+        FROM video v
+        WHERE v.status = 'PUBLISHED'
+          AND v.is_deleted = 0
+        <if test="categoryId != null">
+            AND v.category_id = #{categoryId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND v.title LIKE CONCAT('%', #{keyword}, '%')
+        </if>
     </select>
 
     <!--

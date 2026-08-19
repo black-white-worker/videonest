@@ -11,6 +11,7 @@ import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.mapper.VideoMapper;
 import com.videonest.module.video.service.HotVideoCacheService;
 import com.videonest.module.video.service.VideoReviewService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.videonest.module.video.vo.AdminVideoReviewVO;
 import com.videonest.security.LoginUser;
 import com.videonest.security.SecurityUtils;
@@ -35,17 +36,20 @@ public class VideoReviewServiceImpl implements VideoReviewService {
     private final VideoMapper videoMapper;
     private final MinioService minioService;
     private final HotVideoCacheService hotVideoCacheService;
+    private final VideoListCacheService videoListCacheService;
     private final ApplicationEventPublisher applicationEventPublisher;
 
     public VideoReviewServiceImpl(
             VideoMapper videoMapper,
             MinioService minioService,
             HotVideoCacheService hotVideoCacheService,
+            VideoListCacheService videoListCacheService,
             ApplicationEventPublisher applicationEventPublisher
     ) {
         this.videoMapper = videoMapper;
         this.minioService = minioService;
         this.hotVideoCacheService = hotVideoCacheService;
+        this.videoListCacheService = videoListCacheService;
         this.applicationEventPublisher = applicationEventPublisher;
     }
 
@@ -139,6 +143,7 @@ public class VideoReviewServiceImpl implements VideoReviewService {
     private void invalidateHotVideoCardsAfterCommit() {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             hotVideoCacheService.invalidateCards();
+            videoListCacheService.invalidateAll();
             return;
         }
         TransactionSynchronizationManager.registerSynchronization(
@@ -146,6 +151,7 @@ public class VideoReviewServiceImpl implements VideoReviewService {
                     @Override
                     public void afterCommit() {
                         hotVideoCacheService.invalidateCards();
+                        videoListCacheService.invalidateAll();
                     }
                 }
         );

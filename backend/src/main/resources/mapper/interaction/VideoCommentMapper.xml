@@ -17,24 +17,27 @@
         vc.content,
         vc.created_at AS createdAt,
         u.username,
-        u.nickname,
-            -- COALESCE(字段,默认值)：如果子查询没有统计到回复数，返回0，避免null赋值给VO
-        COALESCE(reply_count.replyCount, 0) AS replyCount
+        u.nickname
         FROM video_comment vc
         INNER JOIN sys_user u ON vc.user_id = u.id
-            -- 左连接一个子查询结果集，用来统计每条一级评论下面有多少条子回复
-        LEFT JOIN (
-            SELECT root_id, COUNT(1) AS replyCount
-            FROM video_comment
-            WHERE status = 1
-            AND video_id = #{videoId}
-            AND parent_id &lt;&gt; 0
-            GROUP BY root_id
-        ) reply_count ON reply_count.root_id = vc.id
         WHERE vc.video_id = #{videoId}
         AND vc.parent_id = 0
         AND vc.status = 1
         ORDER BY vc.created_at DESC, vc.id DESC
+    </select>
+
+    <!-- 只统计当前页出现的根评论，避免每次分页都聚合该视频的全部回复。 -->
+    <select id="selectReplyCounts"
+            resultType="com.videonest.module.interaction.vo.CommentReplyCountVO">
+        SELECT root_id AS rootId, COUNT(1) AS replyCount
+        FROM video_comment
+        WHERE video_id = #{videoId}
+          AND status = 1
+          AND root_id IN
+        <foreach collection="rootIds" item="rootId" open="(" separator="," close=")">
+            #{rootId}
+        </foreach>
+        GROUP BY root_id
     </select>
 
     <!-- 某条一级评论下的回复分页 -->

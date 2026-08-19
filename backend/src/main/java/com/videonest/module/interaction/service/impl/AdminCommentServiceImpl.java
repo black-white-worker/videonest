@@ -8,9 +8,12 @@ import com.videonest.module.interaction.entity.VideoComment;
 import com.videonest.module.interaction.mapper.AdminCommentMapper;
 import com.videonest.module.interaction.mapper.VideoCommentMapper;
 import com.videonest.module.interaction.service.AdminCommentService;
+import com.videonest.module.interaction.service.CommentListCacheService;
 import com.videonest.module.interaction.vo.AdminCommentVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,11 +26,14 @@ import lombok.extern.slf4j.Slf4j;
 public class AdminCommentServiceImpl implements AdminCommentService {
     private final AdminCommentMapper adminCommentMapper;
     private final VideoCommentMapper videoCommentMapper;
+    private final CommentListCacheService commentListCacheService;
 
     public AdminCommentServiceImpl(AdminCommentMapper adminCommentMapper,
-                                   VideoCommentMapper videoCommentMapper) {
+                                   VideoCommentMapper videoCommentMapper,
+                                   CommentListCacheService commentListCacheService) {
         this.adminCommentMapper = adminCommentMapper;
         this.videoCommentMapper = videoCommentMapper;
+        this.commentListCacheService = commentListCacheService;
     }
 
     /**
@@ -70,6 +76,7 @@ public class AdminCommentServiceImpl implements AdminCommentService {
             // 判断是否为主评论：parentId=0代表一级根评论，需要连带删除所有下级回复
             videoCommentMapper.softDeleteRepliesByRootId(commentId);
         }
+        invalidateCommentCacheAfterCommit(comment.getVideoId());
         log.info("管理员软删除评论成功，commentId={}", commentId);
     }
 
@@ -98,6 +105,22 @@ public class AdminCommentServiceImpl implements AdminCommentService {
         if (comment.getParentId() == 0) {
             videoCommentMapper.restoreRepliesByRootId(commentId);
         }
+        invalidateCommentCacheAfterCommit(comment.getVideoId());
         log.info("管理员恢复评论成功，commentId={}", commentId);
+    }
+
+    private void invalidateCommentCacheAfterCommit(Long videoId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            commentListCacheService.invalidate(videoId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        commentListCacheService.invalidate(videoId);
+                    }
+                }
+        );
     }
 }

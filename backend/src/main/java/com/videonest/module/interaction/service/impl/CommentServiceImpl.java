@@ -9,6 +9,8 @@ import com.videonest.module.interaction.dto.CommentCreateRequest;
 import com.videonest.module.interaction.entity.VideoComment;
 import com.videonest.module.interaction.mapper.VideoCommentMapper;
 import com.videonest.module.interaction.service.CommentService;
+import com.videonest.module.interaction.service.CommentListCacheService;
+import com.videonest.module.interaction.vo.CommentReplyCountVO;
 import com.videonest.module.interaction.vo.VideoCommentVO;
 import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.mapper.VideoMapper;
@@ -21,9 +23,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -53,19 +60,22 @@ public class CommentServiceImpl implements CommentService {
     private final HotRankService hotRankService;
     private final StringRedisTemplate stringRedisTemplate;
     private final ApplicationEventPublisher eventPublisher;
+    private final CommentListCacheService commentListCacheService;
 
     public CommentServiceImpl(
             VideoMapper videoMapper,
             VideoCommentMapper videoCommentMapper,
             HotRankService hotRankService,
             StringRedisTemplate stringRedisTemplate,
-            ApplicationEventPublisher eventPublisher
+            ApplicationEventPublisher eventPublisher,
+            CommentListCacheService commentListCacheService
     ) {
         this.videoMapper = videoMapper;
         this.videoCommentMapper = videoCommentMapper;
         this.hotRankService = hotRankService;
         this.stringRedisTemplate = stringRedisTemplate;
         this.eventPublisher = eventPublisher;
+        this.commentListCacheService = commentListCacheService;
     }
 
     /**
@@ -127,6 +137,7 @@ public class CommentServiceImpl implements CommentService {
         // 写入评论数据到数据库
         videoCommentMapper.insert(comment);
         hotRankService.addCommentScore(videoId);
+        invalidateCommentCacheAfterCommit(videoId);
 
         // 查询视频信息拿到作者ID
         Video video = videoMapper.selectById(videoId);
@@ -178,12 +189,39 @@ public class CommentServiceImpl implements CommentService {
         // 校验合法
         validatePublishedVideo(videoId);
 
-        // 用户信息和回复数由一条分页 SQL 批量带回，避免每条评论各查两次的 N+1。
+        if (page == 1) {
+            PageResult<VideoCommentVO> cached = commentListCacheService.getFirstPage(
+                    videoId, size
+            );
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        // 先分页取当前页根评论，再仅统计这些根评论的回复数，避免聚合全视频回复。
         Page<VideoCommentVO> pageRequest = new Page<>(page, size);
-        // 调用Mapper自定义分页SQL查询一级评论，封装为统一分页返回体PageResult
-        return PageResult.of(
-                videoCommentMapper.selectCommentPage(pageRequest, videoId)
+        IPage<VideoCommentVO> pageData = videoCommentMapper.selectCommentPage(
+                pageRequest, videoId
         );
+        List<Long> rootIds = pageData.getRecords().stream()
+                .map(VideoCommentVO::getId)
+                .toList();
+        Map<Long, Long> replyCounts = rootIds.isEmpty()
+                ? Map.of()
+                : videoCommentMapper.selectReplyCounts(videoId, rootIds).stream()
+                .collect(Collectors.toMap(
+                        CommentReplyCountVO::getRootId,
+                        CommentReplyCountVO::getReplyCount,
+                        (left, right) -> left
+                ));
+        pageData.getRecords().forEach(comment ->
+                comment.setReplyCount(replyCounts.getOrDefault(comment.getId(), 0L))
+        );
+        PageResult<VideoCommentVO> result = PageResult.of(pageData);
+        if (page == 1) {
+            commentListCacheService.putFirstPage(videoId, size, result);
+        }
+        return result;
     }
 
     /**
@@ -243,6 +281,7 @@ public class CommentServiceImpl implements CommentService {
             videoCommentMapper.softDeleteById(commentId);
             // 根据根评论ID批量逻辑删除该一级评论下所有嵌套回复
             videoCommentMapper.softDeleteRepliesByRootId(commentId);
+            invalidateCommentCacheAfterCommit(comment.getVideoId());
             log.info("管理员删除一级评论及回复成功，commentId={}", commentId);
             return;
         }
@@ -264,6 +303,9 @@ public class CommentServiceImpl implements CommentService {
         if (comment != null && comment.getParentId() == 0) {
             videoCommentMapper.softDeleteRepliesByRootId(commentId);
         }
+        if (comment != null) {
+            invalidateCommentCacheAfterCommit(comment.getVideoId());
+        }
         log.info("用户删除评论成功，commentId={}，userId={}", commentId, currentUser.userId());
     }
 
@@ -272,14 +314,27 @@ public class CommentServiceImpl implements CommentService {
      * @param videoId 视频主键ID
      */
     private void validatePublishedVideo(Long videoId) {
-        Video video = videoMapper.selectById(videoId);
-
-        if (video == null || !"PUBLISHED".equals(video.getStatus())) {
+        if (videoMapper.selectPublishedViewCountById(videoId) == null) {
             throw new BusinessException(
                     404,
                     "视频不存在、未发布或已下架"
             );
         }
+    }
+
+    private void invalidateCommentCacheAfterCommit(Long videoId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            commentListCacheService.invalidate(videoId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        commentListCacheService.invalidate(videoId);
+                    }
+                }
+        );
     }
 
     /**

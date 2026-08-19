@@ -39,7 +39,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 `
 
 如果 SSH 使用密码登录，省略 `-IdentityFile`。非默认 SSH 端口可增加 `-SshPort 端口号`。
 
-脚本会依次执行测试、本机打包、上传、服务器数据库备份、后端/前端产物封装、容器更新和健康检查。它不会重新构建 RabbitMQ，也不会下载 FFmpeg。数据库结构由 Flyway 自动迁移，不再手工执行 `sql` 目录中的脚本。已有 MySQL、MinIO、Redis 和 RabbitMQ 命名卷不会被删除。
+脚本会依次执行测试、本机打包、上传、服务器数据库备份、后端/前端产物封装、容器更新和健康检查。启动后还会比较本机打包的 `frontend/dist` 与前端容器静态目录的整体内容哈希，只有两者一致才算部署成功；不能只根据 `Last-Modified` 判断，因为内容未变化时 Docker 可能复用缓存层。它不会重新构建 RabbitMQ，也不会下载 FFmpeg。数据库结构由 Flyway 自动迁移，不再手工执行 `sql` 目录中的脚本。已有 MySQL、MinIO、Redis 和 RabbitMQ 命名卷不会被删除。
 
 旧数据库如果留下 V5 媒体字段迁移的失败记录，脚本会在备份成功后逐一补齐缺失字段；确认三个字段完整后才修复该条 Flyway 历史。不会删除视频或其他业务数据，也不会修改已经发布的 V5 文件及其校验值。
 

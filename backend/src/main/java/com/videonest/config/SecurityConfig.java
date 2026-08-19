@@ -98,7 +98,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login",
-                                "/api/health"
+                                "/api/health",
+                                "/actuator/health",
+                                "/actuator/prometheus"
                         ).permitAll()
 
                         // 播放满阈值后的计数上报允许匿名访问，服务端另做去重与限频。

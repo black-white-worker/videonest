@@ -10,7 +10,6 @@ public interface VideoViewCountService {
     /**
      * 记录一次视频播放行为
      * @param videoId 视频主键ID
-     * @param persistedCount 数据库中已经持久化保存的播放数（DB里真实值）
      * @param viewerKey 观看者唯一标识：登录用户用userId，匿名用户生成唯一字符串
      * @param ipHash 用户IP经过哈希处理后的字符串，用于匿名用户防重复播放统计
      * @param anonymous 是否为匿名访客 true=未登录，false=登录用户
@@ -18,7 +17,6 @@ public interface VideoViewCountService {
      */
     ViewRecordResult recordView(
             Long videoId,
-            long persistedCount,
             String viewerKey,
             String ipHash,
             boolean anonymous

@@ -82,6 +82,27 @@ function requestStatus(urlText) {
   });
 }
 
+function requestJson(urlText) {
+  const url = new URL(urlText);
+  const transport = url.protocol === 'https:' ? https : http;
+  return new Promise((resolve, reject) => {
+    const request = transport.request(url, { method: 'GET', timeout: 10_000, headers: { Accept: 'application/json' } }, (response) => {
+      const chunks = [];
+      response.on('data', (chunk) => chunks.push(chunk));
+      response.on('end', () => {
+        try {
+          resolve({ status: response.statusCode || 0, body: JSON.parse(Buffer.concat(chunks).toString('utf8')) });
+        } catch (error) {
+          reject(new Error(`invalid JSON response: ${error.message}`));
+        }
+      });
+    });
+    request.on('timeout', () => request.destroy(new Error('health-check timeout')));
+    request.on('error', reject);
+    request.end();
+  });
+}
+
 function metric(result, key) {
   return result?.[key] ?? result?.total?.[key] ?? '-';
 }
@@ -125,7 +146,7 @@ function writeArtifacts(run) {
   fs.writeFileSync(run.reportPath, composeReport(run), 'utf8');
 }
 
-function specs(options) {
+function specs(options, commentVideoId) {
   const standardDuration = options.quick ? 10 : 20;
   const hotLevels = options.quick ? [100] : [50, 100, 200, 400, 800];
   const listLevels = options.quick ? [100] : [50, 100, 200, 400];
@@ -135,10 +156,10 @@ function specs(options) {
     ...hotLevels.map((concurrency) => ({ group: 'hot', name: `热门视频（${concurrency} 并发）`, script: 'benchmark-read.js', url: endpoint(options.baseUrl, '/api/videos/hot?limit=10'), concurrency, duration: standardDuration })),
     ...listLevels.map((concurrency) => ({ group: 'list', name: `视频列表（${concurrency} 并发）`, script: 'benchmark-read.js', url: endpoint(options.baseUrl, '/api/videos?page=1&size=12'), concurrency, duration: standardDuration })),
     { group: 'other', name: '分类列表', script: 'benchmark-read.js', url: endpoint(options.baseUrl, '/api/categories'), concurrency: 100, duration: standardDuration },
-    { group: 'other', name: '评论列表', script: 'benchmark-read.js', url: endpoint(options.baseUrl, '/api/videos/1/comments?page=1&size=10'), concurrency: 100, duration: standardDuration },
+    { group: 'other', name: '评论列表', script: 'benchmark-read.js', url: endpoint(options.baseUrl, `/api/videos/${commentVideoId}/comments?page=1&size=10`), concurrency: 100, duration: standardDuration },
     ...(options.quick
-      ? [{ group: 'mixed', name: '混合只读流量（100 并发）', script: 'benchmark-mixed.js', url: options.baseUrl, concurrency: 100, duration: 30 }]
-      : [100, 200, 400].map((concurrency) => ({ group: 'mixed', name: `混合只读流量（${concurrency} 并发）`, script: 'benchmark-mixed.js', url: options.baseUrl, concurrency, duration: concurrency === 200 ? 60 : 30 })))
+      ? [{ group: 'mixed', name: '混合只读流量（100 并发）', script: 'benchmark-mixed.js', url: options.baseUrl, concurrency: 100, duration: 30, commentVideoId }]
+      : [100, 200, 400].map((concurrency) => ({ group: 'mixed', name: `混合只读流量（${concurrency} 并发）`, script: 'benchmark-mixed.js', url: options.baseUrl, concurrency, duration: concurrency === 200 ? 60 : 30, commentVideoId })))
   ];
   if (!options.skipDirect) output.splice(1, 0, { group: 'edge', name: '热门视频（直连后端）', script: 'benchmark-read.js', url: endpoint(options.backendUrl, '/api/videos/hot?limit=10'), concurrency: 100, duration: standardDuration });
   return output;
@@ -146,7 +167,9 @@ function specs(options) {
 
 function execute(spec) {
   console.log(`\n[压测] ${spec.name}：${spec.concurrency} 并发，${spec.duration} 秒`);
-  const processResult = spawnSync(process.execPath, [path.join(__dirname, spec.script), spec.url, String(spec.concurrency), String(spec.duration)], {
+  const scriptArguments = [path.join(__dirname, spec.script), spec.url, String(spec.concurrency), String(spec.duration)];
+  if (spec.commentVideoId) scriptArguments.push(String(spec.commentVideoId));
+  const processResult = spawnSync(process.execPath, scriptArguments, {
     cwd: projectRoot,
     encoding: 'utf8',
     timeout: (spec.duration + 20) * 1000
@@ -181,12 +204,15 @@ function execute(spec) {
   const healthUrl = endpoint(options.baseUrl, '/api/videos/hot?limit=1');
   console.log(`[预检] ${healthUrl}`);
   try {
-    run.preflight.status = await requestStatus(healthUrl);
+    const health = await requestJson(healthUrl);
+    run.preflight.status = health.status;
     if (run.preflight.status < 200 || run.preflight.status >= 300) throw new Error(`HTTP ${run.preflight.status}`);
+    run.preflight.commentVideoId = health.body?.data?.[0]?.id;
+    if (!run.preflight.commentVideoId) throw new Error('热门视频预检未返回可用于评论压测的真实视频 ID');
   } catch (error) {
     run.preflight.error = error.message;
   }
-  if (!run.preflight.error) run.results = specs(options).map(execute);
+  if (!run.preflight.error) run.results = specs(options, run.preflight.commentVideoId).map(execute);
   run.finishedAt = new Date().toISOString();
   writeArtifacts(run);
   console.log(`\n报告：${run.reportPath}`);

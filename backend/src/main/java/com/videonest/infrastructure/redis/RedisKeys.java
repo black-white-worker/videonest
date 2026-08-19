@@ -47,6 +47,12 @@ public final class RedisKeys {
     public static final String COMMENT_RATE_LIMIT_PREFIX =
             "videonest:comment:limit:";
 
+    public static final String COMMENT_FIRST_PAGE_PREFIX =
+            "videonest:comment:first:v1:";
+
+    public static final String COMMENT_CACHE_KEYS_PREFIX =
+            "videonest:comment:cache-keys:v1:";
+
     /**
      * 用户是否关注另一位用户：
      * videonest:user:follow:status:100:111
@@ -75,6 +81,12 @@ public final class RedisKeys {
      */
     public static final String VIDEO_HOT_CARDS_KEY =
             "videonest:video:hot:cards:v1";
+
+    public static final String VIDEO_LIST_FIRST_PAGE_PREFIX =
+            "videonest:video:list:first:v1:";
+
+    public static final String VIDEO_LIST_CACHE_KEYS_KEY =
+            "videonest:video:list:cache-keys:v1";
 
     public static final String VIDEO_HOT_REFRESH_LOCK =
             "videonest:lock:video-hot-refresh";
@@ -120,6 +132,12 @@ public final class RedisKeys {
 
     public static String videoDetail(Long videoId) {
         return VIDEO_DETAIL_PREFIX + videoId;
+    }
+
+    public static String videoListFirstPage(Long categoryId, long size) {
+        return VIDEO_LIST_FIRST_PAGE_PREFIX
+                + (categoryId == null ? "all" : categoryId)
+                + ":" + size;
     }
 
     public static String videoViewTotal(Long videoId) {
@@ -173,6 +191,14 @@ public final class RedisKeys {
 
     public static String commentRateLimit(Long userId) {
         return COMMENT_RATE_LIMIT_PREFIX + userId;
+    }
+
+    public static String commentFirstPage(Long videoId, long size) {
+        return COMMENT_FIRST_PAGE_PREFIX + videoId + ":" + size;
+    }
+
+    public static String commentCacheKeys(Long videoId) {
+        return COMMENT_CACHE_KEYS_PREFIX + videoId;
     }
 
     public static String userFollowStatus(Long followerId, Long followeeId) {

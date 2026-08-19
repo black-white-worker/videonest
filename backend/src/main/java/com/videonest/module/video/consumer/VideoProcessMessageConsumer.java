@@ -12,6 +12,7 @@ import com.videonest.module.video.event.VideoProcessEvent;
 import com.videonest.module.video.event.ReviewTimeoutEvent;
 import com.videonest.module.video.mapper.VideoMapper;
 import com.videonest.module.video.service.HotVideoCacheService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.springframework.amqp.support.converter.MessageConversionException;
@@ -67,6 +68,7 @@ public class VideoProcessMessageConsumer {
     private final DelayedMessagePublisher delayedMessagePublisher;
     private final RedisTemplate<String, Object> redisTemplate;
     private final HotVideoCacheService hotVideoCacheService;
+    private final VideoListCacheService videoListCacheService;
     private volatile boolean coverBackfillComplete;
 
     public VideoProcessMessageConsumer(
@@ -77,7 +79,8 @@ public class VideoProcessMessageConsumer {
             VideoReviewProperties reviewProperties,
             DelayedMessagePublisher delayedMessagePublisher,
             RedisTemplate<String, Object> redisTemplate,
-            HotVideoCacheService hotVideoCacheService
+            HotVideoCacheService hotVideoCacheService,
+            VideoListCacheService videoListCacheService
     ) {
         this.objectMapper = objectMapper;
         this.videoMapper = videoMapper;
@@ -87,6 +90,7 @@ public class VideoProcessMessageConsumer {
         this.delayedMessagePublisher = delayedMessagePublisher;
         this.redisTemplate = redisTemplate;
         this.hotVideoCacheService = hotVideoCacheService;
+        this.videoListCacheService = videoListCacheService;
     }
 
     /**
@@ -458,6 +462,7 @@ public class VideoProcessMessageConsumer {
                 redisTemplate.delete(RedisKeys.videoDetail(video.getId()));
                 // 清除热门视频卡片缓存
                 hotVideoCacheService.invalidateCards();
+                videoListCacheService.invalidateAll();
                 log.info("历史封面缩略图补齐成功，videoId={}", video.getId());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

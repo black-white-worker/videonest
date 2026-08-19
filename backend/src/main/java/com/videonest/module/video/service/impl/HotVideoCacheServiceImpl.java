@@ -1,5 +1,7 @@
 package com.videonest.module.video.service.impl;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
 import com.videonest.module.video.config.HotRankProperties;
@@ -14,6 +16,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -21,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.time.Duration;
 
 /**
  * 热门视频缓存服务实现类
@@ -55,6 +59,10 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
     private final StringRedisTemplate stringRedisTemplate;
     private final HotRankProperties properties;
     private final Object localRefreshMonitor = new Object();
+    private volatile Cache<String, List<VideoListItemVO>> localCardsCache;
+
+    @Value("${hot-rank.local-cache-milliseconds:2000}")
+    private long localCacheMilliseconds = 2000;
 
     public HotVideoCacheServiceImpl(
             HotRankService hotRankService,
@@ -85,9 +93,17 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
             return List.of();
         }
 
+        List<VideoListItemVO> local = localCache().getIfPresent(
+                RedisKeys.VIDEO_HOT_CARDS_KEY
+        );
+        if (local != null) {
+            return first(local, limit);
+        }
+
         // 安全读取缓存，捕获Redis异常，异常返回null
         List<VideoListItemVO> cached = readCardsSafely();
         if (cached != null) {
+            localCache().put(RedisKeys.VIDEO_HOT_CARDS_KEY, cached);
             return first(cached, limit);
         }
 
@@ -157,6 +173,7 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
      */
     @Override
     public void invalidateCards() {
+        localCache().invalidate(RedisKeys.VIDEO_HOT_CARDS_KEY);
         try {
             redisTemplate.delete(RedisKeys.VIDEO_HOT_CARDS_KEY);
         } catch (RuntimeException e) {
@@ -224,6 +241,8 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
      * @param cards 需要存入缓存的视频VO
      */
     private void writeCardsSafely(List<VideoListItemVO> cards) {
+        List<VideoListItemVO> immutableCards = List.copyOf(cards);
+        localCache().put(RedisKeys.VIDEO_HOT_CARDS_KEY, immutableCards);
         try {
             redisTemplate.opsForValue().set(
                     RedisKeys.VIDEO_HOT_CARDS_KEY,
@@ -235,6 +254,25 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
             );
         } catch (RuntimeException e) {
             log.warn("写入热榜卡片缓存失败", e);
+        }
+    }
+
+    private Cache<String, List<VideoListItemVO>> localCache() {
+        Cache<String, List<VideoListItemVO>> current = localCardsCache;
+        if (current != null) {
+            return current;
+        }
+        synchronized (localRefreshMonitor) {
+            if (localCardsCache == null) {
+                localCardsCache = Caffeine.newBuilder()
+                        .maximumSize(1)
+                        .expireAfterWrite(Duration.ofMillis(
+                                Math.max(100, localCacheMilliseconds)
+                        ))
+                        .recordStats()
+                        .build();
+            }
+            return localCardsCache;
         }
     }
 

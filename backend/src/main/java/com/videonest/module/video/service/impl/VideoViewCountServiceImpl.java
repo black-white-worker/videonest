@@ -30,6 +30,8 @@ import java.util.Set;
 @Slf4j
 public class VideoViewCountServiceImpl implements VideoViewCountService {
 
+    private static final long NEED_DATABASE_BASELINE = -9_000_000_000_000_000L;
+
     /** KEYS数组
      * KEYS[1]：videoViewDedup 去重key，{videoId}:{viewerKey}，NX设置标记用户已经看过该视频
      * KEYS[2]：anonymousViewRate 匿名用户分钟限流key，ipHash+时间窗口，统计一分钟访问次数
@@ -57,6 +59,14 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
      */
     private static final DefaultRedisScript<Long> RECORD_VIEW_SCRIPT =
             new DefaultRedisScript<>("""
+                    local current = redis.call('GET', KEYS[3])
+                    if not current then
+                        if tonumber(ARGV[1]) < 0 then
+                            return -9000000000000000
+                        end
+                        redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[3])
+                        current = ARGV[1]
+                    end
                     if ARGV[5] == '1' then
                         -- 匿名访问计数器自增
                         local rate = redis.call('INCR', KEYS[2])
@@ -72,17 +82,8 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
                     -- SET NX：设置观看去重标记，EX设置去重窗口过期时间；NX仅key不存在才设置成功
                     -- 设置失败：代表这个viewerKey在去重窗口内已经看过该视频，属于重复播放
                     if not redis.call('SET', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
-                        local current = redis.call('GET', KEYS[3])
-                        -- 如果redis没有总计数，使用数据库传入的持久基数
-                        if not current then
-                            current = ARGV[1]
-                        end
                         -- 上层拿到负数就判定重复观看，取绝对值-1得到播放总数
                         return -tonumber(current) - 1
-                    end
-                    -- 如果videoViewTotal不存在，初始化值为数据库持久播放基数ARGV[1]
-                    if redis.call('EXISTS', KEYS[3]) == 0 then
-                        redis.call('SET', KEYS[3], ARGV[1])
                     end
                     local total = redis.call('INCRBY', KEYS[3], 1)
                     -- 需要刷库的增量delta +1（待同步mysql的增量）
@@ -155,7 +156,6 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
     /**
      * 记录播放
      * @param videoId 视频id
-     * @param persistedViewCount mysql数据库持久化的播放基数
      * @param viewerKey 观看者唯一标识，登录用户userId，匿名生成cookie标识
      * @param ipHash ip哈希脱敏值
      * @param anonymous 是否匿名访客
@@ -164,14 +164,35 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
     @Override
     public ViewRecordResult recordView(
             Long videoId,
-            long persistedViewCount,
             String viewerKey,
             String ipHash,
             boolean anonymous
     ) {
-        // 计算分钟时间窗口：当前时间戳 /60000，得到代表当前分钟的数字；用于匿名限流key
+        Long total = executeRecordScript(
+                videoId, viewerKey, ipHash, anonymous, -1L
+        );
+        if (total != null && total == NEED_DATABASE_BASELINE) {
+            Long persistedViewCount = videoMapper.selectPublishedViewCountById(videoId);
+            if (persistedViewCount == null) {
+                throw new BusinessException(404, "视频不存在");
+            }
+            total = executeRecordScript(
+                    videoId, viewerKey, ipHash, anonymous, persistedViewCount
+            );
+        }
+        return toResult(total, anonymous);
+    }
+
+    private Long executeRecordScript(
+            Long videoId,
+            String viewerKey,
+            String ipHash,
+            boolean anonymous,
+            long persistedViewCount
+    ) {
+        // 绝大多数请求一次 Lua 完成；仅 Redis 总数首次缺失时回源一次 MySQL 初始化基数。
         long rateWindow = System.currentTimeMillis() / 60_000L;
-        Long total = redisTemplate.execute(
+        return redisTemplate.execute(
                 RECORD_VIEW_SCRIPT,
                 List.of(
                         RedisKeys.videoViewDedup(videoId, viewerKey),
@@ -188,6 +209,9 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
                 Integer.toString(anonymousLimitPerMinute),
                 "60"
         );
+    }
+
+    private ViewRecordResult toResult(Long total, boolean anonymous) {
         if (total == null) {
             throw new IllegalStateException("Redis did not return the video view count");
         }

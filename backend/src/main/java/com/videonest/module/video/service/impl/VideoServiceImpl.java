@@ -9,6 +9,7 @@ import com.videonest.module.video.service.VideoDiscoveryService;
 import com.videonest.module.video.service.VideoReviewService;
 import com.videonest.module.video.service.CreatorVideoQueryService;
 import com.videonest.module.video.service.HotVideoCacheService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.videonest.module.video.vo.VideoListItemVO;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.BeanUtils;
@@ -65,6 +66,7 @@ public class VideoServiceImpl implements VideoService {
     private final VideoReviewService videoReviewService;
     private final CreatorVideoQueryService creatorVideoQueryService;
     private final HotVideoCacheService hotVideoCacheService;
+    private final VideoListCacheService videoListCacheService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
     private final ApplicationEventPublisher applicationEventPublisher;
@@ -79,6 +81,7 @@ public class VideoServiceImpl implements VideoService {
             VideoReviewService videoReviewService,
             CreatorVideoQueryService creatorVideoQueryService,
             HotVideoCacheService hotVideoCacheService,
+            VideoListCacheService videoListCacheService,
             RedisTemplate<String, Object> redisTemplate,
             StringRedisTemplate stringRedisTemplate,
             ApplicationEventPublisher applicationEventPublisher,
@@ -92,6 +95,7 @@ public class VideoServiceImpl implements VideoService {
         this.videoReviewService = videoReviewService;
         this.creatorVideoQueryService = creatorVideoQueryService;
         this.hotVideoCacheService = hotVideoCacheService;
+        this.videoListCacheService = videoListCacheService;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
         this.applicationEventPublisher = applicationEventPublisher;
@@ -454,6 +458,7 @@ public class VideoServiceImpl implements VideoService {
 
         // 清除详情缓存，失效热门缓存
         deleteVideoDetailCache(videoId);
+        deleteVideoViewCache(videoId);
         invalidateHotVideoCardsAfterCommit();
         publishResourcePurgeEvent(videoId, purgeAfter);
         log.info(
@@ -520,6 +525,7 @@ public class VideoServiceImpl implements VideoService {
         }
 
         deleteVideoDetailCache(videoId);
+        deleteVideoViewCache(videoId);
         invalidateHotVideoCardsAfterCommit();
         publishResourcePurgeEvent(videoId, purgeAfter);
         log.info(
@@ -538,6 +544,10 @@ public class VideoServiceImpl implements VideoService {
         redisTemplate.delete(RedisKeys.videoDetail(videoId));
     }
 
+    private void deleteVideoViewCache(Long videoId) {
+        redisTemplate.delete(RedisKeys.videoViewTotal(videoId));
+    }
+
     /**
      * 事务提交成功之后，失效热门视频缓存
      * 只有数据库修改成功，才清理缓存；事务回滚则不清理缓存
@@ -546,6 +556,7 @@ public class VideoServiceImpl implements VideoService {
         // 没有事务，直接执行失效热门缓存
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             hotVideoCacheService.invalidateCards();
+            videoListCacheService.invalidateAll();
             return;
         }
         // 有事务，只有事务成功commit提交完成，才执行失效缓存
@@ -554,6 +565,7 @@ public class VideoServiceImpl implements VideoService {
                     @Override
                     public void afterCommit() {
                         hotVideoCacheService.invalidateCards();
+                        videoListCacheService.invalidateAll();
                     }
                 }
         );

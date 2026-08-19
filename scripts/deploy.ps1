@@ -318,6 +318,23 @@ if [ "$ready" != 'true' ]; then
   exit 1
 fi
 
+# 不能只依赖 Last-Modified 判断前端是否部署。内容未变化时 Docker 可能复用缓存层，
+# 文件时间也会保持不变；这里比较整个 dist 目录的内容哈希，确保打包产物已进入运行容器。
+FRONTEND_CONTAINER="$("${COMPOSE[@]}" ps -q frontend 2>/dev/null || true)"
+if [ -z "$FRONTEND_CONTAINER" ]; then
+  echo 'Frontend verification failed: no frontend container was found.' >&2
+  exit 1
+fi
+EXPECTED_FRONTEND_HASH="$(cd frontend/dist && find . -type f -exec sha256sum {} \; | sort | sha256sum | awk '{print $1}')"
+ACTUAL_FRONTEND_HASH="$("${DOCKER[@]}" exec "$FRONTEND_CONTAINER" sh -c 'cd /usr/share/nginx/html && find . -type f -exec sha256sum {} \; | sort | sha256sum' | awk '{print $1}')"
+if [ -z "$EXPECTED_FRONTEND_HASH" ] || [ "$EXPECTED_FRONTEND_HASH" != "$ACTUAL_FRONTEND_HASH" ]; then
+  echo 'Frontend verification failed: packaged dist does not match the running container.' >&2
+  echo "Expected: $EXPECTED_FRONTEND_HASH" >&2
+  echo "Actual:   $ACTUAL_FRONTEND_HASH" >&2
+  exit 1
+fi
+echo "Frontend artifact verification passed: $ACTUAL_FRONTEND_HASH"
+
 "${COMPOSE[@]}" ps
 echo 'Deployment health check passed.'
 '@

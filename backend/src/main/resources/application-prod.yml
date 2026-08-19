@@ -9,3 +9,5 @@ logging:
   level:
     root: INFO
     com.videonest: INFO
+    org.mybatis: WARN
+    com.baomidou.mybatisplus: WARN

@@ -5,8 +5,11 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.videonest.module.interaction.entity.VideoComment;
 import com.videonest.module.interaction.vo.VideoCommentVO;
+import com.videonest.module.interaction.vo.CommentReplyCountVO;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
+
+import java.util.List;
 
 @Mapper
 public interface VideoCommentMapper extends BaseMapper<VideoComment> {
@@ -20,6 +23,11 @@ public interface VideoCommentMapper extends BaseMapper<VideoComment> {
     IPage<VideoCommentVO> selectCommentPage(
             Page<VideoCommentVO> page,
             @Param("videoId") Long videoId
+    );
+
+    List<CommentReplyCountVO> selectReplyCounts(
+            @Param("videoId") Long videoId,
+            @Param("rootIds") List<Long> rootIds
     );
 
     /**

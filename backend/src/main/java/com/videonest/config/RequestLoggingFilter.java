@@ -8,9 +8,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.beans.factory.annotation.Value;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 请求链路追踪过滤器
@@ -29,6 +31,12 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
 
     // 请求头名称，用来传递追踪ID
     private static final String TRACE_ID_HEADER = "X-Trace-Id";
+
+    @Value("${request-logging.slow-request-milliseconds:500}")
+    private long slowRequestMilliseconds;
+
+    @Value("${request-logging.success-sample-rate:0.01}")
+    private double successSampleRate;
 
     /**
      * OncePerRequestFilter：保证一次请求只会执行一次过滤器逻辑
@@ -54,28 +62,38 @@ public class RequestLoggingFilter extends OncePerRequestFilter {
         MDC.put("traceId", traceId);
         response.setHeader(TRACE_ID_HEADER, traceId);
         try {
-            // 请求进入时打印日志：请求方式、地址、客户端IP
-            log.info(
-                    "HTTP 请求开始，method={}，uri={}，remoteAddress={}",
-                    request.getMethod(),
-                    request.getRequestURI(),
-                    request.getRemoteAddr()
-            );
             // 放行请求，继续执行后续过滤器、Controller业务代码
             filterChain.doFilter(request, response);
         } finally {
             long durationMilliseconds =
                     (System.nanoTime() - startedAt) / 1_000_000;
-            // 请求结束日志：响应状态码、耗时
-            log.info(
-                    "HTTP 请求结束，method={}，uri={}，status={}，durationMs={}",
-                    request.getMethod(),
-                    request.getRequestURI(),
-                    response.getStatus(),
-                    durationMilliseconds
-            );
+            logCompletedRequest(request, response, durationMilliseconds);
             // 清除MDC数据，防止线程池复用导致traceId错乱、污染下一次请求
             MDC.remove("traceId");
+        }
+    }
+
+    private void logCompletedRequest(
+            HttpServletRequest request,
+            HttpServletResponse response,
+            long durationMilliseconds
+    ) {
+        int status = response.getStatus();
+        Object[] arguments = {
+                request.getMethod(),
+                request.getRequestURI(),
+                status,
+                durationMilliseconds,
+                request.getRemoteAddr()
+        };
+        String message = "HTTP 请求完成，method={}，uri={}，status={}，durationMs={}，remoteAddress={}";
+        if (status >= 400 || durationMilliseconds >= slowRequestMilliseconds) {
+            log.warn(message, arguments);
+            return;
+        }
+        double boundedSampleRate = Math.max(0D, Math.min(1D, successSampleRate));
+        if (ThreadLocalRandom.current().nextDouble() < boundedSampleRate) {
+            log.info(message, arguments);
         }
     }
 }

@@ -10,6 +10,7 @@ import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.event.VideoProcessEvent;
 import com.videonest.module.video.mapper.VideoMapper;
 import com.videonest.module.video.service.HotVideoCacheService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -52,6 +53,9 @@ class VideoProcessMessageConsumerLockTest {
     @Mock
     private HotVideoCacheService hotVideoCacheService;
 
+    @Mock
+    private VideoListCacheService videoListCacheService;
+
     @Test
     void processingFailureReleasesOnlyTheTokenItAcquired() throws Exception {
         VideoProcessProperties properties = new VideoProcessProperties();
@@ -75,7 +79,8 @@ class VideoProcessMessageConsumerLockTest {
                 new VideoReviewProperties(),
                 delayedMessagePublisher,
                 redisTemplate,
-                hotVideoCacheService
+                hotVideoCacheService,
+                videoListCacheService
         );
 
         assertThrows(

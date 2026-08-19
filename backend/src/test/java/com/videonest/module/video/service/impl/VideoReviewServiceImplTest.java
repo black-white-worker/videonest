@@ -13,6 +13,7 @@ import com.videonest.module.video.service.HotVideoCacheService;
 import com.videonest.module.video.service.VideoDiscoveryService;
 import com.videonest.module.video.service.VideoReviewService;
 import com.videonest.module.video.service.VideoViewCountService;
+import com.videonest.module.video.service.VideoListCacheService;
 import com.videonest.security.LoginUser;
 import com.videonest.module.upload.service.UploadSessionService;
 import org.junit.jupiter.api.AfterEach;
@@ -54,6 +55,9 @@ class VideoReviewServiceImplTest {
     private HotVideoCacheService hotVideoCacheService;
 
     @Mock
+    private VideoListCacheService videoListCacheService;
+
+    @Mock
     private VideoViewCountService videoViewCountService;
 
     @Mock
@@ -82,6 +86,7 @@ class VideoReviewServiceImplTest {
                 videoMapper,
                 minioService,
                 hotVideoCacheService,
+                videoListCacheService,
                 eventPublisher
         );
         SecurityContextHolder.getContext().setAuthentication(

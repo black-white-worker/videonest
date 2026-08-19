@@ -32,6 +32,12 @@ public interface VideoMapper extends BaseMapper<Video> {
             @Param("keyword") String keyword
     );
 
+    /** 独立统计视频数量，避免分页插件为 COUNT 保留作者/分类 JOIN。 */
+    long countPublishedVideos(
+            @Param("categoryId") Long categoryId,
+            @Param("keyword") String keyword
+    );
+
     /**
      * 批量增加播放量
      * @param deltas key=videoId，value=要增加的播放量数值；批量更新，减少数据库IO，避免高频单条update
