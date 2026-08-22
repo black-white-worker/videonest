@@ -171,6 +171,7 @@ public class UploadSessionService {
         }
 
         try {
+            // 查询minio桶里面的元信息
             StoredObjectMetadata metadata = minioService.statObject(
                     ticket.stagingObjectName()
             );

@@ -211,7 +211,8 @@ public class VideoServiceImpl implements VideoService {
                 request.getVideoObjectName(), request.getCoverObjectName()
         );
 
-        // 发布事件 VideoProcessEvent，触发异步FFmpeg转码任务，主线程不阻塞
+        // 同步通知监听器将 VideoProcessEvent 写入 Outbox。
+        // RabbitMQ 投递和 FFmpeg 转码在事务提交后由后台线程异步执行。
         applicationEventPublisher.publishEvent(
                 new VideoProcessEvent(video.getId(), video.getOriginalVideoUrl())
         );
@@ -236,12 +237,12 @@ public class VideoServiceImpl implements VideoService {
             String videoObjectName,
             String coverObjectName
     ) {
-        // 把要执行的逻辑打包成任务，保证数据库事务执行完才跑run是吗
+        // 把要执行的逻辑打包成任务，保证数据库事务执行完才跑run
         Runnable consume = () -> {
             uploadSessionService.markConsumed(videoObjectName);
             uploadSessionService.markConsumed(coverObjectName);
         };
-        // 没有事务：直接执行任务
+        // 没有事务：直接执行任务,是否被`@Transactional`包裹
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             consume.run();
             return;

@@ -25,9 +25,14 @@ public class VideoProcessMessagePublisherImpl
     }
 
     /**
-     * 发布视频处理事件
+     * 监听视频创建事务中发布的处理事件，并在当前事务内写入 Outbox。
+     *
+     * <p>Spring 的默认事件监听是同步的，这里只做一次数据库写入；
+     * 真正的 RabbitMQ 投递和 FFmpeg 转码由后台调度器与 MQ 消费者异步执行。</p>
+     *
      * @param event 视频处理事件对象，携带视频业务参数
      */
+    @EventListener
     @Override
     public void publish(VideoProcessEvent event) {
         // 向outbox消息表插入一条待发送消息
