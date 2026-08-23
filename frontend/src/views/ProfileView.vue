@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   deleteCreatorVideo,
   getMyFavoriteVideos,
@@ -15,7 +15,9 @@ import {
 import { getCategories, type VideoCategory, type VideoListItem } from '../api/video'
 import { getMyFollowers, getMyFollowing, unfollowUser, type FollowUser } from '../api/follow'
 import SiteHeader from '../components/SiteHeader.vue'
+import { clearSession, hasValidSession } from '../utils/auth'
 
+const route = useRoute()
 const router = useRouter()
 
 const profile = ref<CreatorProfile | null>(null)
@@ -31,13 +33,20 @@ const followUsers = ref<FollowUser[]>([])
 const followPage = ref(1)
 const followSize = ref(10)
 const followTotal = ref(0)
-const interactionTab = ref<'favorites' | 'likes'>('favorites')
+const interactionTab = ref<'favorites' | 'likes'>(
+  route.query.tab === 'likes' ? 'likes' : 'favorites'
+)
 const interactionVideos = ref<VideoListItem[]>([])
 const interactionLoading = ref(false)
 const interactionPage = ref(1)
 const interactionSize = ref(8)
 const interactionTotal = ref(0)
-const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>('submissions')
+const requestedSection = route.query.section
+const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>(
+  requestedSection === 'interactions' || requestedSection === 'follows'
+    ? requestedSection
+    : 'submissions'
+)
 const profileCoverUrl =
   'https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=2200&q=88'
 
@@ -88,7 +97,7 @@ const editRules: FormRules = {
 }
 
 function ensureLoggedIn() {
-  if (localStorage.getItem('token')) {
+  if (hasValidSession()) {
     return true
   }
 
@@ -309,8 +318,7 @@ async function handleDelete(video: CreatorVideo) {
 }
 
 function logout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('userInfo')
+  clearSession()
 
   ElMessage.success('已退出登录')
   router.push('/login')

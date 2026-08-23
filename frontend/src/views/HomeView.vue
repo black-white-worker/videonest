@@ -11,6 +11,7 @@ import {
 } from '../api/video'
 import { getUnreadNotificationCount } from '../api/notification'
 import SiteHeader from '../components/SiteHeader.vue'
+import { clearSession, getStoredUser } from '../utils/auth'
 
 const router = useRouter()
 const categories = ref<VideoCategory[]>([])
@@ -59,12 +60,7 @@ const activeWallpaperIndex = ref(0)
 let wallpaperTimer: number | undefined
 
 const user = computed(() => {
-  try {
-    const value = localStorage.getItem('userInfo')
-    return value ? (JSON.parse(value) as { nickname: string; role: 'USER' | 'ADMIN' }) : null
-  } catch {
-    return null
-  }
+  return getStoredUser()
 })
 
 const activeWallpaper = computed(() => wallpaperSlides[activeWallpaperIndex.value])
@@ -152,8 +148,7 @@ function formatDate(value: string) {
   return value ? new Date(value).toLocaleDateString('zh-CN') : ''
 }
 function logout() {
-  localStorage.removeItem('token')
-  localStorage.removeItem('userInfo')
+  clearSession()
   ElMessage.success('已退出登录')
   router.push('/login')
 }
@@ -324,7 +319,9 @@ onBeforeUnmount(() => {
           </template>
         </el-skeleton>
         <div v-if="user" class="channel-shortcuts">
-          <button @click="router.push('/profile')">我的收藏</button>
+          <button @click="router.push('/profile?section=interactions&tab=favorites')">
+            我的收藏
+          </button>
           <button @click="router.push('/notifications')">消息中心</button>
         </div>
       </div>

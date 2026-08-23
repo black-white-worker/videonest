@@ -184,7 +184,7 @@ public class VideoServiceImpl implements VideoService {
             );
         }
 
-        // 组装Video数据库实
+        // 组装Video数据库实例
         Video video = new Video();
         video.setAuthorId(currentUser.userId());
         video.setCategoryId(request.getCategoryId());

@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { login, register } from '../api/auth'
+import { saveSession } from '../utils/auth'
 
+const route = useRoute()
 const router = useRouter()
 
 const activeTab = ref('login')
@@ -31,11 +33,11 @@ async function handleLogin() {
 
     const user = await login(loginForm)
 
-    localStorage.setItem('token', user.token)
-    localStorage.setItem('userInfo', JSON.stringify(user))
+    saveSession(user.token, user)
 
     ElMessage.success(`欢迎回来，${user.nickname}`)
-    await router.push('/')
+    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/'
+    await router.push(redirect.startsWith('/') ? redirect : '/')
   } catch (error) {
     const message = error instanceof Error ? error.message : '登录失败'
     ElMessage.error(message)

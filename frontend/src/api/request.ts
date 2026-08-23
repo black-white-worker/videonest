@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios'
 import { logger } from '../utils/logger'
+import { clearSession, getAccessToken } from '../utils/auth'
 
 interface ApiError {
   message?: string
@@ -31,7 +32,7 @@ const request = axios.create({
 })
 
 request.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token = localStorage.getItem('token')
+  const token = getAccessToken()
 
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
@@ -83,6 +84,14 @@ request.interceptors.response.use(
         : undefined,
       message
     })
+
+    if (error.response?.status === 401) {
+      clearSession()
+      if (window.location.pathname !== '/login') {
+        const redirect = `${window.location.pathname}${window.location.search}`
+        window.location.assign(`/login?redirect=${encodeURIComponent(redirect)}`)
+      }
+    }
     return Promise.reject(new Error(message))
   }
 )

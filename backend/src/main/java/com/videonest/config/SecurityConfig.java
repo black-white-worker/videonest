@@ -118,7 +118,10 @@ public class SecurityConfig {
                                 HttpMethod.GET,
                                 "/api/categories",
                                 "/api/videos",
-                                "/api/videos/**"
+                                "/api/videos/hot",
+                                "/api/videos/*",
+                                "/api/videos/*/comments",
+                                "/api/videos/*/comments/*/replies"
                         ).permitAll()
 
                         // 直传凭证签发与完成确认：只要求已经登录

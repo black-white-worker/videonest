@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { createVideo, uploadCover, uploadVideo } from '../api/creator-video'
 import { getCategories, type VideoCategory } from '../api/video'
 import SiteHeader from '../components/SiteHeader.vue'
+import { hasValidSession } from '../utils/auth'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -47,7 +48,7 @@ const durationText = computed(() => {
 })
 
 function ensureLoggedIn() {
-  if (localStorage.getItem('token')) {
+  if (hasValidSession()) {
     return true
   }
 
@@ -348,23 +349,26 @@ onBeforeUnmount(() => {
                 </div>
                 <span class="required-badge">必填</span>
               </div>
-              <div class="cover-upload">
+              <label
+                class="cover-upload"
+                :class="{ uploaded: form.coverObjectName, disabled: coverUploading }"
+              >
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  :disabled="coverUploading"
+                  @change="handleCoverChange"
+                />
                 <img v-if="coverPreviewUrl" :src="coverPreviewUrl" alt="封面预览" />
                 <div v-else class="cover-placeholder">
                   <span>▧</span>
                   <strong>16:9 封面</strong>
-                  <small>JPG / PNG / WebP，最大 10MB</small>
+                  <small>JPG / PNG，最大 10MB</small>
                 </div>
+                <span class="cover-select-action">
+                  {{ form.coverObjectName ? '点击重新选择封面' : '点击选择封面图片' }}
+                </span>
                 <div v-if="coverUploading" class="mask">正在上传封面…</div>
-              </div>
-              <label class="select-file">
-                <input
-                  type="file"
-                  accept="image/*"
-                  :disabled="coverUploading"
-                  @change="handleCoverChange"
-                />
-                {{ form.coverObjectName ? '重新选择封面' : '选择封面图片' }}
               </label>
               <p class="cover-tip">封面应与视频内容相关，避免过多文字和低清晰度图片。</p>
             </aside>
@@ -869,6 +873,29 @@ onBeforeUnmount(() => {
   border: 1px dashed var(--vn-border);
   border-radius: 10px;
   background: #f6f7f8;
+  cursor: pointer;
+  transition: 0.2s;
+}
+
+.cover-upload:hover {
+  border-color: var(--vn-primary);
+  background-color: var(--vn-primary-soft);
+}
+
+.cover-upload.uploaded {
+  border-style: solid;
+  border-color: #a8dfb8;
+}
+
+.cover-upload.disabled {
+  cursor: wait;
+}
+
+.cover-upload > input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
 }
 
 .cover-upload img {
@@ -905,6 +932,19 @@ onBeforeUnmount(() => {
 .cover-placeholder small {
   margin-top: 3px;
   font-size: 10px;
+}
+
+.cover-select-action {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 7px;
+  background: rgb(15 23 42 / 76%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
 }
 
 .select-file {

@@ -17,6 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
+import java.util.regex.Pattern;
 
 /**
  * JWT 令牌解析与自动认证过滤器
@@ -31,6 +32,10 @@ import java.util.Locale;
 @Component
 @Slf4j
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
+
+    private static final Pattern PUBLIC_VIDEO_GET_PATH = Pattern.compile(
+            "^/api/videos(?:/hot|/\\d+|/\\d+/comments|/\\d+/comments/\\d+/replies)?$"
+    );
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtRevocationService jwtRevocationService;
@@ -56,7 +61,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String path = request.getServletPath();
 
         return path.equals("/api/auth/login")
-                || path.equals("/api/auth/register");
+                || path.equals("/api/auth/register")
+                || (request.getMethod().equals("GET")
+                    && (path.equals("/api/categories") || PUBLIC_VIDEO_GET_PATH.matcher(path).matches()));
     }
 
     /**
