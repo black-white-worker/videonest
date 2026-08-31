@@ -160,6 +160,11 @@ resource-cleanup:
   fixed-delay-milliseconds: ${RESOURCE_CLEANUP_FIXED_DELAY_MILLISECONDS:3600000}
   batch-size: ${RESOURCE_CLEANUP_BATCH_SIZE:20}
 
+upload-cleanup:
+  fixed-delay-milliseconds: ${UPLOAD_CLEANUP_FIXED_DELAY_MILLISECONDS:600000}
+  batch-size: ${UPLOAD_CLEANUP_BATCH_SIZE:100}
+  lock-seconds: ${UPLOAD_CLEANUP_LOCK_SECONDS:900}
+
 logging:
   level:
     root: INFO

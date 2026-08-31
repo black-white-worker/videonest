@@ -8,6 +8,7 @@ import com.videonest.module.video.service.VideoService;
 import com.videonest.module.video.mapper.VideoMapper;
 import com.videonest.module.category.mapper.VideoCategoryMapper;
 import com.videonest.module.user.mapper.SysUserMapper;
+import com.videonest.module.user.mapper.PasswordResetRequestMapper;
 import com.videonest.module.notification.mapper.NotificationMapper;
 import com.videonest.module.follow.mapper.UserFollowMapper;
 import com.videonest.module.interaction.mapper.VideoLikeMapper;
@@ -60,6 +61,7 @@ class AdminEndpointSecurityTest {
     @MockitoBean private VideoMapper videoMapper;
     @MockitoBean private VideoCategoryMapper videoCategoryMapper;
     @MockitoBean private SysUserMapper sysUserMapper;
+    @MockitoBean private PasswordResetRequestMapper passwordResetRequestMapper;
     @MockitoBean private NotificationMapper notificationMapper;
     @MockitoBean private UserFollowMapper userFollowMapper;
     @MockitoBean private VideoLikeMapper videoLikeMapper;

@@ -40,6 +40,12 @@ const navItems = [
     description: '异常消息诊断与重试',
     path: '/admin/dead-letters',
     icon: '信'
+  },
+  {
+    label: '用户管理',
+    description: '账号信息与密码重置',
+    path: '/admin/users',
+    icon: '户'
   }
 ]
 

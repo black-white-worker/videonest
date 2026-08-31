@@ -252,6 +252,10 @@ public class UploadSessionService {
                 2,
                 TimeUnit.HOURS
         );
+        stringRedisTemplate.opsForSet().add(
+                RedisKeys.UPLOAD_CONFIRMED_INDEX_KEY,
+                objectName
+        );
     }
 
     /**
@@ -278,6 +282,15 @@ public class UploadSessionService {
     public void markConsumed(String objectName) {
         if (objectName != null && !objectName.isBlank()) {
             try {
+                // 先移出清理索引，再删除确认标记，避免清理任务把已经投稿成功的对象误删。
+                Long removed = stringRedisTemplate.opsForSet().remove(
+                        RedisKeys.UPLOAD_CONFIRMED_INDEX_KEY,
+                        objectName
+                );
+                if (!Long.valueOf(1L).equals(removed)) {
+                    log.warn("移除已消费上传对象索引失败，暂不删除确认标记，objectName={}", objectName);
+                    return;
+                }
                 redisTemplate.delete(RedisKeys.confirmedUpload(objectName));
             } catch (RuntimeException e) {
                 // 数据库唯一索引仍会阻止复用；确认标记也会在两小时后自动过期。

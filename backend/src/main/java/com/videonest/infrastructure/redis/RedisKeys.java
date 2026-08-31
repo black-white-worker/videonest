@@ -80,13 +80,13 @@ public final class RedisKeys {
      * 已经补齐视频信息和访问地址的热榜卡片缓存。
      */
     public static final String VIDEO_HOT_CARDS_KEY =
-            "videonest:video:hot:cards:v1";
+            "videonest:video:hot:cards:v2";
 
     public static final String VIDEO_LIST_FIRST_PAGE_PREFIX =
-            "videonest:video:list:first:v1:";
+            "videonest:video:list:first:v2:";
 
     public static final String VIDEO_LIST_CACHE_KEYS_KEY =
-            "videonest:video:list:cache-keys:v1";
+            "videonest:video:list:cache-keys:v2";
 
     public static final String VIDEO_HOT_REFRESH_LOCK =
             "videonest:lock:video-hot-refresh";
@@ -105,6 +105,13 @@ public final class RedisKeys {
 
     public static final String UPLOAD_CONFIRMED_PREFIX =
             "videonest:upload:confirmed:";
+
+    /** 已完成校验但尚未被业务消费的正式对象索引。 */
+    public static final String UPLOAD_CONFIRMED_INDEX_KEY =
+            "videonest:upload:confirmed:index";
+
+    public static final String UPLOAD_ORPHAN_CLEANUP_LOCK =
+            "videonest:lock:upload-orphan-cleanup";
 
     public static final String UPLOAD_COMPLETE_LOCK_PREFIX =
             "videonest:lock:upload-complete:";

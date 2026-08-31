@@ -11,6 +11,7 @@ const AdminCommentView = () => import('../views/AdminCommentView.vue')
 const NotificationView = () => import('../views/NotificationView.vue')
 const AdminRecycleBinView = () => import('../views/AdminRecycleBinView.vue')
 const AdminDeadLetterView = () => import('../views/AdminDeadLetterView.vue')
+const AdminUserView = () => import('../views/AdminUserView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
@@ -64,6 +65,11 @@ const router = createRouter({
       path: '/admin/dead-letters',
       component: AdminDeadLetterView,
       meta: { title: '死信处理', requiresAuth: true }
+    },
+    {
+      path: '/admin/users',
+      component: AdminUserView,
+      meta: { title: '用户管理', requiresAuth: true }
     }
   ]
 })

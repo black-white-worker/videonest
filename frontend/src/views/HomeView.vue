@@ -16,6 +16,7 @@ import { clearSession, getStoredUser } from '../utils/auth'
 const router = useRouter()
 const categories = ref<VideoCategory[]>([])
 const videos = ref<VideoListItem[]>([])
+const hotVideos = ref<VideoListItem[]>([])
 const selectedCategoryId = ref<number | undefined>()
 const keyword = ref('')
 const isHotMode = ref(false)
@@ -92,6 +93,7 @@ async function loadVideos() {
       page: currentPage.value,
       size: pageSize.value
     })
+    hotVideos.value = []
     videos.value = result.records
     total.value = result.total
   } catch (error) {
@@ -104,8 +106,9 @@ async function loadVideos() {
 async function loadHotVideos() {
   try {
     videoLoading.value = true
-    videos.value = await getHotVideos(pageSize.value)
-    total.value = videos.value.length
+    hotVideos.value = await getHotVideos(50)
+    videos.value = hotVideos.value.slice(0, pageSize.value)
+    total.value = hotVideos.value.length
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '获取热门视频失败')
   } finally {
@@ -135,7 +138,12 @@ function searchVideos() {
 }
 function handlePageChange(page: number) {
   currentPage.value = page
-  loadVideos()
+  if (isHotMode.value) {
+    const start = (page - 1) * pageSize.value
+    videos.value = hotVideos.value.slice(start, start + pageSize.value)
+  } else {
+    loadVideos()
+  }
   window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 function formatDuration(seconds: number) {
@@ -374,7 +382,7 @@ onBeforeUnmount(() => {
         </template>
       </el-skeleton>
 
-      <div v-if="!isHotMode && total > pageSize" class="pagination">
+      <div v-if="total > pageSize && (currentPage > 1 || videos.length === pageSize)" class="pagination">
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"

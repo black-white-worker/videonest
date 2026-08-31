@@ -32,7 +32,7 @@ class FlywayMySqlContainerTest {
                 .locations("classpath:db/migration")
                 .load();
 
-        assertEquals(7, flyway.migrate().migrationsExecuted);
+        assertEquals(8, flyway.migrate().migrationsExecuted);
 
         try (Connection connection = DriverManager.getConnection(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()
@@ -74,7 +74,7 @@ class FlywayMySqlContainerTest {
                 .baselineVersion("3")
                 .load();
 
-        assertEquals(4, legacyUpgradeFlyway.migrate().migrationsExecuted);
+        assertEquals(5, legacyUpgradeFlyway.migrate().migrationsExecuted);
 
         try (Connection connection = DriverManager.getConnection(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()

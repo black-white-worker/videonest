@@ -139,6 +139,46 @@ export async function ignoreDeadLetter(id: number): Promise<void> {
   await request.put(`/admin/dead-letters/${id}/ignore`)
 }
 
+export interface AdminUser {
+  id: number
+  username: string
+  nickname: string
+  status: number
+  role: string
+}
+
+export interface PasswordResetRequest {
+  id: number
+  userId: number
+  username: string
+  nickname: string
+  status: string
+  createTime: string
+}
+
+export async function getAdminUsers(): Promise<AdminUser[]> {
+  const response = await request.get<ApiResponse<AdminUser[]>>('/admin/users')
+  return response.data.data
+}
+
+export async function getPasswordResetRequests(): Promise<PasswordResetRequest[]> {
+  const response = await request.get<ApiResponse<PasswordResetRequest[]>>('/admin/users/password-reset-requests')
+  return response.data.data
+}
+
+export async function resetUserPassword(requestId: number, userId: number): Promise<string> {
+  const response = await request.post<ApiResponse<string>>(
+    `/admin/users/password-reset-requests/${requestId}/reset`,
+    undefined,
+    { params: { userId } }
+  )
+  return response.data.data
+}
+
+export async function requestPasswordReset(): Promise<void> {
+  await request.post('/users/password-reset-requests')
+}
+
 export interface AdminComment {
   id: string
   videoId: number

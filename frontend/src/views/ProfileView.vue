@@ -14,6 +14,7 @@ import {
 } from '../api/creator'
 import { getCategories, type VideoCategory, type VideoListItem } from '../api/video'
 import { getMyFollowers, getMyFollowing, unfollowUser, type FollowUser } from '../api/follow'
+import { requestPasswordReset } from '../api/admin'
 import SiteHeader from '../components/SiteHeader.vue'
 import { clearSession, hasValidSession } from '../utils/auth'
 
@@ -41,12 +42,26 @@ const interactionLoading = ref(false)
 const interactionPage = ref(1)
 const interactionSize = ref(8)
 const interactionTotal = ref(0)
+const passwordResetLoading = ref(false)
 const requestedSection = route.query.section
 const activeCenterSection = ref<'submissions' | 'interactions' | 'follows'>(
   requestedSection === 'interactions' || requestedSection === 'follows'
     ? requestedSection
     : 'submissions'
 )
+
+async function applyPasswordReset() {
+  try {
+    await ElMessageBox.confirm('提交后请等待管理员处理，确认申请重置登录密码吗？', '申请密码重置', { type: 'warning' })
+    passwordResetLoading.value = true
+    await requestPasswordReset()
+    ElMessage.success('申请已提交，请留意消息通知')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '提交申请失败')
+  } finally {
+    passwordResetLoading.value = false
+  }
+}
 const profileCoverUrl =
   'https://images.unsplash.com/photo-1511497584788-876760111969?auto=format&fit=crop&w=2200&q=88'
 
@@ -345,6 +360,7 @@ onMounted(() => {
       </template>
       <template #actions>
         <el-button text @click="router.push('/notifications')">消息</el-button>
+        <el-button text :loading="passwordResetLoading" @click="applyPasswordReset">申请重置密码</el-button>
         <el-button @click="router.push('/')">返回主站</el-button>
         <el-button type="primary" @click="router.push('/upload')">+ 投稿</el-button>
         <el-button text type="danger" @click="logout">退出</el-button>

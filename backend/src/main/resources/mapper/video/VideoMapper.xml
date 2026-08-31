@@ -54,10 +54,12 @@
         ORDER BY v.publish_time DESC, v.id DESC
     </select>
 
-    <!-- COUNT 只访问 video 表，避免分页插件对展示 JOIN 做无意义统计。 -->
+    <!-- COUNT 必须与展示查询使用相同的 INNER JOIN，避免统计到作者或分区已不存在、但列表无法展示的脏数据。 -->
     <select id="countPublishedVideos" resultType="long">
         SELECT COUNT(*)
         FROM video v
+        INNER JOIN sys_user u ON v.author_id = u.id
+        INNER JOIN video_category c ON v.category_id = c.id
         WHERE v.status = 'PUBLISHED'
           AND v.is_deleted = 0
         <if test="categoryId != null">

@@ -168,6 +168,9 @@ trap cleanup EXIT
 
 command -v docker >/dev/null 2>&1 || { echo 'Docker is not installed on the server.' >&2; exit 1; }
 "${DOCKER[@]}" compose version >/dev/null
+# tar 解压不会删除上一版本中已经不存在的文件。清理的仅是可再生前端构建产物，
+# 防止旧哈希文件进入新镜像并导致用户仍加载到过期资源。
+rm -rf "$REMOTE_DIR/frontend/dist"
 tar -xzf "$REMOTE_ARCHIVE" -C "$REMOTE_DIR"
 install -m 600 "$REMOTE_ENV" "$REMOTE_DIR/.env"
 cd "$REMOTE_DIR"
@@ -320,8 +323,9 @@ fi
 
 # 不能只依赖 Last-Modified 判断前端是否部署。内容未变化时 Docker 可能复用缓存层，
 # 文件时间也会保持不变；这里比较整个 dist 目录的内容哈希，确保打包产物已进入运行容器。
+FRONTEND_CONTAINER=''
 FRONTEND_CONTAINER="$("${COMPOSE[@]}" ps -q frontend 2>/dev/null || true)"
-if [ -z "$FRONTEND_CONTAINER" ]; then
+if [ -z "${FRONTEND_CONTAINER:-}" ]; then
   echo 'Frontend verification failed: no frontend container was found.' >&2
   exit 1
 fi
