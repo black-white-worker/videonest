@@ -276,27 +276,19 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
 
     /**
      * claimDeltas：批量抢占视频播放增量
-     * 循环每个videoId，执行CLAIM_DELTA_SCRIPT脚本，原子拿走delta，删除redis delta key
+     * 使用 pipeline 批量执行 CLAIM_DELTA_SCRIPT 脚本，从 N 次 Redis 往返降到 1 次
      * @param videoIds dirty集合拿到的videoId字符串集合
      * @return map key=videoId value=抢占到的播放增量delta
      */
     private Map<Long, Long> claimDeltas(Set<String> videoIds) {
         Map<Long, Long> claimedDeltas = new LinkedHashMap<>();
+        List<String> validIds = new ArrayList<>();
+
+        // 先过滤非法 videoId，避免 pipeline 中出现格式错误
         for (String rawVideoId : videoIds) {
             try {
-                Long videoId = Long.valueOf(rawVideoId);
-                Long delta = redisTemplate.execute(
-                        CLAIM_DELTA_SCRIPT,
-                        List.of(
-                                RedisKeys.videoViewDelta(videoId),
-                                RedisKeys.VIDEO_VIEW_DIRTY_KEY
-                        ),
-                        rawVideoId
-                );
-                // delta>0代表抢占成功，有增量需要更新数据库
-                if (delta != null && delta > 0) {
-                    claimedDeltas.put(videoId, delta);
-                }
+                Long.valueOf(rawVideoId);
+                validIds.add(rawVideoId);
             } catch (NumberFormatException e) {
                 // 脏集合里面出现非法非数字videoId，直接从集合移除，打警告日志
                 redisTemplate.opsForSet().remove(
@@ -304,6 +296,46 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
                         rawVideoId
                 );
                 log.warn("Removed invalid video id from dirty view set: {}", rawVideoId);
+            }
+        }
+        if (validIds.isEmpty()) {
+            return claimedDeltas;
+        }
+
+        // pipeline 批量执行 claim 脚本，原子拿走delta，删除redis delta key，从dirty集合移除videoId
+        byte[] scriptBytes = CLAIM_DELTA_SCRIPT.getScriptAsString()
+                .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        List<Object> results = redisTemplate.executePipelined(
+                new org.springframework.data.redis.core.RedisCallback<>() {
+                    @Override
+                    public Object doInRedis(
+                            org.springframework.data.redis.connection.RedisConnection connection
+                    ) {
+                        for (String rawVideoId : validIds) {
+                            Long videoId = Long.valueOf(rawVideoId);
+                            byte[] key1 = RedisKeys.videoViewDelta(videoId)
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            byte[] key2 = RedisKeys.VIDEO_VIEW_DIRTY_KEY
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            byte[] arg = rawVideoId
+                                    .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            connection.eval(
+                                    scriptBytes,
+                                    org.springframework.data.redis.connection.ReturnType.INTEGER,
+                                    2,
+                                    key1, key2, arg
+                            );
+                        }
+                        return null;
+                    }
+                }
+        );
+
+        // 按顺序从 pipeline 结果中提取每个视频的 delta
+        for (int i = 0; i < validIds.size() && i < results.size(); i++) {
+            Object result = results.get(i);
+            if (result instanceof Long delta && delta > 0) {
+                claimedDeltas.put(Long.valueOf(validIds.get(i)), delta);
             }
         }
         return claimedDeltas;

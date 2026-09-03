@@ -2,6 +2,7 @@ package com.videonest.module.upload.service;
 
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -9,7 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.Set;
-import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /** 清理 complete 成功但用户始终没有提交投稿的正式对象。 */
@@ -18,6 +19,7 @@ import java.util.concurrent.TimeUnit;
 public class UploadOrphanCleanupService {
     private final StringRedisTemplate redisTemplate;
     private final MinioService minioService;
+    private final RenewableRedisLock renewableRedisLock;
 
     @Value("${upload-cleanup.batch-size:100}")
     private int batchSize;
@@ -25,23 +27,32 @@ public class UploadOrphanCleanupService {
     @Value("${upload-cleanup.lock-seconds:900}")
     private long lockSeconds;
 
-    public UploadOrphanCleanupService(StringRedisTemplate redisTemplate, MinioService minioService) {
+    public UploadOrphanCleanupService(
+            StringRedisTemplate redisTemplate,
+            MinioService minioService,
+            RenewableRedisLock renewableRedisLock
+    ) {
         this.redisTemplate = redisTemplate;
         this.minioService = minioService;
+        this.renewableRedisLock = renewableRedisLock;
     }
 
     @Scheduled(fixedDelayString = "${upload-cleanup.fixed-delay-milliseconds:600000}")
     public void cleanupExpiredConfirmedObjects() {
-        String token = UUID.randomUUID().toString();
-        Boolean locked = redisTemplate.opsForValue().setIfAbsent(
-                RedisKeys.UPLOAD_ORPHAN_CLEANUP_LOCK,
-                token,
-                Math.max(lockSeconds, 60),
-                TimeUnit.SECONDS
-        );
-        if (!Boolean.TRUE.equals(locked)) return;
-
+        Optional<RenewableRedisLock.LockHandle> acquiredLock;
         try {
+            acquiredLock = renewableRedisLock.tryAcquire(
+                    RedisKeys.UPLOAD_ORPHAN_CLEANUP_LOCK,
+                    Math.max(lockSeconds, 60),
+                    TimeUnit.SECONDS
+            );
+        } catch (RuntimeException e) {
+            log.warn("获取孤儿上传对象清理锁失败，本轮跳过", e);
+            return;
+        }
+        if (acquiredLock.isEmpty()) return;
+
+        try (RenewableRedisLock.LockHandle ignored = acquiredLock.get()) {
             Set<String> indexed = redisTemplate.opsForSet().members(
                     RedisKeys.UPLOAD_CONFIRMED_INDEX_KEY
             );
@@ -65,12 +76,6 @@ public class UploadOrphanCleanupService {
                     // 删除失败保留索引，等待下一轮重试。
                     log.warn("清理未提交上传对象失败，objectName={}", objectName, e);
                 }
-            }
-        } finally {
-            // 仅删除自己的锁，避免误删其他实例刚获得的锁。
-            String current = redisTemplate.opsForValue().get(RedisKeys.UPLOAD_ORPHAN_CLEANUP_LOCK);
-            if (token.equals(current)) {
-                redisTemplate.delete(RedisKeys.UPLOAD_ORPHAN_CLEANUP_LOCK);
             }
         }
     }

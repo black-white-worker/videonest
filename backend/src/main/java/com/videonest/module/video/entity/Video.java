@@ -66,6 +66,15 @@ public class Video {
     @TableField("video_1080p_url")
     private String video1080pUrl;
 
+    @TableField("video_480p_size_bytes")
+    private Long video480pSizeBytes;
+
+    @TableField("video_720p_size_bytes")
+    private Long video720pSizeBytes;
+
+    @TableField("video_1080p_size_bytes")
+    private Long video1080pSizeBytes;
+
     private String processError;
 
     @TableLogic(value = "0", delval = "1")

@@ -165,6 +165,9 @@
         v.video_480p_url AS video480pUrl,
         v.video_720p_url AS video720pUrl,
         v.video_1080p_url AS video1080pUrl,
+        v.video_480p_size_bytes AS video480pSizeBytes,
+        v.video_720p_size_bytes AS video720pSizeBytes,
+        v.video_1080p_size_bytes AS video1080pSizeBytes,
         v.duration,
         v.view_count AS viewCount,
         v.like_count AS likeCount,
@@ -591,6 +594,22 @@
           AND purge_after IS NOT NULL
           AND purge_after &lt;= #{now}
         ORDER BY purge_after ASC
+        LIMIT #{limit}
+    </select>
+
+    <!--
+    selectStuckProcessingVideoIds
+    功能：兜底扫描查询转码超时卡住的视频ID列表
+    条件：状态=PROCESSING、未删除、update_time早于指定阈值（说明很久没有更新了）
+    场景：消费者进程崩溃导致消息丢失，视频永久卡在PROCESSING状态；定时任务重新投递消息
+    -->
+    <select id="selectStuckProcessingVideoIds" resultType="java.lang.Long">
+        SELECT id
+        FROM video
+        WHERE status = 'PROCESSING'
+          AND is_deleted = 0
+          AND update_time &lt;= #{before}
+        ORDER BY update_time ASC
         LIMIT #{limit}
     </select>
 

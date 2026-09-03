@@ -4,6 +4,7 @@ import com.videonest.common.exception.VideoProcessingException;
 import com.videonest.infrastructure.mq.DelayedMessagePublisher;
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.module.video.config.VideoProcessProperties;
 import com.videonest.module.video.config.VideoReviewProperties;
 import com.videonest.module.video.entity.Video;
@@ -18,6 +19,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
@@ -51,6 +53,12 @@ class VideoProcessMessageConsumerLockTest {
     private ValueOperations<String, Object> valueOperations;
 
     @Mock
+    private StringRedisTemplate lockRedisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> lockValueOperations;
+
+    @Mock
     private HotVideoCacheService hotVideoCacheService;
 
     @Mock
@@ -59,16 +67,16 @@ class VideoProcessMessageConsumerLockTest {
     @Test
     void processingFailureReleasesOnlyTheTokenItAcquired() throws Exception {
         VideoProcessProperties properties = new VideoProcessProperties();
-        properties.setTimeoutSeconds(30L);
+        properties.setLockLeaseSeconds(30L);
         long videoId = 42L;
         String lockKey = RedisKeys.videoProcessLock(videoId);
         Video video = new Video();
         video.setId(videoId);
         video.setStatus("PROCESSING");
         when(videoMapper.selectById(videoId)).thenReturn(video);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.setIfAbsent(eq(lockKey), any(String.class), eq(330L),
-                eq(TimeUnit.SECONDS))).thenReturn(true);
+        when(lockRedisTemplate.opsForValue()).thenReturn(lockValueOperations);
+        when(lockValueOperations.setIfAbsent(eq(lockKey), any(String.class), eq(30_000L),
+                eq(TimeUnit.MILLISECONDS))).thenReturn(true);
         when(minioService.download("source.mp4")).thenReturn(failingInputStream());
 
         VideoProcessMessageConsumer consumer = new VideoProcessMessageConsumer(
@@ -79,6 +87,7 @@ class VideoProcessMessageConsumerLockTest {
                 new VideoReviewProperties(),
                 delayedMessagePublisher,
                 redisTemplate,
+                new RenewableRedisLock(lockRedisTemplate),
                 hotVideoCacheService,
                 videoListCacheService
         );
@@ -91,9 +100,9 @@ class VideoProcessMessageConsumerLockTest {
         );
 
         ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
-        verify(valueOperations).setIfAbsent(eq(lockKey), token.capture(), eq(330L),
-                eq(TimeUnit.SECONDS));
-        verify(redisTemplate).execute(
+        verify(lockValueOperations).setIfAbsent(eq(lockKey), token.capture(), eq(30_000L),
+                eq(TimeUnit.MILLISECONDS));
+        verify(lockRedisTemplate).execute(
                 any(DefaultRedisScript.class),
                 eq(List.of(lockKey)),
                 eq(token.getValue())

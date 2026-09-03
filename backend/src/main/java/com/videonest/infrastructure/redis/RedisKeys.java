@@ -134,6 +134,10 @@ public final class RedisKeys {
     public static final String RESOURCE_CLEANUP_JOB_LOCK =
             "videonest:lock:resource-cleanup-job";
 
+    /** 转码超时兜底扫描任务锁，多实例部署时保证只有一台执行扫描。 */
+    public static final String VIDEO_PROCESS_RECOVERY_JOB_LOCK =
+            "videonest:lock:video-process-recovery-job";
+
     public static final String REVIEW_TIMEOUT_COUNT =
             "videonest:video:review:timeout:count";
 
@@ -141,10 +145,10 @@ public final class RedisKeys {
         return VIDEO_DETAIL_PREFIX + videoId;
     }
 
-    public static String videoListFirstPage(Long categoryId, long size) {
+    public static String videoListPage(Long categoryId, long page, long size) {
         return VIDEO_LIST_FIRST_PAGE_PREFIX
                 + (categoryId == null ? "all" : categoryId)
-                + ":" + size;
+                + ":" + page + ":" + size;
     }
 
     public static String videoViewTotal(Long videoId) {

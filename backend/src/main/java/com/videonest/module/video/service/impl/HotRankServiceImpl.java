@@ -162,6 +162,7 @@ public class HotRankServiceImpl implements HotRankService {
     /**
      * replaceCurrentRank：原子更新当前热榜
      * 先写临时tmp key，全部写完之后 rename覆盖正式key
+     * 使用 pipeline 批量 ZADD，从 N 次 Redis 往返降到 1 次
      */
     private void replaceCurrentRank(List<Map.Entry<Long, Double>> ranking) {
         // 如果热榜 ranking 为空，删除 Redis 中旧的正式热榜 key，直接结束方法，清理旧脏数据同时避免无效 Redis 调用。
@@ -174,14 +175,26 @@ public class HotRankServiceImpl implements HotRankService {
         String temporaryKey = RedisKeys.VIDEO_HOT_CURRENT_KEY
                 + ":tmp:" + java.util.UUID.randomUUID();
         try {
-            // 往临时ZSet写入全部新热榜数据
-            for (Map.Entry<Long, Double> entry : ranking) {
-                stringRedisTemplate.opsForZSet().add(
-                        temporaryKey,
-                        entry.getKey().toString(),
-                        entry.getValue()
-                );
-            }
+            // pipeline 批量写入全部热榜数据，减少 Redis 往返次数
+            byte[] tmpKeyBytes = temporaryKey.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            stringRedisTemplate.executePipelined(
+                    new org.springframework.data.redis.core.RedisCallback<>() {
+                        @Override
+                        public Object doInRedis(
+                                org.springframework.data.redis.connection.RedisConnection connection
+                        ) {
+                            for (Map.Entry<Long, Double> entry : ranking) {
+                                connection.zSetCommands().zAdd(
+                                        tmpKeyBytes,
+                                        entry.getValue(),
+                                        entry.getKey().toString()
+                                                .getBytes(java.nio.charset.StandardCharsets.UTF_8)
+                                );
+                            }
+                            return null;
+                        }
+                    }
+            );
             // 设置临时key过期时间，防止异常残留垃圾key
             stringRedisTemplate.expire(
                     temporaryKey,

@@ -2,10 +2,13 @@ package com.videonest.integration;
 
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.Resource;
+import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -16,6 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers(disabledWithoutDocker = true)
 class FlywayMySqlContainerTest {
+
+    /** 老库升级基准：迁移到 V3 后删除历史表，再按 V3 基线继续升级 */
+    private static final String LEGACY_BASELINE_VERSION = "3";
 
     @Container
     static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.4")
@@ -32,7 +38,9 @@ class FlywayMySqlContainerTest {
                 .locations("classpath:db/migration")
                 .load();
 
-        assertEquals(8, flyway.migrate().migrationsExecuted);
+        // 空库全量迁移：执行全部 V*.sql，数量由 countMigrationScripts() 自动统计，新增迁移无需改测试
+        int totalMigrations = countMigrationScripts();
+        assertEquals(totalMigrations, flyway.migrate().migrationsExecuted);
 
         try (Connection connection = DriverManager.getConnection(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()
@@ -71,10 +79,13 @@ class FlywayMySqlContainerTest {
                 .dataSource(MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword())
                 .locations("classpath:db/migration")
                 .baselineOnMigrate(true)
-                .baselineVersion("3")
+                .baselineVersion(LEGACY_BASELINE_VERSION)
                 .load();
 
-        assertEquals(5, legacyUpgradeFlyway.migrate().migrationsExecuted);
+        // 从 V3 baseline 起仅执行 V4 及以后（总迁移数 - 前 3 个），新增迁移自动适配
+        int expectedAfterBaseline =
+                countMigrationScripts() - Integer.parseInt(LEGACY_BASELINE_VERSION);
+        assertEquals(expectedAfterBaseline, legacyUpgradeFlyway.migrate().migrationsExecuted);
 
         try (Connection connection = DriverManager.getConnection(
                 MYSQL.getJdbcUrl(), MYSQL.getUsername(), MYSQL.getPassword()
@@ -90,6 +101,18 @@ class FlywayMySqlContainerTest {
                 assertTrue(tables.next());
             }
         }
+    }
+
+    /**
+     * 统计 db/migration 下所有 V*.sql 迁移脚本的数量。
+     * 新增迁移脚本后无需修改测试断言，此处自动适配最新迁移数。
+     */
+    private static int countMigrationScripts() throws IOException {
+        PathMatchingResourcePatternResolver resolver =
+                new PathMatchingResourcePatternResolver(FlywayMySqlContainerTest.class.getClassLoader());
+        Resource[] migrations =
+                resolver.getResources("classpath:db/migration/V*.sql");
+        return migrations.length;
     }
 
     private void cleanDatabase() {

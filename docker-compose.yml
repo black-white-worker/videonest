@@ -62,7 +62,7 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
       MINIO_API_CORS_ALLOW_ORIGIN: ${MINIO_API_CORS_ALLOW_ORIGIN:-*}
     ports:
-      - "127.0.0.1:9010:9000"
+      - "9010:9000"
       - "127.0.0.1:9011:9001"
     volumes:
       - minio_data:/data

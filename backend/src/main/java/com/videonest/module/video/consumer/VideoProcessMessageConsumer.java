@@ -4,6 +4,7 @@ import com.videonest.infrastructure.mq.RabbitMqConfig;
 import com.videonest.infrastructure.mq.DelayedMessagePublisher;
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.common.exception.VideoProcessingException;
 import com.videonest.module.video.config.VideoProcessProperties;
 import com.videonest.module.video.config.VideoReviewProperties;
@@ -20,7 +21,6 @@ import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import lombok.extern.slf4j.Slf4j;
 
@@ -30,9 +30,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.time.LocalDateTime;
+import net.coobird.thumbnailator.Thumbnails;
 
 /**
  * RabbitMQ 消费者类,就是VideoProcessEvent事件的消费者
@@ -46,20 +48,6 @@ public class VideoProcessMessageConsumer {
     private static final long LIST_COVER_MAX_BYTES = 300L * 1024;
     // 详情页封面最大字节限制：800KB
     private static final long DETAIL_COVER_MAX_BYTES = 800L * 1024;
-    /*
-     * Redis Lua解锁脚本：安全释放分布式锁
-     * 判断当前锁的value等于传入的lockToken才允许删除锁
-     * 防止：A线程锁超时，B线程拿到锁，A执行del把B的锁删掉
-     * 返回1解锁成功，0解锁失败
-     */
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
-            new DefaultRedisScript<>("""
-                    if redis.call('GET', KEYS[1]) == ARGV[1] then
-                        return redis.call('DEL', KEYS[1])
-                    end
-                    return 0
-                    """, Long.class);
-
     private final ObjectMapper objectMapper;
     private final VideoMapper videoMapper;
     private final MinioService minioService;
@@ -67,6 +55,7 @@ public class VideoProcessMessageConsumer {
     private final VideoReviewProperties reviewProperties;
     private final DelayedMessagePublisher delayedMessagePublisher;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final RenewableRedisLock renewableRedisLock;
     private final HotVideoCacheService hotVideoCacheService;
     private final VideoListCacheService videoListCacheService;
     private volatile boolean coverBackfillComplete;
@@ -79,6 +68,7 @@ public class VideoProcessMessageConsumer {
             VideoReviewProperties reviewProperties,
             DelayedMessagePublisher delayedMessagePublisher,
             RedisTemplate<String, Object> redisTemplate,
+            RenewableRedisLock renewableRedisLock,
             HotVideoCacheService hotVideoCacheService,
             VideoListCacheService videoListCacheService
     ) {
@@ -89,6 +79,7 @@ public class VideoProcessMessageConsumer {
         this.reviewProperties = reviewProperties;
         this.delayedMessagePublisher = delayedMessagePublisher;
         this.redisTemplate = redisTemplate;
+        this.renewableRedisLock = renewableRedisLock;
         this.hotVideoCacheService = hotVideoCacheService;
         this.videoListCacheService = videoListCacheService;
     }
@@ -113,23 +104,21 @@ public class VideoProcessMessageConsumer {
         }
 
         String lockKey = RedisKeys.videoProcessLock(event.videoId());
-        // 生成随机锁令牌，用于Lua解锁脚本，区分不同任务的锁
-        String lockToken = UUID.randomUUID().toString();
-        // setIfAbsent 分布式锁：key不存在才设置；设置过期时间=转码超时+300秒兜底
-        Boolean locked = redisTemplate.opsForValue().setIfAbsent(
+        Optional<RenewableRedisLock.LockHandle> acquiredLock =
+                renewableRedisLock.tryAcquire(
                 lockKey,
-                lockToken,
-                properties.getTimeoutSeconds() + 300,
+                properties.getLockLeaseSeconds(),
                 TimeUnit.SECONDS
         );
         // 获取锁失败，说明别的服务实例正在处理这个视频，直接返回，避免重复转码
-        if (!Boolean.TRUE.equals(locked)) {
+        if (acquiredLock.isEmpty()) {
             log.info("视频处理任务正在由其他实例执行，videoId={}", event.videoId());
             return;
         }
 
-        Path workDir = null;
-        try {
+        try (RenewableRedisLock.LockHandle lock = acquiredLock.get()) {
+            Path workDir = null;
+            try {
             log.info("开始处理视频，videoId={}，source={}", event.videoId(), event.sourceObjectName());
             // 在本地磁盘创建临时工作目录，所有转码中间文件全部放这里
             workDir = Files.createTempDirectory("videonest-" + event.videoId() + "-");
@@ -187,6 +176,8 @@ public class VideoProcessMessageConsumer {
             String coverListName = coverBasePath + "/list-400.jpg";
             String coverDetailName = coverBasePath + "/detail-1080.jpg";
 
+            // 看门狗发现锁已丢失时，不能再提交本消费者的处理结果。
+            lock.ensureHeld();
             // 将本地转码完成的文件上传MinIO对象存储
             minioService.uploadFile(video480, video480Name, "video/mp4");
             minioService.uploadFile(video720, video720Name, "video/mp4");
@@ -194,10 +185,19 @@ public class VideoProcessMessageConsumer {
             minioService.uploadFile(coverList, coverListName, "image/jpeg");
             minioService.uploadFile(coverDetail, coverDetailName, "image/jpeg");
 
+            lock.ensureHeld();
             video.setVideo480pUrl(video480Name);
             video.setVideo720pUrl(video720Name);
             video.setVideo1080pUrl(video1080Name);
             video.setVideoUrl(video720Name);
+            // 从本地转码文件直接读取大小，避免用户首次访问详情页时3次 MinIO 网络调用
+            try {
+                video.setVideo480pSizeBytes(Files.size(video480));
+                video.setVideo720pSizeBytes(Files.size(video720));
+                video.setVideo1080pSizeBytes(Files.size(video1080));
+            } catch (IOException e) {
+                log.warn("读取转码文件大小失败，videoId={}", event.videoId(), e);
+            }
             // cover_url 保留为兼容字段，但同样只指向处理后的详情缩略图。
             video.setCoverUrl(coverDetailName);
             video.setCoverListUrl(coverListName);
@@ -220,14 +220,14 @@ public class VideoProcessMessageConsumer {
             );
             videoMapper.updateById(video);
             log.info("视频处理成功并进入待审核状态，videoId={}", event.videoId());
-        } catch (IOException e) {
+            } catch (IOException e) {
             log.error("视频处理发生文件系统故障，videoId={}", event.videoId(), e);
             throw new VideoProcessingException(
                     "FILE_SYSTEM",
                     shortMessage(e),
                     e
             );
-        } catch (InterruptedException e) {
+            } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             log.error("视频处理线程被中断，videoId={}", event.videoId(), e);
             throw new VideoProcessingException(
@@ -235,23 +235,10 @@ public class VideoProcessMessageConsumer {
                     "视频处理线程被中断",
                     e
             );
-        } finally {
+            } finally {
             // finally块：无论成功失败，删除本地临时目录，释放磁盘空间
             deleteDirectory(workDir);
-            // 释放redis分布式锁
-            unlockVideoProcess(lockKey, lockToken, event.videoId());
-        }
-    }
-
-    /**
-     * 仅释放当前消费者持有的锁，避免锁超时并被其他实例重新获取后被误删。
-     */
-    private void unlockVideoProcess(String lockKey, String lockToken, Long videoId) {
-        try {
-            // 执行释放锁的lua脚本
-            redisTemplate.execute(UNLOCK_SCRIPT, List.of(lockKey), lockToken);
-        } catch (RuntimeException e) {
-            log.warn("释放视频处理锁失败，等待锁自动过期，videoId={}", videoId, e);
+            }
         }
     }
 
@@ -368,6 +355,8 @@ public class VideoProcessMessageConsumer {
 
     /**
      * 循环降低图片质量，生成指定宽度、大小限制的封面缩略图
+     * 使用 Thumbnailator 在 JVM 内完成缩放+压缩，替代 FFmpeg 外部进程，
+     * 2核机器上避免频繁启动 FFmpeg 进程的 CPU 和内存开销。
      * @param source 封面原图本地路径
      * @param output 输出缩略图路径
      * @param maxWidth 最大宽度
@@ -378,21 +367,19 @@ public class VideoProcessMessageConsumer {
             Path output,
             int maxWidth,
             long maxBytes
-    ) throws IOException, InterruptedException {
-        int quality = 3;
-        do {
-            runFfmpeg(List.of(
-                    properties.getFfmpegPath(), "-y", "-i", source.toString(),
-                    "-frames:v", "1", "-an", "-map_metadata", "-1",
-                    "-vf", "scale=min(" + maxWidth + "\\,iw):-2",
-                    "-q:v", Integer.toString(quality),
-                    output.toString()
-            ));
+    ) throws IOException {
+        // 质量从高到低尝试，对应文件从大到小；找到第一个不超过 maxBytes 的就返回
+        double[] qualities = {0.92, 0.82, 0.72, 0.62, 0.52, 0.42, 0.32};
+        for (double quality : qualities) {
+            Thumbnails.of(source.toFile())
+                    .width(maxWidth)
+                    .outputQuality(quality)
+                    .outputFormat("jpg")
+                    .toFile(output.toFile());
             if (Files.size(output) <= maxBytes) {
                 return;
             }
-            quality += 2;   // 文件过大，降低画质，增大q:v数值
-        } while (quality <= 15);        // 最大循环到15，如果还超限抛出异常
+        }
 
         throw new VideoProcessingException(
                 "COVER_SIZE",
@@ -464,10 +451,6 @@ public class VideoProcessMessageConsumer {
                 hotVideoCacheService.invalidateCards();
                 videoListCacheService.invalidateAll();
                 log.info("历史封面缩略图补齐成功，videoId={}", video.getId());
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.warn("历史封面缩略图补齐任务被中断，videoId={}", video.getId());
-                return;
             } catch (Exception e) {
                 log.error("历史封面缩略图补齐失败，videoId={}", video.getId(), e);
             } finally {

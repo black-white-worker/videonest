@@ -20,4 +20,22 @@ public class VideoProcessProperties {
     private String ffprobePath = "ffprobe";
 
     private long timeoutSeconds = 1800;
+
+    /**
+     * 转码锁的初始 TTL。看门狗会在任务运行期间自动续期；进程异常退出后，
+     * 该 TTL 仍是允许其他消费者接管任务的最长等待时间。
+     */
+    private long lockLeaseSeconds = 300;
+
+    /**
+     * 转码超时兜底阈值（分钟）。视频处于 PROCESSING 状态超过该时长仍未更新，
+     * 兜底扫描任务会重新投递转码消息。需大于最大可能转码耗时
+     * （单次 FFmpeg 超时 30 分钟 × 3 个分辨率 + 下载上传时间），避免误判。
+     */
+    private long processingTimeoutMinutes = 120;
+
+    /**
+     * 兜底扫描每批最多处理的视频条数，防止一次性投递过多消息压垮消费者。
+     */
+    private int stuckScanBatchSize = 20;
 }

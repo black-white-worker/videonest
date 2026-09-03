@@ -70,7 +70,7 @@ if ($RemoteDir -notmatch '^/[A-Za-z0-9._/-]+$' -or $RemoteDir -eq '/') {
 if (-not $EnvFile) { $EnvFile = Join-Path $ProjectRoot ".env" }
 $EnvFile = (Resolve-Path -LiteralPath $EnvFile).Path
 if (-not $PublicSiteUrl) { $PublicSiteUrl = "http://$Server" }
-if (-not $MinioPublicEndpoint) { $MinioPublicEndpoint = "http://$Server`:9000" }
+if (-not $MinioPublicEndpoint) { $MinioPublicEndpoint = "http://$Server`:9010" }
 
 foreach ($Url in @($PublicSiteUrl, $MinioPublicEndpoint)) {
     $Parsed = $null
@@ -304,10 +304,13 @@ fi
 
 HTTP_PORT="$(sed -n 's/^HTTP_PORT=//p' .env | tail -n 1)"
 HTTP_PORT="${HTTP_PORT:-80}"
+# MinIO API 在宿主机上映射为 9010（docker-compose.yml 中 127.0.0.1:9010->9000）
+MINIO_API_PORT="$(sed -n 's/^MINIO_API_PORT=//p' .env | tail -n 1)"
+MINIO_API_PORT="${MINIO_API_PORT:-9010}"
 ready='false'
 for _ in $(seq 1 60); do
   if curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/videos?page=1&size=1" >/dev/null 2>&1 &&
-     curl -fsS 'http://127.0.0.1:9000/minio/health/live' >/dev/null 2>&1; then
+     curl -fsS "http://127.0.0.1:${MINIO_API_PORT}/minio/health/live" >/dev/null 2>&1; then
     ready='true'
     break
   fi

@@ -2,6 +2,7 @@ package com.videonest.module.video.service.impl;
 
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.module.video.config.ResourceCleanupProperties;
 import com.videonest.module.video.mapper.VideoMapper;
 import org.junit.jupiter.api.Test;
@@ -10,6 +11,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 
@@ -36,22 +38,28 @@ class VideoResourceCleanupServiceImplLockTest {
     @Mock
     private ValueOperations<String, Object> valueOperations;
 
+    @Mock
+    private StringRedisTemplate lockRedisTemplate;
+
+    @Mock
+    private ValueOperations<String, String> lockValueOperations;
+
     @Test
     void purgeReleasesOnlyTheTokenItAcquired() {
         VideoResourceCleanupServiceImpl service = service();
         long videoId = 42L;
         String lockKey = RedisKeys.resourcePurgeLock(videoId);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.setIfAbsent(eq(lockKey), any(String.class), eq(10L),
-                eq(TimeUnit.MINUTES))).thenReturn(true);
+        when(lockRedisTemplate.opsForValue()).thenReturn(lockValueOperations);
+        when(lockValueOperations.setIfAbsent(eq(lockKey), any(String.class), eq(600_000L),
+                eq(TimeUnit.MILLISECONDS))).thenReturn(true);
         when(videoMapper.selectDeletedVideoById(videoId)).thenReturn(null);
 
         service.purgeVideo(videoId);
 
         ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
-        verify(valueOperations).setIfAbsent(eq(lockKey), token.capture(), eq(10L),
-                eq(TimeUnit.MINUTES));
-        verify(redisTemplate).execute(
+        verify(lockValueOperations).setIfAbsent(eq(lockKey), token.capture(), eq(600_000L),
+                eq(TimeUnit.MILLISECONDS));
+        verify(lockRedisTemplate).execute(
                 any(DefaultRedisScript.class),
                 eq(List.of(lockKey)),
                 eq(token.getValue())
@@ -61,8 +69,8 @@ class VideoResourceCleanupServiceImplLockTest {
     @Test
     void scheduledCleanupReleasesOnlyTheTokenItAcquired() {
         VideoResourceCleanupServiceImpl service = service();
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-        when(valueOperations.setIfAbsent(
+        when(lockRedisTemplate.opsForValue()).thenReturn(lockValueOperations);
+        when(lockValueOperations.setIfAbsent(
                 eq(RedisKeys.RESOURCE_CLEANUP_JOB_LOCK),
                 any(String.class),
                 eq(60_000L),
@@ -73,13 +81,13 @@ class VideoResourceCleanupServiceImplLockTest {
         service.cleanupExpiredResources();
 
         ArgumentCaptor<String> token = ArgumentCaptor.forClass(String.class);
-        verify(valueOperations).setIfAbsent(
+        verify(lockValueOperations).setIfAbsent(
                 eq(RedisKeys.RESOURCE_CLEANUP_JOB_LOCK),
                 token.capture(),
                 eq(60_000L),
                 eq(TimeUnit.MILLISECONDS)
         );
-        verify(redisTemplate).execute(
+        verify(lockRedisTemplate).execute(
                 any(DefaultRedisScript.class),
                 eq(List.of(RedisKeys.RESOURCE_CLEANUP_JOB_LOCK)),
                 eq(token.getValue())
@@ -94,6 +102,7 @@ class VideoResourceCleanupServiceImplLockTest {
                 videoMapper,
                 minioService,
                 redisTemplate,
+                new RenewableRedisLock(lockRedisTemplate),
                 properties
         );
     }

@@ -102,23 +102,23 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
             Long categoryId, String keyword, long page, long size
     ) {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        boolean cacheable = page == 1 && normalizedKeyword == null;
+        boolean cacheable = page >= 1 && page <= 10 && normalizedKeyword == null;
         if (cacheable) {
-            PageResult<VideoListItemVO> cached = videoListCacheService.getFirstPage(
-                    categoryId, size
+            PageResult<VideoListItemVO> cached = videoListCacheService.getPage(
+                    categoryId, page, size
             );
             if (cached != null) {
                 return cached;
             }
             synchronized (firstPageRebuildMonitor) {
-                cached = videoListCacheService.getFirstPage(categoryId, size);
+                cached = videoListCacheService.getPage(categoryId, page, size);
                 if (cached != null) {
                     return cached;
                 }
                 PageResult<VideoListItemVO> rebuilt = queryPublishedVideos(
                         categoryId, null, page, size
                 );
-                videoListCacheService.putFirstPage(categoryId, size, rebuilt);
+                videoListCacheService.putPage(categoryId, page, size, rebuilt);
                 return rebuilt;
             }
         }

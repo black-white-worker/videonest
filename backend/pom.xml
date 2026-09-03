@@ -135,6 +135,13 @@
 			<artifactId>caffeine</artifactId>
 		</dependency>
 
+		<!-- 封面缩略图：JVM 内图片缩放压缩，替代 FFmpeg 进程，2核机器省CPU省启动开销 -->
+		<dependency>
+			<groupId>net.coobird</groupId>
+			<artifactId>thumbnailator</artifactId>
+			<version>0.4.20</version>
+		</dependency>
+
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
 			<artifactId>spring-boot-starter-amqp</artifactId>

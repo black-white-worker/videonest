@@ -183,6 +183,17 @@ public interface VideoMapper extends BaseMapper<Video> {
     );
 
     /**
+     * 查询转码超时卡住的视频id列表，兜底扫描任务调用
+     * @param before 最后更新时间早于该时间点才算卡住
+     * @param limit 批量限制，防止一次性投递过多消息
+     * @return 卡住的视频id集合
+     */
+    List<Long> selectStuckProcessingVideoIds(
+            @Param("before") LocalDateTime before,
+            @Param("limit") int limit
+    );
+
+    /**
      * 批量查询需要回补封面缩略图的视频，后台任务批量生成封面
      * @param limit 批量条数
      * @return Video实体列表

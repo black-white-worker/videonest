@@ -5,6 +5,7 @@ import com.videonest.common.exception.StorageOperationException;
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.oss.service.StoredObjectMetadata;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.module.upload.dto.UploadPresignRequest;
 import com.videonest.module.upload.vo.FileUploadVO;
 import com.videonest.module.upload.vo.UploadPresignVO;
@@ -12,11 +13,11 @@ import com.videonest.security.SecurityUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -34,26 +35,11 @@ public class UploadSessionService {
     // complete完成接口分布式锁过期时间10分钟，防止死锁
     private static final int COMPLETE_LOCK_MINUTES = 10;
 
-    /**
-     * Redis Lua解锁脚本：防止锁误删除（A线程锁，B线程释放锁）
-     * 逻辑：只有key存储的值等于传入的token，才执行DEL删除key；否则返回0不操作
-     * KEYS[1]：锁key
-     * ARGV[1]：锁的唯一token
-     */
-
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
-            // 锁存在，并且里面token等于当前线程的token，证明是自己的锁，才删除
-            new DefaultRedisScript<>("""
-                    if redis.call('GET', KEYS[1]) == ARGV[1] then
-                        return redis.call('DEL', KEYS[1])
-                    end
-                    return 0
-                    """, Long.class);
-
     private final MinioService minioService;
     private final UploadedFileSecurityValidator securityValidator;
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
+    private final RenewableRedisLock renewableRedisLock;
 
     /**
      * 构造器注入，Spring自动注入各个依赖Bean
@@ -66,12 +52,14 @@ public class UploadSessionService {
             MinioService minioService,
             UploadedFileSecurityValidator securityValidator,
             RedisTemplate<String, Object> redisTemplate,
-            StringRedisTemplate stringRedisTemplate
+            StringRedisTemplate stringRedisTemplate,
+            RenewableRedisLock renewableRedisLock
     ) {
         this.minioService = minioService;
         this.securityValidator = securityValidator;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
+        this.renewableRedisLock = renewableRedisLock;
     }
 
     /**
@@ -127,31 +115,17 @@ public class UploadSessionService {
      */
     public FileUploadVO complete(String uploadId) {
         String lockKey = RedisKeys.uploadCompleteLock(uploadId);
-        // 锁的唯一token，用于lua脚本安全释放锁，防止释放别人的锁
-        String lockToken = UUID.randomUUID().toString();
-
-        /*
-        * opsForValue() 返回 ValueOperations 对象，它就是操作 Redis 远端字符串数据的手柄；
-        * 传入 key、value，它内部组装命令、通过网络发给 Redis，修改 Redis 服务端上保存的数据。
-        * */
-
-        //setIfAbsent()对应 Redis 的 NX 选项：Only set if key does not exist，key 不存在才设置
-        Boolean locked = stringRedisTemplate.opsForValue().setIfAbsent(
+        Optional<RenewableRedisLock.LockHandle> acquiredLock =
+                renewableRedisLock.tryAcquire(
                 lockKey,
-                lockToken,
                 COMPLETE_LOCK_MINUTES,
                 TimeUnit.MINUTES
         );
-        // 不直接写if(!locked)，是为了规避Boolean包装类 null 空指针
-        //  防止重复提交，和重复执行
-        if (!Boolean.TRUE.equals(locked)) {
+        if (acquiredLock.isEmpty()) {
             throw new BusinessException(409, "该上传正在校验，请勿重复提交");
         }
-        try {
-            return completeLocked(uploadId);
-        } finally {
-            // 无论业务成功失败，都执行释放锁
-            unlockComplete(lockKey, lockToken);
+        try (RenewableRedisLock.LockHandle lock = acquiredLock.get()) {
+            return completeLocked(uploadId, lock);
         }
     }
 
@@ -160,7 +134,10 @@ public class UploadSessionService {
      * @param uploadId 上传会话id
      * @return FileUploadVO
      */
-    private FileUploadVO completeLocked(String uploadId) {
+    private FileUploadVO completeLocked(
+            String uploadId,
+            RenewableRedisLock.LockHandle lock
+    ) {
         // 获取当前登录用户id，校验票据归属
         long userId = SecurityUtils.getCurrentUser().userId();
         // 从Redis取出上传票据
@@ -190,11 +167,13 @@ public class UploadSessionService {
             UploadedFileSecurityValidator.Inspection inspection =
                     securityValidator.inspect(ticket.stagingObjectName(), ticket.type());
 
+            lock.ensureHeld();
             // 在Redis写入确认标记，标记该文件已经校验完成，有效期2小时
             registerConfirmed(ticket.finalObjectName(), userId, ticket.type());
             minioService.moveObject(
                     ticket.stagingObjectName(), ticket.finalObjectName()
             );
+            lock.ensureHeld();
             // 删除Redis上传票据，票据一次性使用
             redisTemplate.delete(RedisKeys.uploadTicket(uploadId));
             // 返回结果VO：正式存储路径、视频解析出来的时长
@@ -215,25 +194,6 @@ public class UploadSessionService {
                 redisTemplate.delete(RedisKeys.uploadTicket(uploadId));
             }
             throw e;
-        }
-    }
-
-    /**
-     * 使用Lua脚本安全释放分布式锁
-     * @param lockKey redis锁key
-     * @param lockToken 锁的唯一token
-     */
-    private void unlockComplete(String lockKey, String lockToken) {
-        try {
-            // 执行lua脚本释放锁，防止释放其他线程的锁
-            stringRedisTemplate.execute(
-                    UNLOCK_SCRIPT,
-                    java.util.List.of(lockKey),
-                    lockToken
-            );
-        } catch (RuntimeException e) {
-            // 锁会在十分钟后自动过期，释放失败不覆盖原始上传结果。
-            log.warn("释放上传完成锁失败，lockKey={}", lockKey, e);
         }
     }
 

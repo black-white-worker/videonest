@@ -27,7 +27,7 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
     private final Counter hits;
     private final Counter misses;
 
-    @Value("${video-list-cache.ttl-seconds:45}")
+    @Value("${video-list-cache.ttl-seconds:150}")
     private long ttlSeconds;
 
     public VideoListCacheServiceImpl(
@@ -42,15 +42,15 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
     }
 
     @Override
-    public PageResult<VideoListItemVO> getFirstPage(Long categoryId, long size) {
-        String key = RedisKeys.videoListFirstPage(categoryId, size);
+    public PageResult<VideoListItemVO> getPage(Long categoryId, long page, long size) {
+        String key = RedisKeys.videoListPage(categoryId, page, size);
         try {
             Object cached = redisTemplate.opsForValue().get(key);
-            if (cached instanceof VideoListPageCache page) {
+            if (cached instanceof VideoListPageCache pageCache) {
                 hits.increment();
                 return new PageResult<>(
-                        new ArrayList<>(page.records()),
-                        page.total(), page.page(), page.size(), page.pages()
+                        new ArrayList<>(pageCache.records()),
+                        pageCache.total(), pageCache.page(), pageCache.size(), pageCache.pages()
                 );
             }
         } catch (RuntimeException e) {
@@ -61,20 +61,21 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
     }
 
     @Override
-    public void putFirstPage(
+    public void putPage(
             Long categoryId,
+            long page,
             long size,
-            PageResult<VideoListItemVO> page
+            PageResult<VideoListItemVO> pageResult
     ) {
-        String key = RedisKeys.videoListFirstPage(categoryId, size);
+        String key = RedisKeys.videoListPage(categoryId, page, size);
         long effectiveTtl = Math.max(1, ttlSeconds)
                 + ThreadLocalRandom.current().nextLong(0, 16);
         try {
             redisTemplate.opsForValue().set(
                     key,
                     new VideoListPageCache(
-                            new ArrayList<>(page.records()),
-                            page.total(), page.page(), page.size(), page.pages()
+                            new ArrayList<>(pageResult.records()),
+                            pageResult.total(), pageResult.page(), pageResult.size(), pageResult.pages()
                     ),
                     effectiveTtl,
                     TimeUnit.SECONDS

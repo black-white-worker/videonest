@@ -7,6 +7,7 @@ import com.videonest.common.exception.BusinessException;
 import com.videonest.common.exception.StorageOperationException;
 import com.videonest.infrastructure.oss.service.MinioService;
 import com.videonest.infrastructure.redis.RedisKeys;
+import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.module.video.config.ResourceCleanupProperties;
 import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.mapper.VideoMapper;
@@ -15,7 +16,6 @@ import com.videonest.module.video.vo.DeletedVideoVO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +24,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.UUID;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -37,35 +37,23 @@ import java.util.concurrent.TimeUnit;
 public class VideoResourceCleanupServiceImpl
         implements VideoResourceCleanupService {
 
-    /**
-     * Redis Lua解锁脚本，分布式锁解锁
-     * KEYS[1]：锁key
-     * ARGV[1]：当前线程/实例生成的唯一token
-     * 逻辑：只有key存储的值等于当前token，才允许删除锁；防止把别的实例持有的锁误释放
-     * 返回1解锁成功；0不做任何操作
-     */
-    private static final DefaultRedisScript<Long> UNLOCK_SCRIPT =
-            new DefaultRedisScript<>("""
-                    if redis.call('GET', KEYS[1]) == ARGV[1] then
-                        return redis.call('DEL', KEYS[1])
-                    end
-                    return 0
-                    """, Long.class);
-
     private final VideoMapper videoMapper;
     private final MinioService minioService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final RenewableRedisLock renewableRedisLock;
     private final ResourceCleanupProperties properties;
 
     public VideoResourceCleanupServiceImpl(
             VideoMapper videoMapper,
             MinioService minioService,
             RedisTemplate<String, Object> redisTemplate,
+            RenewableRedisLock renewableRedisLock,
             ResourceCleanupProperties properties
     ) {
         this.videoMapper = videoMapper;
         this.minioService = minioService;
         this.redisTemplate = redisTemplate;
+        this.renewableRedisLock = renewableRedisLock;
         this.properties = properties;
     }
 
@@ -97,21 +85,19 @@ public class VideoResourceCleanupServiceImpl
     @Transactional
     public void purgeVideo(Long videoId) {
         String lockKey = RedisKeys.resourcePurgeLock(videoId);
-        String lockToken = UUID.randomUUID().toString();
-        // setIfAbsent：key不存在才设置，过期时间10分钟；防止死锁
-        Boolean locked = redisTemplate.opsForValue().setIfAbsent(
+        Optional<RenewableRedisLock.LockHandle> acquiredLock =
+                renewableRedisLock.tryAcquire(
                 lockKey,
-                lockToken,
                 10,
                 TimeUnit.MINUTES
         );
         // 获取锁失败，代表别的服务实例正在处理这条视频，直接返回，避免重复执行
-        if (!Boolean.TRUE.equals(locked)) {
+        if (acquiredLock.isEmpty()) {
             log.info("资源清理任务正在由其他实例执行，videoId={}", videoId);
             return;
         }
 
-        try {
+        try (RenewableRedisLock.LockHandle lock = acquiredLock.get()) {
             Video video = videoMapper.selectDeletedVideoById(videoId);
             if (video == null) {
                 log.info("待清理视频已不存在，按幂等成功处理，videoId={}", videoId);
@@ -122,6 +108,8 @@ public class VideoResourceCleanupServiceImpl
             for (String objectName : resourceObjectNames(video)) {
                 minioService.deleteObject(objectName);
             }
+
+            lock.ensureHeld();
 
             // 硬删除视频关联数据
             videoMapper.hardDeleteVideoLikes(videoId);
@@ -135,8 +123,6 @@ public class VideoResourceCleanupServiceImpl
 
             clearVideoCache(videoId);
             log.info("视频及关联资源永久删除成功，videoId={}", videoId);
-        } finally {
-            unlock(lockKey, lockToken, "视频资源清理", videoId);
         }
     }
 
@@ -157,19 +143,23 @@ public class VideoResourceCleanupServiceImpl
      */
     @Scheduled(fixedDelayString = "${resource-cleanup.fixed-delay-milliseconds:3600000}")
     public void cleanupExpiredResources() {
-        String lockToken = UUID.randomUUID().toString();
-        // 获取定时任务分布式锁，过期时间取配置的任务间隔与60s的最大值，防止任务未完成锁过期
-        Boolean locked = redisTemplate.opsForValue().setIfAbsent(
-                RedisKeys.RESOURCE_CLEANUP_JOB_LOCK,
-                lockToken,
-                Math.max(properties.getFixedDelayMilliseconds(), 60_000),
-                TimeUnit.MILLISECONDS
-        );
-        if (!Boolean.TRUE.equals(locked)) {
+        // 初始 TTL 只作为实例故障后的接管上限，正常长批次由看门狗续期。
+        Optional<RenewableRedisLock.LockHandle> acquiredLock;
+        try {
+            acquiredLock = renewableRedisLock.tryAcquire(
+                    RedisKeys.RESOURCE_CLEANUP_JOB_LOCK,
+                    Math.max(properties.getFixedDelayMilliseconds(), 60_000),
+                    TimeUnit.MILLISECONDS
+            );
+        } catch (RuntimeException e) {
+            log.warn("获取定时资源清理锁失败，本轮跳过", e);
+            return;
+        }
+        if (acquiredLock.isEmpty()) {
             return;
         }
 
-        try {
+        try (RenewableRedisLock.LockHandle ignored = acquiredLock.get()) {
             // 查询满足到期时间条件、待物理删除的视频ID列表，限制batchSize批次大小
             List<Long> videoIds = videoMapper.selectDuePurgeVideoIds(
                     LocalDateTime.now(),
@@ -188,34 +178,6 @@ public class VideoResourceCleanupServiceImpl
             if (!videoIds.isEmpty()) {
                 log.info("定时资源清理批次执行完成，count={}", videoIds.size());
             }
-        } finally {
-            unlock(
-                    RedisKeys.RESOURCE_CLEANUP_JOB_LOCK,
-                    lockToken,
-                    "定时资源清理",
-                    null
-            );
-        }
-    }
-
-    /**
-     * 仅释放当前实例持有的锁，避免超时锁被其他实例重新获取后遭到误删。
-     */
-    private void unlock(
-            String lockKey,
-            String lockToken,
-            String operation,
-            Long videoId
-    ) {
-        try {
-            redisTemplate.execute(UNLOCK_SCRIPT, List.of(lockKey), lockToken);
-        } catch (RuntimeException e) {
-            log.warn(
-                    "释放{}锁失败，等待锁自动过期，videoId={}",
-                    operation,
-                    videoId,
-                    e
-            );
         }
     }
 

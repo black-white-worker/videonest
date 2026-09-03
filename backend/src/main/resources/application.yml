@@ -17,11 +17,11 @@ spring:
 
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
-    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/${DB_NAME:videonest}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3307}/${DB_NAME:videonest}?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useServerPrepStmts=true&cachePrepStmts=true&prepStmtCacheSize=250&prepStmtCacheSqlLimit=2048&rewriteBatchedStatements=true
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     hikari:
-      maximum-pool-size: ${DB_POOL_MAX_SIZE:16}
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
       minimum-idle: ${DB_POOL_MIN_IDLE:8}
       connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:2000}
       validation-timeout: ${DB_VALIDATION_TIMEOUT_MS:1000}
@@ -48,14 +48,14 @@ spring:
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
-      port: ${REDIS_PORT:6379}
+      port: ${REDIS_PORT:6380}
       username: ${REDIS_USERNAME:default}
       password: ${REDIS_PASSWORD}
       database: ${REDIS_DATABASE:0}
       timeout: 3000ms
       lettuce:
         pool:
-          max-active: ${REDIS_POOL_MAX_ACTIVE:16}
+          max-active: ${REDIS_POOL_MAX_ACTIVE:20}
           max-idle: ${REDIS_POOL_MAX_IDLE:16}
           min-idle: ${REDIS_POOL_MIN_IDLE:4}
           max-wait: ${REDIS_POOL_MAX_WAIT:500ms}
@@ -63,7 +63,7 @@ spring:
   task:
     scheduling:
       pool:
-        size: ${SCHEDULING_POOL_SIZE:2}
+        size: ${SCHEDULING_POOL_SIZE:4}
       thread-name-prefix: videonest-scheduler-
 
   rabbitmq:
@@ -109,8 +109,8 @@ outbox:
   dispatch-interval-milliseconds: ${OUTBOX_DISPATCH_INTERVAL_MILLISECONDS:1000}
 
 minio:
-  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
-  public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://127.0.0.1:9000}}
+  endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9010}
+  public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://127.0.0.1:9010}}
   region: ${MINIO_REGION:us-east-1}
   access-key: ${MINIO_ACCESS_KEY}
   secret-key: ${MINIO_SECRET_KEY}
@@ -121,6 +121,8 @@ video-process:
   ffmpeg-path: ${FFMPEG_PATH:ffmpeg}
   ffprobe-path: ${FFPROBE_PATH:ffprobe}
   timeout-seconds: ${VIDEO_PROCESS_TIMEOUT_SECONDS:1800}
+  # 转码锁由看门狗自动续期；此值只决定进程故障后的接管等待上限。
+  lock-lease-seconds: ${VIDEO_PROCESS_LOCK_LEASE_SECONDS:300}
   # 单机 Docker 环境默认同时执行两个转码任务，避免多个 FFmpeg 进程耗尽内存。
   # 可设置为 2-4，让 RabbitMQ 在任务积压时最多扩展至四个消费者。
   consumer-concurrency: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:2}
@@ -149,7 +151,7 @@ hot-rank:
   refresh-interval-milliseconds: ${HOT_RANK_REFRESH_INTERVAL_MS:45000}
   current-ttl-seconds: ${HOT_RANK_CURRENT_TTL_SECONDS:180}
   cards-ttl-seconds: ${HOT_RANK_CARDS_TTL_SECONDS:60}
-  local-cache-milliseconds: ${HOT_RANK_LOCAL_CACHE_MILLISECONDS:2000}
+  local-cache-milliseconds: ${HOT_RANK_LOCAL_CACHE_MILLISECONDS:8000}
   refresh-lock-seconds: ${HOT_RANK_REFRESH_LOCK_SECONDS:40}
 
 video-review:
@@ -164,6 +166,10 @@ upload-cleanup:
   fixed-delay-milliseconds: ${UPLOAD_CLEANUP_FIXED_DELAY_MILLISECONDS:600000}
   batch-size: ${UPLOAD_CLEANUP_BATCH_SIZE:100}
   lock-seconds: ${UPLOAD_CLEANUP_LOCK_SECONDS:900}
+
+redis-lock:
+  # 统一租约锁看门狗的检查间隔；TTL 的三分之一到期时才会实际续期。
+  watchdog-interval-milliseconds: ${REDIS_LOCK_WATCHDOG_INTERVAL_MILLISECONDS:5000}
 
 logging:
   level:
@@ -194,7 +200,7 @@ request-logging:
   success-sample-rate: ${REQUEST_LOG_SUCCESS_SAMPLE_RATE:0.01}
 
 video-list-cache:
-  ttl-seconds: ${VIDEO_LIST_CACHE_TTL_SECONDS:45}
+  ttl-seconds: ${VIDEO_LIST_CACHE_TTL_SECONDS:300}
 
 comment-list-cache:
   ttl-seconds: ${COMMENT_LIST_CACHE_TTL_SECONDS:30}

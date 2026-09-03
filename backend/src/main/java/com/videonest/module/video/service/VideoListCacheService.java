@@ -5,9 +5,9 @@ import com.videonest.module.video.vo.VideoListItemVO;
 
 public interface VideoListCacheService {
 
-    PageResult<VideoListItemVO> getFirstPage(Long categoryId, long size);
+    PageResult<VideoListItemVO> getPage(Long categoryId, long page, long size);
 
-    void putFirstPage(Long categoryId, long size, PageResult<VideoListItemVO> page);
+    void putPage(Long categoryId, long page, long size, PageResult<VideoListItemVO> pageResult);
 
     void invalidateAll();
 }
