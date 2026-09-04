@@ -23,6 +23,7 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
@@ -96,6 +97,9 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
      * @param keyword 搜索关键词
      * @param page 页码
      * @param size 每页条数
+     *
+     * 缓存策略：前 10 页且无关键词走缓存（本地 Caffeine → Redis → DB），命中/软过期旧值直接返回，
+     * 返回前统一实时生成 MinIO 签名 URL；深分页或带关键词直接回源数据库。
      */
     @Override
     public PageResult<VideoListItemVO> listPublishedVideos(
@@ -104,29 +108,48 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         boolean cacheable = page >= 1 && page <= 10 && normalizedKeyword == null;
         if (cacheable) {
-            PageResult<VideoListItemVO> cached = videoListCacheService.getPage(
-                    categoryId, page, size
-            );
-            if (cached != null) {
-                return cached;
-            }
-            synchronized (firstPageRebuildMonitor) {
-                cached = videoListCacheService.getPage(categoryId, page, size);
-                if (cached != null) {
-                    return cached;
-                }
-                PageResult<VideoListItemVO> rebuilt = queryPublishedVideos(
-                        categoryId, null, page, size
-                );
-                videoListCacheService.putPage(categoryId, page, size, rebuilt);
-                return rebuilt;
-            }
+            return readCachedList(categoryId, page, size);
         }
-
-        return queryPublishedVideos(categoryId, normalizedKeyword, page, size);
+        // 深分页 / 带关键词搜索：不进缓存，直接回源并签名返回
+        return sign(queryRaw(categoryId, normalizedKeyword, page, size));
     }
 
-    private PageResult<VideoListItemVO> queryPublishedVideos(
+    /**
+     * 缓存路径读取：本地 Caffeine → Redis → DB。
+     * 1. 命中缓存（含软过期旧值）→ 返回；若已过软过期，后台异步重建（SWR），请求不阻塞；
+     * 2. 完全未命中（首次访问 / 写操作清空）→ 单机锁防击穿，只让一个线程回源并回填缓存。
+     */
+    private PageResult<VideoListItemVO> readCachedList(Long categoryId, long page, long size) {
+        VideoListCacheService.CacheLookup cached = videoListCacheService.getPage(
+                categoryId, page, size
+        );
+        if (cached != null) {
+            // SWR：旧值仍可用，先用旧值响应，后台异步刷新，避免请求排队阻塞
+            if (cached.stale()) {
+                videoListCacheService.refreshAsync(
+                        categoryId, page, size,
+                        () -> queryRaw(categoryId, null, page, size)
+                );
+            }
+            return sign(cached.data());
+        }
+        // 完全 miss：加单机锁防止缓存击穿，二次检查后只有一个线程回源
+        synchronized (firstPageRebuildMonitor) {
+            cached = videoListCacheService.getPage(categoryId, page, size);
+            if (cached != null) {
+                return sign(cached.data());
+            }
+            PageResult<VideoListItemVO> rebuilt = queryRaw(categoryId, null, page, size);
+            videoListCacheService.putPage(categoryId, page, size, rebuilt);
+            return sign(rebuilt);
+        }
+    }
+
+    /**
+     * 回源数据库构建【原始数据】：coverUrl 保持 MinIO 对象名 / 原始地址，不做签名。
+     * 这样缓存里保存的是可长期复用的原始数据，不随签名 URL 过期而失效。
+     */
+    private PageResult<VideoListItemVO> queryRaw(
             Long categoryId, String keyword, long page, long size
     ) {
         Page<VideoListItemVO> pageRequest = new Page<>(page, size);
@@ -138,12 +161,23 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
                 keyword
         );
         pageData.setTotal(total);
-        // 遍历列表，把数据库存储的MinIO对象名，转换为带签名的临时访问url
-        pageData.getRecords().forEach(video ->
-                video.setCoverUrl(minioService.getAccessUrl(video.getCoverUrl()))
-        );
-        PageResult<VideoListItemVO> result = PageResult.of(pageData);
-        return result;
+        return PageResult.of(pageData);
+    }
+
+    /**
+     * 返回前统一生成 MinIO 签名 URL：
+     * 拷贝每条记录再签名，避免直接修改缓存中的原始对象名（防止污染缓存、重复签名）。
+     * 预签名 URL 每次实时生成，保证永不因过期失效。
+     */
+    private PageResult<VideoListItemVO> sign(PageResult<VideoListItemVO> src) {
+        List<VideoListItemVO> signed = new ArrayList<>(src.records().size());
+        for (VideoListItemVO vo : src.records()) {
+            VideoListItemVO copy = new VideoListItemVO();
+            BeanUtils.copyProperties(vo, copy);
+            copy.setCoverUrl(minioService.getAccessUrl(copy.getCoverUrl()));
+            signed.add(copy);
+        }
+        return new PageResult<>(signed, src.total(), src.page(), src.size(), src.pages());
     }
 
     /**

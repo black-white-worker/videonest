@@ -201,6 +201,12 @@ request-logging:
 
 video-list-cache:
   ttl-seconds: ${VIDEO_LIST_CACHE_TTL_SECONDS:300}
+  # 本地 Caffeine 二级缓存条目上限：2G 小内存机器上防止堆内存被缓存吃满触发 GC
+  local-max-size: ${VIDEO_LIST_CACHE_LOCAL_MAX_SIZE:200}
+  # 本地软过期（秒）：数据写入超过该时长后，命中返回旧值并触发一次后台异步刷新（SWR）
+  local-soft-ttl-seconds: ${VIDEO_LIST_CACHE_LOCAL_SOFT_TTL_SECONDS:15}
+  # 本地硬过期（秒）：本地缓存条目生命周期上限，0 表示沿用 ttl-seconds
+  local-hard-ttl-seconds: ${VIDEO_LIST_CACHE_LOCAL_HARD_TTL_SECONDS:0}
 
 comment-list-cache:
   ttl-seconds: ${COMMENT_LIST_CACHE_TTL_SECONDS:30}

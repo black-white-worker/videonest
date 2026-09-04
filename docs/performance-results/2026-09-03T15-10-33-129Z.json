@@ -1,0 +1,325 @@
+{
+  "startedAt": "2026-09-03T15:10:33.129Z",
+  "options": {
+    "baseUrl": "http://82.157.205.6",
+    "backendUrl": "http://127.0.0.1:8080",
+    "report": "docs\\performance-test-2026-09-03.md",
+    "results": "docs\\performance-results\\2026-09-03T15-10-33-129Z.json",
+    "quick": true,
+    "skipDirect": true
+  },
+  "reportPath": "S:\\videonest\\docs\\performance-test-2026-09-03.md",
+  "resultsPath": "S:\\videonest\\docs\\performance-results\\2026-09-03T15-10-33-129Z.json",
+  "preflight": {
+    "status": 200,
+    "commentVideoId": 11
+  },
+  "results": [
+    {
+      "group": "edge",
+      "name": "Nginx 首页",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/",
+        "concurrency": 100,
+        "elapsedSeconds": 16.217,
+        "requests": 4120,
+        "successful": 4086,
+        "failed": 34,
+        "successRatePercent": 99.175,
+        "requestsPerSecond": 254.05,
+        "latencyMs": {
+          "p50": 20.67,
+          "p95": 696.04,
+          "p99": 7616.07,
+          "max": 10011.33
+        },
+        "statusCodes": {
+          "200": 4086
+        },
+        "errors": {
+          "Error": 34
+        }
+      }
+    },
+    {
+      "group": "edge",
+      "name": "热门视频（经 Nginx）",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/api/videos/hot?limit=10",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/api/videos/hot?limit=10",
+        "concurrency": 100,
+        "elapsedSeconds": 10.147,
+        "requests": 3912,
+        "successful": 3912,
+        "failed": 0,
+        "successRatePercent": 100,
+        "requestsPerSecond": 385.53,
+        "latencyMs": {
+          "p50": 164.56,
+          "p95": 895.59,
+          "p99": 1452.38,
+          "max": 2114.55
+        },
+        "statusCodes": {
+          "200": 3912
+        },
+        "errors": {}
+      }
+    },
+    {
+      "group": "hot",
+      "name": "热门视频（100 并发）",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/api/videos/hot?limit=10",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/api/videos/hot?limit=10",
+        "concurrency": 100,
+        "elapsedSeconds": 10.478,
+        "requests": 5376,
+        "successful": 5376,
+        "failed": 0,
+        "successRatePercent": 100,
+        "requestsPerSecond": 513.09,
+        "latencyMs": {
+          "p50": 119.53,
+          "p95": 560.23,
+          "p99": 899.5,
+          "max": 1482.76
+        },
+        "statusCodes": {
+          "200": 5376
+        },
+        "errors": {}
+      }
+    },
+    {
+      "group": "list",
+      "name": "视频列表（100 并发）",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/api/videos?page=1&size=12",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/api/videos?page=1&size=12",
+        "concurrency": 100,
+        "elapsedSeconds": 17.552,
+        "requests": 1261,
+        "successful": 1222,
+        "failed": 39,
+        "successRatePercent": 96.907,
+        "requestsPerSecond": 71.84,
+        "latencyMs": {
+          "p50": 271.27,
+          "p95": 7041.03,
+          "p99": 11061.22,
+          "max": 15061.48
+        },
+        "statusCodes": {
+          "200": 1222
+        },
+        "errors": {
+          "Error": 39
+        }
+      }
+    },
+    {
+      "group": "other",
+      "name": "分类列表",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/api/categories",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/api/categories",
+        "concurrency": 100,
+        "elapsedSeconds": 13.495,
+        "requests": 3449,
+        "successful": 3449,
+        "failed": 0,
+        "successRatePercent": 100,
+        "requestsPerSecond": 255.58,
+        "latencyMs": {
+          "p50": 181.91,
+          "p95": 911.26,
+          "p99": 2721.26,
+          "max": 7407.17
+        },
+        "statusCodes": {
+          "200": 3449
+        },
+        "errors": {}
+      }
+    },
+    {
+      "group": "other",
+      "name": "评论列表",
+      "script": "benchmark-read.js",
+      "url": "http://82.157.205.6/api/videos/11/comments?page=1&size=10",
+      "concurrency": 100,
+      "duration": 10,
+      "data": {
+        "target": "http://82.157.205.6/api/videos/11/comments?page=1&size=10",
+        "concurrency": 100,
+        "elapsedSeconds": 10.511,
+        "requests": 4533,
+        "successful": 4533,
+        "failed": 0,
+        "successRatePercent": 100,
+        "requestsPerSecond": 431.28,
+        "latencyMs": {
+          "p50": 137.33,
+          "p95": 306.14,
+          "p99": 4178.49,
+          "max": 6162.69
+        },
+        "statusCodes": {
+          "200": 4533
+        },
+        "errors": {}
+      }
+    },
+    {
+      "group": "mixed",
+      "name": "混合只读流量（100 并发）",
+      "script": "benchmark-mixed.js",
+      "url": "http://82.157.205.6",
+      "concurrency": 100,
+      "duration": 30,
+      "commentVideoId": 11,
+      "data": {
+        "baseUrl": "http://82.157.205.6/",
+        "concurrency": 100,
+        "elapsedSeconds": 37.21,
+        "workload": [
+          {
+            "name": "hot",
+            "path": "/api/videos/hot?limit=10",
+            "weight": 35
+          },
+          {
+            "name": "video-list",
+            "path": "/api/videos?page=1&size=12",
+            "weight": 35
+          },
+          {
+            "name": "categories",
+            "path": "/api/categories",
+            "weight": 15
+          },
+          {
+            "name": "comments",
+            "path": "/api/videos/11/comments?page=1&size=10",
+            "weight": 15
+          }
+        ],
+        "total": {
+          "requests": 6990,
+          "successful": 6922,
+          "failed": 68,
+          "successRatePercent": 99.027,
+          "requestsPerSecond": 187.85,
+          "latencyMs": {
+            "p50": 48.38,
+            "p95": 1743.94,
+            "p99": 9999.65,
+            "max": 17026.89
+          },
+          "statusCodes": {
+            "200": 6922
+          },
+          "errors": {
+            "Error": 68
+          }
+        },
+        "scenarios": {
+          "hot": {
+            "requests": 2488,
+            "successful": 2480,
+            "failed": 8,
+            "successRatePercent": 99.678,
+            "requestsPerSecond": 66.86,
+            "latencyMs": {
+              "p50": 22.81,
+              "p95": 743.93,
+              "p99": 3685.22,
+              "max": 10010.02
+            },
+            "statusCodes": {
+              "200": 2480
+            },
+            "errors": {
+              "Error": 8
+            }
+          },
+          "video-list": {
+            "requests": 2476,
+            "successful": 2424,
+            "failed": 52,
+            "successRatePercent": 97.9,
+            "requestsPerSecond": 66.54,
+            "latencyMs": {
+              "p50": 273.37,
+              "p95": 3623.43,
+              "p99": 10133.67,
+              "max": 17026.89
+            },
+            "statusCodes": {
+              "200": 2424
+            },
+            "errors": {
+              "Error": 52
+            }
+          },
+          "categories": {
+            "requests": 999,
+            "successful": 996,
+            "failed": 3,
+            "successRatePercent": 99.7,
+            "requestsPerSecond": 26.85,
+            "latencyMs": {
+              "p50": 26.74,
+              "p95": 728.12,
+              "p99": 3758.38,
+              "max": 10008.75
+            },
+            "statusCodes": {
+              "200": 996
+            },
+            "errors": {
+              "Error": 3
+            }
+          },
+          "comments": {
+            "requests": 1027,
+            "successful": 1022,
+            "failed": 5,
+            "successRatePercent": 99.513,
+            "requestsPerSecond": 27.6,
+            "latencyMs": {
+              "p50": 28.06,
+              "p95": 736.65,
+              "p99": 3159.82,
+              "max": 10006.31
+            },
+            "statusCodes": {
+              "200": 1022
+            },
+            "errors": {
+              "Error": 5
+            }
+          }
+        }
+      }
+    }
+  ],
+  "finishedAt": "2026-09-03T15:12:29.316Z"
+}
