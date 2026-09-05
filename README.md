@@ -4,11 +4,11 @@
 
 VideoNest 是一个面向学习、作品展示与小型社区的视频平台。它以 Vue 3 和 Spring Boot 为核心，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。
 
-![VideoNest 首页](docs/images/home.png)
+![VideoNest 首页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/home.jpg)
 
-![VideoNest 投稿发布页](docs/images/upload.png)
+![VideoNest 投稿发布页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/upload.jpg)
 
-![VideoNest 视频详情页](docs/images/video-detail.png)
+![VideoNest 视频详情页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/video-detail.jpg)
 
 ## 亮点
 
@@ -94,7 +94,7 @@ docker compose up -d --build
 docker compose ps
 ```
 
-如果宿主机的 `3306` 已被本地 MySQL 占用，使用本项目提供的压测/本地兼容覆盖配置。它只移除 MySQL 的宿主机端口映射，容器间连接不受影响：
+如果不希望 MySQL 暴露到宿主机端口（例如纯容器内压测、或避免与本地 MySQL 冲突），使用本项目提供的覆盖配置。它只移除 MySQL 的宿主机端口映射，容器间连接不受影响：
 
 ```powershell
 docker compose -f docker-compose.yml -f docker-compose.benchmark.yml up -d --build
@@ -151,7 +151,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --buil
 | MinIO API / 管理台 | `http://127.0.0.1:9010` / `http://127.0.0.1:9011` |
 | MySQL / Redis | `127.0.0.1:3307` / `127.0.0.1:6380` |
 
-使用 `docker-compose.benchmark.yml` 覆盖配置时，MySQL 仅在 Docker 网络内可访问，不会监听宿主机 `3306`。
+使用 `docker-compose.benchmark.yml` 覆盖配置时，MySQL 仅在 Docker 网络内可访问，不会监听宿主机端口。
 
 首次初始化时，Compose 会执行 `sql` 目录中已挂载的初始化和增量脚本。一键部署还会幂等执行评论层级迁移；生产部署前仍建议备份数据库。
 
