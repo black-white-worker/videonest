@@ -6,14 +6,17 @@ VideoNest 是一个面向学习、作品展示与小型社区的视频平台。�
 
 ![VideoNest 首页](docs/images/home.png)
 
+![VideoNest 投稿发布页](docs/images/upload.png)
+
 ![VideoNest 视频详情页](docs/images/video-detail.png)
 
 ## 亮点
 
 - 完整视频链路：上传原视频、RabbitMQ 异步转码、审核发布、多清晰度播放与延迟清理。
-- 可扩展的读路径：Redis ZSet 热榜、播放量 Redis 原子累计与 MySQL 批量回写、MinIO 直连播放。
-- 可靠异步任务：发布确认、消费重试、死信队列、事件幂等、Redis 锁与人工重投。
-- 社区能力：注册登录、JWT 鉴权、点赞、收藏、评论与回复、关注、通知和管理后台。
+- 多级缓存读路径：视频列表 Caffeine 本地缓存 + SWR 异步刷新、Redis ZSet 热榜与本地短缓存、播放量 Redis 原子累计与 MySQL 批量回写、MinIO 直连播放。
+- 可靠异步任务：Transactional Outbox 事务发件箱、发布确认、消费重试、死信队列、事件幂等、可续期 Redis 锁（看门狗自动续期）、转码卡死兜底扫描与人工重投。
+- 社区与管理：注册登录、JWT 鉴权与撤销、认证限流、点赞收藏、嵌套评论与回复、关注通知、管理员用户管理与密码重置、死信与内容审核后台。
+- 资源治理：上传后未投稿文件定时清理、回收站延迟清理、MinIO staging 前缀生命周期过期。
 - 一键运行：Docker Compose 编排前端、后端、MySQL、Redis、RabbitMQ、MinIO 与 Nginx。
 
 ## 架构
@@ -34,18 +37,18 @@ flowchart LR
     U -->|"临时签名 URL"| O
 ```
 
-项目采用模块化单体：认证、视频、上传、互动、关注、通知等模块运行在一个 Spring Boot 应用中；转码和通知通过消息队列解耦。这个形态便于本地部署，也为后续拆分独立 Worker 留出空间。
+项目采用模块化单体：认证、视频、上传、互动、关注、通知、管理等模块运行在一个 Spring Boot 应用中；转码和通知通过消息队列解耦。读路径采用 Caffeine 本地缓存 + Redis 分布式缓存的多级结构，热榜与视频列表均支持异步刷新（SWR）；异步任务通过 Transactional Outbox 保证事件不丢，可续期 Redis 锁防止并发转码，卡死兜底扫描器自动重投长时间未动的任务。这个形态便于本地部署，也为后续拆分独立 Worker 留出空间。
 
 ## 功能一览
 
 | 模块 | 能力 |
 |---|---|
-| 用户与认证 | 注册、登录、JWT 鉴权、普通用户/管理员权限、个人主页 |
-| 视频发现 | 首页推荐、热门榜、分类筛选、关键词搜索、分页列表 |
-| 投稿与播放 | 封面/视频上传、480P/720P/1080P 转码、自动截帧、清晰度切换、MinIO 直连播放 |
-| 审核与创作 | 投稿状态、审核通过/驳回、创作者视频管理、回收站与延迟清理 |
-| 社区互动 | 点赞、收藏、一级评论、回复、关注、粉丝列表 |
-| 通知与运维 | 互动通知、未读数、死信查看/忽略/重投、评论与视频管理 |
+| 用户与认证 | 注册、登录、JWT 鉴权与撤销、认证限流、普通用户/管理员权限、个人主页、密码重置申请 |
+| 视频发现 | 首页推荐轮播、热门榜、分类筛选、关键词搜索、分页列表 |
+| 投稿与播放 | 封面/视频上传、480P/720P/1080P 转码、自动截帧、Thumbnailator 封面处理、清晰度切换、MinIO 直连播放 |
+| 审核与创作 | 投稿状态、审核通过/驳回、创作者视频管理、回收站与延迟清理、未投稿文件定时清理 |
+| 社区互动 | 点赞、收藏、嵌套评论与回复、关注、粉丝列表 |
+| 通知与运维 | 互动通知、未读数、管理员用户管理与密码重置、死信查看/忽略/重投、评论与视频管理 |
 
 视频状态流转：
 
@@ -60,9 +63,9 @@ flowchart LR
 | 层级 | 技术 |
 |---|---|
 | 前端 | Vue 3、TypeScript、Vite、Vue Router、Axios、Element Plus |
-| 后端 | Java 21、Spring Boot 4、Spring Security、JWT、MyBatis-Plus、HikariCP |
-| 数据与缓存 | MySQL 8.4、Redis 7.4、Lua、Redis ZSet |
-| 异步与存储 | RabbitMQ、MinIO、FFmpeg |
+| 后端 | Java 21、Spring Boot 4、Spring Security、JWT、MyBatis-Plus、HikariCP、Caffeine、Flyway |
+| 数据与缓存 | MySQL 8.4、Redis 7.4、Lua、Redis ZSet、Redis Pipeline |
+| 异步与存储 | RabbitMQ、MinIO、FFmpeg、Thumbnailator |
 | 部署 | Docker Compose、Nginx、Maven、npm |
 
 ## 快速开始
@@ -145,8 +148,8 @@ sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --buil
 | VideoNest | `http://127.0.0.1` |
 | 后端 API | `http://127.0.0.1:8080` |
 | RabbitMQ 管理台 | `http://127.0.0.1:15672` |
-| MinIO API / 管理台 | `http://127.0.0.1:9000` / `http://127.0.0.1:9001` |
-| MySQL / Redis | `127.0.0.1:3306` / `127.0.0.1:6379` |
+| MinIO API / 管理台 | `http://127.0.0.1:9010` / `http://127.0.0.1:9011` |
+| MySQL / Redis | `127.0.0.1:3307` / `127.0.0.1:6380` |
 
 使用 `docker-compose.benchmark.yml` 覆盖配置时，MySQL 仅在 Docker 网络内可访问，不会监听宿主机 `3306`。
 
@@ -198,12 +201,12 @@ docker compose build
 
 | 模块 | 接口前缀 | 示例能力 |
 |---|---|---|
-| 认证 | `/api/auth` | 注册、登录 |
+| 认证 | `/api/auth` | 注册、登录、密码重置申请 |
 | 视频与分类 | `/api/videos`、`/api/categories` | 列表、详情、热门榜、分类 |
-| 互动与评论 | `/api/videos/{videoId}`、`/api/videos/{videoId}/comments` | 点赞、收藏、评论、回复 |
+| 互动与评论 | `/api/videos/{videoId}`、`/api/videos/{videoId}/comments` | 点赞、收藏、嵌套评论、回复 |
 | 上传与创作 | `/api/files`、`/api/creator` | 文件上传、投稿、创作者视频 |
 | 用户关系与通知 | `/api/users`、`/api/notifications` | 关注、粉丝、通知、未读数 |
-| 管理后台 | `/api/admin/videos`、`/api/admin/comments`、`/api/admin/dead-letters` | 审核、回收站、评论与死信管理 |
+| 管理后台 | `/api/admin/videos`、`/api/admin/comments`、`/api/admin/dead-letters`、`/api/admin/users` | 审核、回收站、评论与死信管理、用户管理与密码重置 |
 
 所有接口统一返回 `ApiResponse`。需登录的接口通过 `Authorization: Bearer <token>` 传递 JWT。
 
@@ -213,13 +216,15 @@ docker compose build
 
 | 分类 | 变量 |
 |---|---|
-| MySQL | `DB_NAME`、`DB_USERNAME`、`DB_PASSWORD`、`MYSQL_ROOT_PASSWORD` |
-| Redis | `REDIS_USERNAME`、`REDIS_PASSWORD` |
+| MySQL | `DB_NAME`、`DB_USERNAME`、`DB_PASSWORD`、`MYSQL_ROOT_PASSWORD`、`DB_POOL_MAX_SIZE`、`DB_POOL_MIN_IDLE` |
+| Redis | `REDIS_USERNAME`、`REDIS_PASSWORD`、`REDIS_POOL_MAX_ACTIVE`、`REDIS_POOL_MAX_IDLE`、`REDIS_POOL_MIN_IDLE` |
 | RabbitMQ | `RABBITMQ_USERNAME`、`RABBITMQ_PASSWORD` |
-| MinIO | `MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_PUBLIC_ENDPOINT` |
-| 安全 | `JWT_SECRET`、`ANTIVIRUS_COMMAND`、`ANTIVIRUS_REQUIRED` |
-| 视频处理 | `VIDEO_PROCESS_CONSUMER_CONCURRENCY`、`FFPROBE_PATH` |
+| MinIO | `MINIO_ACCESS_KEY`、`MINIO_SECRET_KEY`、`MINIO_BUCKET`、`MINIO_PUBLIC_ENDPOINT`、`MINIO_PUBLIC_READ_PREFIXES` |
+| 缓存 | `HOT_RANK_REFRESH_INTERVAL_MS`、`HOT_RANK_LOCAL_CACHE_MILLISECONDS`、`VIDEO_LIST_CACHE_TTL_SECONDS`、`VIDEO_LIST_CACHE_LOCAL_MAX_SIZE`、`VIDEO_LIST_CACHE_LOCAL_SOFT_TTL_SECONDS`、`COMMENT_LIST_CACHE_TTL_SECONDS` |
+| 安全 | `JWT_SECRET`、`ANTIVIRUS_COMMAND`、`ANTIVIRUS_REQUIRED`、`UPLOAD_SCAN_TIMEOUT_SECONDS` |
+| 视频处理 | `VIDEO_PROCESS_CONSUMER_CONCURRENCY`、`FFPROBE_PATH`、`VIDEO_VIEW_DEDUP_WINDOW_SECONDS` |
 | 业务规则 | `VIDEO_REVIEW_TIMEOUT_MILLISECONDS`、`RESOURCE_RETENTION_DAYS`、`ANONYMOUS_VIEW_LIMIT_PER_MINUTE` |
+| 服务器 | `HTTP_PORT`、`TOMCAT_MAX_THREADS`、`TOMCAT_MIN_SPARE_THREADS` |
 
 生产环境应配置强密码、HTTPS、对象存储与 RabbitMQ/MySQL 的网络访问限制、上传病毒扫描、限流、日志脱敏及备份策略。
 
@@ -237,32 +242,34 @@ node scripts/run-performance-suite.js --quick
 
 完整套件覆盖首页、热门视频、视频列表、分类、评论和 100/200/400 并发混合流量。它先进行健康预检，再生成 Markdown 报告和原始 JSON；不会调用写接口。
 
-2026-08-02 的本机 Docker、小数据量、热缓存基线：
+2026-09-04 的云服务器（经 Nginx 公网入口）只读压测基线：
 
 | 场景 | 结果 |
 |---|---|
-| 全量只读测试 | 17 个场景、1,169,759 次请求、100% HTTP 200 |
-| 混合流量（200 并发，60 秒） | 3,057.65 QPS，P99 144.94 ms |
-| 热门视频（100 并发） | 1,990.58 QPS，P99 62.04 ms |
-| 视频列表（100 并发） | 3,304.78 QPS，P99 64.61 ms |
+| 全量只读测试 | 16 个场景、0 个失败场景、健康预检通过 |
+| 热门视频（100 并发） | 319.16 QPS，100% 成功，P99 776.64 ms |
+| 视频列表（100 并发） | 107.33 QPS，99.58% 成功，P99 6040.67 ms |
+| 评论列表（100 并发） | 467.04 QPS，100% 成功，P99 1670.03 ms |
+| 混合只读流量（200 并发） | 197.91 QPS，99.36% 成功，P99 8639.01 ms |
 
-详情、边界和复现说明见 [压测报告](docs/performance-test-2026-08-02.md)。这些结果仅代表该本机环境，不构成生产容量承诺；生产评估应使用独立发压机、接近生产的数据规模以及 10～30 分钟以上的读写混合流量。
+详情、边界和复现说明见 [压测报告 2026-09-04](docs/performance-test-2026-09-04.md)。更早的本机 Docker 热缓存基线见 [压测报告 2026-08-02](docs/performance-test-2026-08-02.md)。这些结果仅代表对应测试环境，不构成生产容量承诺；生产评估应使用独立发压机、接近生产的数据规模以及 10～30 分钟以上的读写混合流量。
 
 ## 项目结构
 
 ```text
 videonest/
 ├─ backend/                    # Spring Boot 后端
-│  ├─ src/main/java/.../module/ # auth、video、upload、interaction、follow、notification
-│  ├─ src/main/resources/       # 配置与 MyBatis Mapper
+│  ├─ src/main/java/.../module/ # auth、video、upload、interaction、follow、notification、admin
+│  ├─ src/main/resources/       # 配置、MyBatis Mapper 与 Flyway 迁移脚本
 │  └─ src/test/                 # 自动化测试
 ├─ frontend/                    # Vue 3 前端与 Nginx 配置
-├─ deploy/                      # 独立基础设施部署文件
-├─ docs/                        # 截图、压测报告与原始结果
-├─ scripts/                     # 可复现压测脚本
+├─ deploy/                      # 独立基础设施部署文件（RabbitMQ 等）
+├─ docs/                        # 截图、压测报告、可靠性设计文档
+├─ scripts/                     # 可复现压测脚本与部署脚本
 ├─ sql/                         # 初始化与增量 SQL
 ├─ docker-compose.yml           # 完整服务编排
 ├─ docker-compose.benchmark.yml # 本机端口冲突覆盖配置
+├─ docker-compose.jar.yml       # 服务器仅复制产物的覆盖配置
 └─ .env.example                 # 环境变量模板
 ```
 
