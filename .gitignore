@@ -6,3 +6,4 @@ backend/target/
 frontend/dist/
 .m2/
 deploy/redis/redis-data/
+benchmark/results/

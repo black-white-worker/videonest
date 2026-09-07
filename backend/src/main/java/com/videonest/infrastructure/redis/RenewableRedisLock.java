@@ -130,10 +130,11 @@ public class RenewableRedisLock {
         }
     }
 
+    /** 续期间隔计算 */
     private long renewalIntervalMilliseconds(long leaseMilliseconds) {
         return Math.max(
                 MIN_RENEW_INTERVAL_MILLISECONDS,
-                Math.min(MAX_RENEW_INTERVAL_MILLISECONDS, leaseMilliseconds / 3)
+                Math.min(MAX_RENEW_INTERVAL_MILLISECONDS, leaseMilliseconds / 3) // 不高于 60 秒，默认 TTL 的三分之一
         );
     }
 
@@ -144,7 +145,7 @@ public class RenewableRedisLock {
         private final long leaseMilliseconds;
         private final long renewalIntervalMilliseconds;
         private volatile long nextRenewAt;
-        private volatile boolean held = true;
+        private volatile boolean held = true;       // 是否仍持有锁
         private volatile boolean closed;
 
         private LockHandle(
@@ -169,10 +170,12 @@ public class RenewableRedisLock {
             }
         }
 
+        /** 是否到期需要续期 */
         private boolean shouldRenew(long now) {
             return held && !closed && now >= nextRenewAt;
         }
 
+        /** 续期成功后推进下次续期时间 */
         private void markRenewed(long now) {
             nextRenewAt = now + renewalIntervalMilliseconds;
         }

@@ -104,7 +104,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // 调用工具类解析JWT，拿到载荷Claims（存放userId、username、role）
             Claims claims = jwtTokenProvider.parseToken(token);
 
-            // 该Token是否在Redis黑名单（用户主动退出登录
+            // 该Token是否在Redis黑名单（用户主动退出登录）
             if (jwtRevocationService.isRevoked(claims)) {
                 responseWriter.write(
                         response,

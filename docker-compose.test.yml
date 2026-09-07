@@ -1,0 +1,27 @@
+# ============================================================
+# 压测专用 override 文件（测试环境隔离配置）
+# ------------------------------------------------------------
+# 用法（服务器上）：
+#   测试启动： docker compose -f docker-compose.yml -f docker-compose.test.yml up -d backend
+#   测试停止： docker compose -f docker-compose.yml -f docker-compose.test.yml stop backend
+#   恢复生产： docker compose -f docker-compose.yml up -d backend
+#
+# 原理：compose 支持叠加多个 -f 文件，后写的文件按 key 覆盖先写的，
+#       其余配置（端口、镜像、卷、健康检查等）全部沿用主文件，无需重复。
+#
+# 重要：本文件是"惰性"的——只有显式加 -f docker-compose.test.yml 才会生效。
+#       平时正常 docker compose up -d 不会读取它，因此不影响线上运行。
+# ============================================================
+services:
+  backend:
+    environment:
+      # 数据库切到测试库，生产库 videonest 完全不会被碰
+      DB_NAME: videonest_test
+      # Redis 切到 15 号 db，生产用的 0 号 db 数据不受影响
+      REDIS_DATABASE: 15
+      # RabbitMQ 切到独立的 /test vhost，队列和死信消息都隔离在里面
+      RABBITMQ_VHOST: /test
+      # MinIO 切到独立 bucket，测试上传的文件不混进生产的 videonest
+      MINIO_BUCKET: videonest-test
+      # 注册接口有限流（每小时 5 次），压测前必须关掉，否则请求全被 429 挡掉
+      AUTH_RATE_LIMIT_ENABLED: "false"

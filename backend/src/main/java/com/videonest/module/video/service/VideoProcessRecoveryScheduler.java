@@ -84,6 +84,7 @@ public class VideoProcessRecoveryScheduler {
         }
     }
 
+    /** 定时扫描 */
     private void doScan() {
         // 计算超时阈值：当前时间减去配置的超时分钟数
         LocalDateTime threshold = LocalDateTime.now().minusMinutes(

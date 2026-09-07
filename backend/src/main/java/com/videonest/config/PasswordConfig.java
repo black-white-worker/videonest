@@ -14,7 +14,8 @@ public class PasswordConfig {
 
     @Bean
     public PasswordEncoder passwordEncoder() {
-        //创建加密器实例
-        return new BCryptPasswordEncoder();
+        // strength=8：加密迭代次数为 2^8=256 次，比默认强度 10（2^10=1024 次）快约 4 倍
+        // 个人项目安全性完全够用，可显著降低注册接口的 CPU 开销
+        return new BCryptPasswordEncoder(8);
     }
 }
