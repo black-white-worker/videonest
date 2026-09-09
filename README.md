@@ -2,7 +2,7 @@
 
 后端的 HTTP 状态码、JWT 撤销、认证限流、Flyway 与 Transactional Outbox 设计边界见 [后端可靠性设计](docs/backend-reliability-design.md)。
 
-VideoNest 是一个面向学习、作品展示与小型社区的视频平台。它以 Vue 3 和 Spring Boot 为核心，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。
+VideoNest 是一个面向学习、作品展示与小型社区的视频平台。它以 Vue 3 和 Spring Boot 为核心，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。当前首页提供轮换视觉横幅、关键词搜索、分区筛选和热门内容流；创作者与管理员分别在个人中心和管理后台完成后续操作。
 
 ![VideoNest 首页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/home.jpg)
 
@@ -15,7 +15,7 @@ VideoNest 是一个面向学习、作品展示与小型社区的视频平台。�
 - 完整视频链路：上传原视频、RabbitMQ 异步转码、审核发布、多清晰度播放与延迟清理。
 - 多级缓存读路径：视频列表 Caffeine 本地缓存 + SWR 异步刷新、Redis ZSet 热榜与本地短缓存、播放量 Redis 原子累计与 MySQL 批量回写、MinIO 直连播放。
 - 可靠异步任务：Transactional Outbox 事务发件箱、发布确认、消费重试、死信队列、事件幂等、可续期 Redis 锁（看门狗自动续期）、转码卡死兜底扫描与人工重投。
-- 社区与管理：注册登录、JWT 鉴权与撤销、认证限流、点赞收藏、嵌套评论与回复、关注通知、管理员用户管理与密码重置、死信与内容审核后台。
+- 社区与管理：注册登录、JWT 鉴权与撤销、认证限流、点赞收藏、嵌套评论与回复、关注通知、视频二维码/链接/QQ 分享、管理员用户管理与密码重置、死信与内容审核后台。
 - 资源治理：上传后未投稿文件定时清理、回收站延迟清理、MinIO staging 前缀生命周期过期。
 - 一键运行：Docker Compose 编排前端、后端、MySQL、Redis、RabbitMQ、MinIO 与 Nginx。
 
@@ -58,6 +58,17 @@ flowchart LR
                   └→ REJECTED
 ```
 
+## 页面与角色
+
+| 页面 | 当前体验 |
+|---|---|
+| 首页 | 轮换视觉横幅、搜索、分区筛选、推荐列表与热门榜单；热门榜支持分页浏览。 |
+| 视频详情 | 多清晰度播放（以转码结果为准）、播放参数展示、点赞、收藏、关注、嵌套评论与回复，以及二维码、QQ、QQ 空间、系统和链接分享。 |
+| 创作与个人中心 | 预签名直传、视频投稿、转码/审核状态、稿件编辑与删除；查看点赞、收藏、关注/粉丝，并可申请密码重置。 |
+| 消息与管理 | 登录用户可查看未读互动通知；管理员可审核投稿、管理评论和回收站、处理死信、查看用户及处理密码重置申请。 |
+
+前端路由会将需要登录的页面重定向到登录页。管理操作还由后端权限校验保护，不能仅依赖前端入口隐藏。
+
 ## 技术栈
 
 | 层级 | 技术 |
@@ -82,10 +93,10 @@ flowchart LR
 ### 1. 配置环境变量
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item deploy/server.env.example .env
 ```
 
-编辑 `.env`，替换所有示例密码和 `JWT_SECRET`。不要提交包含真实密钥的 `.env`。
+仓库的环境变量模板位于 [`deploy/server.env.example`](deploy/server.env.example)，不在根目录提交 `.env.example`。编辑复制得到的 `.env`，替换所有示例密码和 `JWT_SECRET`；本地首次运行可保留其中的本机地址设置。不要提交包含真实密钥的 `.env`。
 
 ### 2. 启动服务
 
@@ -153,7 +164,7 @@ sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --buil
 
 使用 `docker-compose.benchmark.yml` 覆盖配置时，MySQL 仅在 Docker 网络内可访问，不会监听宿主机端口。
 
-首次初始化时，Compose 会执行 `sql` 目录中已挂载的初始化和增量脚本。一键部署还会幂等执行评论层级迁移；生产部署前仍建议备份数据库。
+首次启动后，后端会通过 Flyway 自动执行 `backend/src/main/resources/db/migration` 中的版本化迁移。一键部署会在迁移前备份数据库，并对历史迁移异常做兼容性检查；生产部署前仍建议自行确认备份可用。
 
 ## 本地开发
 
@@ -212,7 +223,7 @@ docker compose build
 
 ## 配置说明
 
-完整模板见 [.env.example](.env.example)。常用变量如下：
+完整模板见 [`deploy/server.env.example`](deploy/server.env.example)。常用变量如下：
 
 | 分类 | 变量 |
 |---|---|
@@ -242,7 +253,7 @@ node scripts/run-performance-suite.js --quick
 
 完整套件覆盖首页、热门视频、视频列表、分类、评论和 100/200/400 并发混合流量。它先进行健康预检，再生成 Markdown 报告和原始 JSON；不会调用写接口。
 
-2026-09-04 的云服务器（经 Nginx 公网入口）只读压测基线：
+2026-09-04 的只读压测记录（经 Nginx 入口；发压机与被测服务位于同一主机）如下：
 
 | 场景 | 结果 |
 |---|---|
@@ -254,6 +265,12 @@ node scripts/run-performance-suite.js --quick
 
 详情、边界和复现说明见 [压测报告 2026-09-04](docs/performance-test-2026-09-04.md)。更早的本机 Docker 热缓存基线见 [压测报告 2026-08-02](docs/performance-test-2026-08-02.md)。这些结果仅代表对应测试环境，不构成生产容量承诺；生产评估应使用独立发压机、接近生产的数据规模以及 10～30 分钟以上的读写混合流量。
 
+### 写链路压测资产
+
+`benchmark/` 保存 JMeter 5.6.3 测试计划，覆盖注册、登录、热门榜、上传预签名、上传完成回调和投稿发布。其中写接口会创建或读取测试数据，必须只在隔离环境执行；仓库提供的 `docker-compose.test.yml` 会切换到测试 MySQL 库、Redis DB、RabbitMQ vhost 与 MinIO bucket，并关闭认证限流以便测量服务自身吞吐。不要将该配置用于公网或生产环境。
+
+当前认证密码编码器使用 BCrypt cost 8（`2^8` 轮）以降低注册、登录的 CPU 压力。若用于真实生产账号，应结合机器规格、攻击面、限流和延迟目标重新评估该成本，而非把压测配置直接视为安全基线。
+
 ## 项目结构
 
 ```text
@@ -264,6 +281,7 @@ videonest/
 │  └─ src/test/                 # 自动化测试
 ├─ frontend/                    # Vue 3 前端与 Nginx 配置
 ├─ deploy/                      # 独立基础设施部署文件（RabbitMQ 等）
+├─ benchmark/                   # JMeter 写链路压测计划
 ├─ docs/                        # 截图、压测报告、可靠性设计文档
 ├─ scripts/                     # 可复现压测脚本与部署脚本
 ├─ sql/                         # 初始化与增量 SQL
