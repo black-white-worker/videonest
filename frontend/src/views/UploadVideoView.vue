@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { createVideo, uploadCover, uploadVideo } from '../api/creator-video'
+import { createVideo, uploadCover, uploadVideo, type UploadCancel, type UploadProgress } from '../api/creator-video'
 import { getCategories, type VideoCategory } from '../api/video'
 import SiteHeader from '../components/SiteHeader.vue'
 import { hasValidSession } from '../utils/auth'
@@ -14,6 +14,11 @@ const categories = ref<VideoCategory[]>([])
 const categoryLoading = ref(false)
 const coverUploading = ref(false)
 const videoUploading = ref(false)
+const videoProgress = ref<UploadProgress | null>(null)
+const videoUploadCancel = ref<UploadCancel | null>(null)
+const lastVideoFile = ref<File | null>(null)
+const videoUploadFailed = ref(false)
+const resumeHint = ref(false)
 const submitting = ref(false)
 const coverPreviewUrl = ref('')
 
@@ -122,15 +127,28 @@ async function handleVideoChange(event: Event) {
     return
   }
 
-  if (file.size > 500 * 1024 * 1024) {
-    ElMessage.error('视频文件不能超过 500MB')
+  if (file.size > 800 * 1024 * 1024) {
+    ElMessage.error('视频文件不能超过 800MB')
     return
   }
 
+  lastVideoFile.value = file
+  await startVideoUpload(file)
+  input.value = ''
+}
+
+async function startVideoUpload(file: File) {
   try {
     videoUploading.value = true
+    videoProgress.value = null
+    videoUploadFailed.value = false
+    resumeHint.value = false
 
-    const uploadResult = await uploadVideo(file)
+    const uploadResult = await uploadVideo(file, progress => {
+      videoProgress.value = progress
+    }, cancel => {
+      videoUploadCancel.value = cancel
+    })
     if (!uploadResult.detectedDuration) {
       throw new Error('后端未能探测视频时长')
     }
@@ -142,12 +160,38 @@ async function handleVideoChange(event: Event) {
   } catch (error) {
     form.videoObjectName = ''
     form.duration = 0
-
-    ElMessage.error(error instanceof Error ? error.message : '视频上传失败')
+    const message = error instanceof Error ? error.message : '视频上传失败'
+    if (message === '上传已取消') {
+      ElMessage.info('上传已取消，临时文件正在清理')
+      lastVideoFile.value = null
+    } else {
+      videoUploadFailed.value = true
+      ElMessage.error(message)
+    }
   } finally {
     videoUploading.value = false
-    input.value = ''
+    videoProgress.value = null
+    videoUploadCancel.value = null
   }
+}
+
+function cancelVideoUpload() {
+  videoUploadCancel.value?.()
+}
+
+function retryVideoUpload() {
+  if (lastVideoFile.value) void startVideoUpload(lastVideoFile.value)
+}
+
+function formatBytes(value: number) {
+  if (value < 1024 * 1024) return `${Math.round(value / 1024)}KB`
+  return `${(value / 1024 / 1024).toFixed(1)}MB`
+}
+
+function formatSeconds(value?: number) {
+  if (value === undefined || !Number.isFinite(value)) return '正在计算剩余时间'
+  const seconds = Math.max(1, Math.round(value))
+  return seconds >= 60 ? `预计剩余 ${Math.ceil(seconds / 60)} 分钟` : `预计剩余 ${seconds} 秒`
 }
 
 async function submit() {
@@ -195,6 +239,7 @@ async function submit() {
 onMounted(() => {
   if (ensureLoggedIn()) {
     loadCategories()
+    resumeHint.value = Object.keys(localStorage).some(key => key.startsWith('videonest.multipart.'))
   }
 })
 
@@ -263,7 +308,7 @@ onBeforeUnmount(() => {
                 <span class="step-number">01</span>
                 <h2>上传视频文件</h2>
               </div>
-              <small>支持 MP4，最大 500MB</small>
+              <small>支持 MP4，最大 800MB；超过 400MB 自动支持续传</small>
             </div>
             <label class="video-dropzone" :class="{ uploaded: form.videoObjectName }">
               <input
@@ -286,9 +331,21 @@ onBeforeUnmount(() => {
               </span>
               <div v-if="videoUploading" class="mask">
                 <strong>正在上传视频</strong>
-                <span>请勿关闭或离开当前页面…</span>
+                <template v-if="videoProgress">
+                  <span>{{ Math.floor((videoProgress.loaded / videoProgress.total) * 100) }}% · {{ formatBytes(videoProgress.loaded) }} / {{ formatBytes(videoProgress.total) }}</span>
+                  <span>{{ formatBytes(videoProgress.speedBytesPerSecond) }}/s · {{ formatSeconds(videoProgress.remainingSeconds) }}</span>
+                  <span>{{ videoProgress.mode === 'multipart' ? '大文件分片上传，可重新选择同一文件继续上传' : videoProgress.attempt > 1 ? '正在重试完整文件上传' : '上传中，请保持页面开启' }}</span>
+                </template>
+                <span v-else>正在准备上传…</span>
               </div>
             </label>
+            <div v-if="videoUploading || videoUploadFailed || resumeHint" class="upload-actions">
+              <span v-if="resumeHint && !videoUploading" class="upload-actions__hint">检测到未完成的大文件上传；重新选择同一文件后可继续上传。</span>
+              <el-button v-if="videoUploading" size="small" type="danger" plain @click.prevent="cancelVideoUpload">取消上传</el-button>
+              <el-button v-else-if="videoUploadFailed && lastVideoFile" size="small" type="primary" @click.prevent="retryVideoUpload">
+                {{ lastVideoFile.size > 400 * 1024 * 1024 ? '继续上传' : '重新上传' }}
+              </el-button>
+            </div>
           </section>
 
           <div class="metadata-layout">
@@ -806,6 +863,18 @@ onBeforeUnmount(() => {
 
 .video-dropzone > p {
   margin: 6px 0 14px;
+  color: var(--vn-text-muted);
+  font-size: 12px;
+}
+
+.upload-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.upload-actions__hint {
   color: var(--vn-text-muted);
   font-size: 12px;
 }

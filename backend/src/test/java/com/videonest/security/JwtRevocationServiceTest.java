@@ -12,6 +12,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 【单元测试】验证 JwtRevocationService 的核心行为与边界条件。
+ */
 class JwtRevocationServiceTest {
 
     @Test

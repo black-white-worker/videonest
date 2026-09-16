@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { ArrowRight } from '@element-plus/icons-vue'
 import { useRouter } from 'vue-router'
-import { getNotifications, markNotificationRead, type NotificationItem } from '../api/notification'
+import { getNotifications, getUnreadNotificationCount, markNotificationRead, type NotificationItem } from '../api/notification'
 import SiteHeader from '../components/SiteHeader.vue'
 
 const router = useRouter()
@@ -26,7 +26,9 @@ function getTypeText(item: NotificationItem) {
   if (item.type === 'LIKE') return `${item.actorNickname || `用户 ${item.actorId}`} 点赞了你的视频`
   if (item.type === 'FAVORITE')
     return `${item.actorNickname || `用户 ${item.actorId}`} 收藏了你的视频`
-  if (item.type === 'REVIEW_TIMEOUT') return '你的视频等待审核已超时'
+  if (item.type === 'REVIEW_TIMEOUT') return item.videoTitle
+    ? `稿件《${item.videoTitle}》等待审核已超时`
+    : '有稿件等待审核已超时'
   if (item.type === 'VIDEO_REJECTED')
     return item.videoTitle ? `你的视频《${item.videoTitle}》审核未通过` : '你的视频审核未通过'
   const actor = item.actorNickname || `用户 ${item.actorId}`
@@ -83,6 +85,9 @@ async function loadNotifications() {
     const result = await getNotifications({ page: page.value, size: size.value })
     notifications.value = result.records
     total.value = result.total
+    // 与首页红点使用同一个后端总未读统计，避免当前页数量被误当作总数。
+    const unreadTotal = await getUnreadNotificationCount()
+    window.dispatchEvent(new CustomEvent('videonest:unread-notification-count', { detail: unreadTotal }))
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : '获取通知失败')
   } finally {
@@ -95,6 +100,8 @@ async function openNotification(item: NotificationItem) {
     if (item.isRead === 0) {
       await markNotificationRead(item.id)
       item.isRead = 1
+      const unreadTotal = await getUnreadNotificationCount()
+      window.dispatchEvent(new CustomEvent('videonest:unread-notification-count', { detail: unreadTotal }))
     }
 
     if (item.type === 'VIDEO_REJECTED') {

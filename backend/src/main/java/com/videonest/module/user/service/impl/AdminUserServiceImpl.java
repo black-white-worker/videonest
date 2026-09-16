@@ -21,6 +21,9 @@ import java.security.SecureRandom;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * AdminUserService 的默认业务实现。
+ */
 @Service
 public class AdminUserServiceImpl implements AdminUserService {
     private static final SecureRandom RANDOM = new SecureRandom();

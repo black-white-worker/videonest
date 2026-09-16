@@ -188,14 +188,20 @@ async function loadUnreadNotificationCount() {
     unreadNotificationCount.value = 0
   }
 }
+function syncUnreadNotificationCount(event: Event) {
+  const value = (event as CustomEvent<number>).detail
+  if (typeof value === 'number' && value >= 0) unreadNotificationCount.value = value
+}
 onMounted(async () => {
   restartWallpaperTimer()
   await loadCategories()
   await loadVideos()
   await loadUnreadNotificationCount()
+  window.addEventListener('videonest:unread-notification-count', syncUnreadNotificationCount)
 })
 onBeforeUnmount(() => {
   if (wallpaperTimer) window.clearInterval(wallpaperTimer)
+  window.removeEventListener('videonest:unread-notification-count', syncUnreadNotificationCount)
 })
 </script>
 

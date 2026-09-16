@@ -15,4 +15,6 @@ public class VideoReviewProperties {
 
     // 审核超时时间
     private long timeoutMilliseconds = 86_400_000L;
+    private long timeoutRecoveryFixedDelayMilliseconds = 300_000L;
+    private int timeoutRecoveryBatchSize = 50;
 }

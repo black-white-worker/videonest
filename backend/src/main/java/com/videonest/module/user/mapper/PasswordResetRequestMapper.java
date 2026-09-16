@@ -10,6 +10,9 @@ import org.apache.ibatis.annotations.Update;
 
 import java.util.List;
 
+/**
+ * PasswordResetRequestMapper 数据访问映射接口。
+ */
 @Mapper
 public interface PasswordResetRequestMapper extends BaseMapper<PasswordResetRequest> {
     @Select("""

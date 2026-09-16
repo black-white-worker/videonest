@@ -176,6 +176,7 @@ public class VideoProcessMessageConsumer {
             String coverListName = coverBasePath + "/list-400.jpg";
             String coverDetailName = coverBasePath + "/detail-1080.jpg";
 
+            // 转码和上传耗时较长，提交数据库状态前再次确认锁仍归当前消费者持有。
             // 看门狗发现锁已丢失时，不能再提交本消费者的处理结果。
             lock.ensureHeld();
             // 将本地转码完成的文件上传MinIO对象存储

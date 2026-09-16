@@ -16,6 +16,9 @@ import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * CommentListCacheService 的默认业务实现。
+ */
 @Service
 @Slf4j
 public class CommentListCacheServiceImpl implements CommentListCacheService {

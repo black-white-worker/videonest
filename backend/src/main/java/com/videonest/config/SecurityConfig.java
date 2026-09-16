@@ -42,9 +42,7 @@ import java.util.List;
 public class SecurityConfig {
 
     // 自定义JWT校验过滤器，构造注入
-    /**作用和字段注入一样@Autowired
-      private JwtAuthenticationFilter jwtAuthenticationFilter;
-    * */
+
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final RestAuthenticationEntryPoint authenticationEntryPoint;
     private final RestAccessDeniedHandler accessDeniedHandler;

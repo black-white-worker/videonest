@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * SysUser 后端组件。
+ */
 @Data
 @TableName("sys_user")
 public class SysUser {

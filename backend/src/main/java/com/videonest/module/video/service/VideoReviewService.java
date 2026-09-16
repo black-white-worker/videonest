@@ -3,6 +3,9 @@ package com.videonest.module.video.service;
 import com.videonest.common.api.PageResult;
 import com.videonest.module.video.vo.AdminVideoReviewVO;
 
+/**
+ * VideoReviewService 业务服务接口。
+ */
 public interface VideoReviewService {
 
     /**

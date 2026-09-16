@@ -2,6 +2,9 @@ package com.videonest.module.notification.service;
 
 import com.videonest.module.notification.event.NotificationDomainEvent;
 
+/**
+ * NotificationMessagePublisherService 业务服务接口。
+ */
 public interface NotificationMessagePublisherService {
 
     /**

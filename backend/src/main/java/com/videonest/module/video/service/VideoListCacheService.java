@@ -5,6 +5,9 @@ import com.videonest.module.video.vo.VideoListItemVO;
 
 import java.util.function.Supplier;
 
+/**
+ * VideoListCacheService 业务服务接口。
+ */
 public interface VideoListCacheService {
 
     /**

@@ -155,6 +155,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             )
                     );
 
+            // 认证对象只写入当前请求上下文，不把 JWT 状态存入 Session。
             // 将认证对象存入Security上下文，当前请求全局生效
             // 后续在Controller/Service通过SecurityUtils.getCurrentUser()就能拿到登录用户
             SecurityContextHolder

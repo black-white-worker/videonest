@@ -4,6 +4,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * FollowUserVO 返回数据对象。
+ */
 @Data
 public class FollowUserVO {
 

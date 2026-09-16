@@ -10,6 +10,7 @@ import org.springframework.context.annotation.Configuration;
  * 作用：项目启动时创建MinioClient客户端，交给Spring管理，业务直接注入使用
  */
 
+
 @Configuration
 // 启用属性绑定：自动读取application.yml中的minio配置，封装为MinioProperties对象
 @EnableConfigurationProperties(MinioProperties.class)

@@ -2,6 +2,8 @@ package com.videonest.infrastructure.oss.service;
 
 import java.io.InputStream;
 import java.nio.file.Path;
+import java.util.List;
+import java.util.Map;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
@@ -22,6 +24,11 @@ public interface MinioService {
             String objectName,
             int expiryMinutes
     );
+
+    String createPresignedPartUploadUrl(String objectName, int partNumber,
+                                        int expiryMinutes);
+    void composeObjects(String targetObjectName, List<String> sourceObjectNames);
+    void deleteObjects(List<String> objectNames);
 
     /**
      * 查询文件元数据

@@ -7,6 +7,7 @@ import com.videonest.infrastructure.oss.service.StoredObjectMetadata;
 import com.videonest.infrastructure.redis.RedisKeys;
 import com.videonest.infrastructure.redis.RenewableRedisLock;
 import com.videonest.module.upload.dto.UploadPresignRequest;
+import com.videonest.module.upload.config.UploadProperties;
 import com.videonest.module.upload.vo.FileUploadVO;
 import com.videonest.module.upload.vo.UploadPresignVO;
 import com.videonest.security.SecurityUtils;
@@ -29,7 +30,6 @@ import java.util.concurrent.TimeUnit;
 public class UploadSessionService {
 
     private static final long MAX_COVER_SIZE = 10 * 1024 * 1024L;
-    private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024L;
     // 预签名URL有效期15分钟
     private static final int PRESIGN_MINUTES = 15;
     // complete完成接口分布式锁过期时间10分钟，防止死锁
@@ -40,6 +40,7 @@ public class UploadSessionService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
     private final RenewableRedisLock renewableRedisLock;
+    private final UploadProperties uploadProperties;
 
     /**
      * 构造器注入，Spring自动注入各个依赖Bean
@@ -53,13 +54,15 @@ public class UploadSessionService {
             UploadedFileSecurityValidator securityValidator,
             RedisTemplate<String, Object> redisTemplate,
             StringRedisTemplate stringRedisTemplate,
-            RenewableRedisLock renewableRedisLock
+            RenewableRedisLock renewableRedisLock,
+            UploadProperties uploadProperties
     ) {
         this.minioService = minioService;
         this.securityValidator = securityValidator;
         this.redisTemplate = redisTemplate;
         this.stringRedisTemplate = stringRedisTemplate;
         this.renewableRedisLock = renewableRedisLock;
+        this.uploadProperties = uploadProperties;
     }
 
     /**
@@ -129,6 +132,16 @@ public class UploadSessionService {
         }
     }
 
+    /** Cancel a not-yet-confirmed direct upload and remove its staging object immediately. */
+    public void cancel(String uploadId) {
+        long userId = SecurityUtils.getCurrentUser().userId();
+        Object value = redisTemplate.opsForValue().get(RedisKeys.uploadTicket(uploadId));
+        if (value instanceof UploadTicket ticket && ticket.userId() == userId) {
+            minioService.deleteObject(ticket.stagingObjectName());
+            redisTemplate.delete(RedisKeys.uploadTicket(uploadId));
+        }
+    }
+
     /**
      * 获取锁成功后的上传完成核心逻辑
      * @param uploadId 上传会话id
@@ -158,7 +171,7 @@ public class UploadSessionService {
             }
             // 根据文件类型取最大允许大小
             long maxSize = "cover".equals(ticket.type())
-                    ? MAX_COVER_SIZE : MAX_VIDEO_SIZE;
+                    ? MAX_COVER_SIZE : uploadProperties.getMaxVideoSizeBytes();
             if (metadata.size() > maxSize) {
                 throw new BusinessException(413, "上传对象超过大小限制");
             }
@@ -167,6 +180,7 @@ public class UploadSessionService {
             UploadedFileSecurityValidator.Inspection inspection =
                     securityValidator.inspect(ticket.stagingObjectName(), ticket.type());
 
+            // 安全扫描完成后仍需确认锁未丢失，再把 staging 对象转为正式对象。
             lock.ensureHeld();
             // 在Redis写入确认标记，标记该文件已经校验完成，有效期2小时
             registerConfirmed(ticket.finalObjectName(), userId, ticket.type());
@@ -264,9 +278,12 @@ public class UploadSessionService {
      * @param request 预签名请求dto
      */
     private void validateDeclaredMetadata(UploadPresignRequest request) {
-        long max = "cover".equals(request.getType()) ? MAX_COVER_SIZE : MAX_VIDEO_SIZE;
+        long max = "cover".equals(request.getType()) ? MAX_COVER_SIZE : uploadProperties.getMaxVideoSizeBytes();
         if (request.getSize() > max) {
             throw new BusinessException(413, "文件超过允许大小");
+        }
+        if ("video".equals(request.getType()) && request.getSize() > uploadProperties.getMultipartThresholdBytes()) {
+            throw new BusinessException(400, "超过单文件上传阈值，请使用分片上传");
         }
         canonicalExtension(request.getType(), request.getContentType());
     }

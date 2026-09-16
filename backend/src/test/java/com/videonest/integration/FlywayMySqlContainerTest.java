@@ -17,6 +17,9 @@ import java.sql.Statement;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+/**
+ * 【单元测试】验证 FlywayMySqlContainer 的核心行为与边界条件。
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class FlywayMySqlContainerTest {
 

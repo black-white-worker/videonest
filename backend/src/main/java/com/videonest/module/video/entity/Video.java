@@ -9,6 +9,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Video 后端组件。
+ */
 @Data
 @TableName("video")
 public class Video {

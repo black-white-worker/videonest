@@ -8,6 +8,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 自动读取application.yml中前缀为 minio 的配置，封装为Java对象
  */
 
+
 @Data
 //从 application.yml配置文件中，自动读取所有以 minio 开头的配置项，自动绑定到当前类的成员变量
 //自动映射赋值到当前类的成员变量，实现配置文件与 Java 实体

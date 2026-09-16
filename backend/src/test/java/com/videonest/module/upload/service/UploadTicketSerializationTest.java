@@ -5,6 +5,9 @@ import com.videonest.config.RedisConfig;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * 【单元测试】验证 UploadTicketSerialization 的核心行为与边界条件。
+ */
 class UploadTicketSerializationTest {
 
     @Test

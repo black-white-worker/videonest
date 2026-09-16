@@ -17,6 +17,7 @@ import com.videonest.module.interaction.mapper.VideoCommentMapper;
 import com.videonest.module.interaction.mapper.AdminCommentMapper;
 import com.videonest.infrastructure.mq.mapper.DeadLetterRecordMapper;
 import com.videonest.infrastructure.outbox.mapper.OutboxEventMapper;
+import com.videonest.module.upload.mapper.UploadMultipartSessionMapper;
 import jakarta.servlet.FilterChain;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +34,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 
+/**
+ * 【Web 层测试】验证管理员接口的认证与授权边界。
+ */
 @WebMvcTest(AdminVideoController.class)
 @Import({
         SecurityConfig.class,
@@ -70,6 +74,7 @@ class AdminEndpointSecurityTest {
     @MockitoBean private AdminCommentMapper adminCommentMapper;
     @MockitoBean private DeadLetterRecordMapper deadLetterRecordMapper;
     @MockitoBean private OutboxEventMapper outboxEventMapper;
+    @MockitoBean private UploadMultipartSessionMapper uploadMultipartSessionMapper;
 
     @BeforeEach
     void passThroughCustomFilters() throws Exception {

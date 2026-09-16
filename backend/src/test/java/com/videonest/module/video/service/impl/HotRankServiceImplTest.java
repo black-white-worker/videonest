@@ -17,6 +17,9 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 【单元测试】验证 HotRankServiceImpl 的核心行为与边界条件。
+ */
 @ExtendWith(MockitoExtension.class)
 class HotRankServiceImplTest {
 

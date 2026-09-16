@@ -5,6 +5,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * PasswordResetRequestVO 返回数据对象。
+ */
 @Data
 @AllArgsConstructor
 public class PasswordResetRequestVO {

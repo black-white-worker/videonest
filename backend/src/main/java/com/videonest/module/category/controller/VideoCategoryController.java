@@ -22,6 +22,7 @@ public class VideoCategoryController {
         this.videoCategoryService = videoCategoryService;
     }
 
+    /** 查询当前启用的视频分类，供首页筛选和投稿选择使用。 */
     @GetMapping
     public ApiResponse<List<VideoCategory>> list() {
         return ApiResponse.success(videoCategoryService.listEnabledCategories());

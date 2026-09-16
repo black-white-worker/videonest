@@ -5,6 +5,9 @@ import com.videonest.module.user.vo.PasswordResetRequestVO;
 
 import java.util.List;
 
+/**
+ * AdminUserService 业务服务接口。
+ */
 public interface AdminUserService {
     List<AdminUserVO> listUsers();
     List<PasswordResetRequestVO> listPendingResetRequests();

@@ -1,5 +1,8 @@
 package com.videonest.common.exception;
 
+/**
+ * MessagePublishException 业务异常类型。
+ */
 public class MessagePublishException extends RuntimeException {
 
     private final String messageType;

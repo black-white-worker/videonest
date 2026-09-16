@@ -3,6 +3,9 @@ package com.videonest.module.interaction.service;
 import com.videonest.common.api.PageResult;
 import com.videonest.module.interaction.vo.VideoCommentVO;
 
+/**
+ * CommentListCacheService 业务服务接口。
+ */
 public interface CommentListCacheService {
     PageResult<VideoCommentVO> getFirstPage(Long videoId, long size);
     void putFirstPage(Long videoId, long size, PageResult<VideoCommentVO> page);

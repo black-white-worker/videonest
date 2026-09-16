@@ -123,9 +123,8 @@ video-process:
   timeout-seconds: ${VIDEO_PROCESS_TIMEOUT_SECONDS:1800}
   # 转码锁由看门狗自动续期；此值只决定进程故障后的接管等待上限。
   lock-lease-seconds: ${VIDEO_PROCESS_LOCK_LEASE_SECONDS:300}
-  # 单机 Docker 环境默认同时执行两个转码任务，避免多个 FFmpeg 进程耗尽内存。
-  # 可设置为 2-4，让 RabbitMQ 在任务积压时最多扩展至四个消费者。
-  consumer-concurrency: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:2}
+  # 2核2G机器默认单并发，避免大文件转码影响数据库、MinIO与在线请求。
+  consumer-concurrency: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:1}
   cover-backfill-initial-delay-milliseconds: ${COVER_BACKFILL_INITIAL_DELAY_MILLISECONDS:60000}
   cover-backfill-fixed-delay-milliseconds: ${COVER_BACKFILL_FIXED_DELAY_MILLISECONDS:300000}
 
@@ -135,6 +134,16 @@ upload-security:
   antivirus-required: ${ANTIVIRUS_REQUIRED:false}
   scan-timeout-seconds: ${UPLOAD_SCAN_TIMEOUT_SECONDS:120}
   max-image-pixels: ${MAX_UPLOAD_IMAGE_PIXELS:50000000}
+
+upload:
+  max-video-size-bytes: ${UPLOAD_MAX_VIDEO_SIZE_BYTES:838860800}
+  multipart-threshold-bytes: ${UPLOAD_MULTIPART_THRESHOLD_BYTES:419430400}
+  multipart-part-size-bytes: ${UPLOAD_MULTIPART_PART_SIZE_BYTES:16777216}
+  multipart-concurrency: ${UPLOAD_MULTIPART_CONCURRENCY:3}
+  multipart-session-hours: ${UPLOAD_MULTIPART_SESSION_HOURS:24}
+  multipart-url-minutes: ${UPLOAD_MULTIPART_URL_MINUTES:15}
+  max-active-multipart-sessions-per-user: ${UPLOAD_MAX_ACTIVE_MULTIPART_SESSIONS_PER_USER:1}
+  minimum-free-disk-bytes: ${UPLOAD_MINIMUM_FREE_DISK_BYTES:10737418240}
 
 video-view-count:
   flush-delay-milliseconds: ${VIDEO_VIEW_COUNT_FLUSH_DELAY_MILLISECONDS:10000}
@@ -156,6 +165,8 @@ hot-rank:
 
 video-review:
   timeout-milliseconds: ${VIDEO_REVIEW_TIMEOUT_MILLISECONDS:86400000}
+  timeout-recovery-fixed-delay-milliseconds: ${VIDEO_REVIEW_TIMEOUT_RECOVERY_FIXED_DELAY_MS:300000}
+  timeout-recovery-batch-size: ${VIDEO_REVIEW_TIMEOUT_RECOVERY_BATCH_SIZE:50}
 
 resource-cleanup:
   retention-days: ${RESOURCE_RETENTION_DAYS:7}

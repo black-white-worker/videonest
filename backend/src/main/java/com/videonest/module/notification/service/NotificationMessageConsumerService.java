@@ -1,5 +1,8 @@
 package com.videonest.module.notification.service;
 
+/**
+ * NotificationMessageConsumerService 业务服务接口。
+ */
 public interface NotificationMessageConsumerService {
 
     /**

@@ -9,6 +9,8 @@ import io.minio.BucketExistsArgs;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.CopyObjectArgs;
 import io.minio.CopySource;
+import io.minio.ComposeObjectArgs;
+import io.minio.ComposeSource;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -30,6 +32,8 @@ import java.security.GeneralSecurityException;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.Set;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -269,6 +273,35 @@ public class MinioServiceImpl implements MinioService {
         } catch (MinioException e) {
             throw storageFailure("PRESIGN", "MinIO 无法生成访问地址", isRetryable(e), e);
         }
+    }
+
+    @Override
+    public String createPresignedPartUploadUrl(String objectName, int partNumber,
+                                               int expiryMinutes) {
+        try {
+            return publicMinioClient.getPresignedObjectUrl(
+                    GetPresignedObjectUrlArgs.builder().method(Method.PUT)
+                            .bucket(minioProperties.getBucketName()).object(objectName)
+                            .expiry(expiryMinutes, TimeUnit.MINUTES).build());
+        } catch (Exception e) {
+            throw storageFailure("MULTIPART_PRESIGN", "MinIO 无法生成分片上传地址", true, e);
+        }
+    }
+
+    @Override
+    public void composeObjects(String targetObjectName, List<String> sourceObjectNames) {
+        try {
+            minioClient.composeObject(ComposeObjectArgs.builder().bucket(minioProperties.getBucketName())
+                    .object(targetObjectName).sources(sourceObjectNames.stream().map(source ->
+                            ComposeSource.builder().bucket(minioProperties.getBucketName()).object(source).build()).toList()).build());
+        } catch (Exception e) {
+            throw storageFailure("MULTIPART_COMPOSE", "MinIO 无法合并上传分片", true, e);
+        }
+    }
+
+    @Override
+    public void deleteObjects(List<String> objectNames) {
+        for (String objectName : objectNames) deleteObject(objectName);
     }
 
     private boolean isPublicObject(String objectName) {

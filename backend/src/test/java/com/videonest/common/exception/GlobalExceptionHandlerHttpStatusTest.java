@@ -11,6 +11,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/**
+ * 【Web 层测试】验证全局异常处理器返回的 HTTP 状态码。
+ */
 class GlobalExceptionHandlerHttpStatusTest {
 
     private MockMvc mockMvc;
@@ -30,6 +33,9 @@ class GlobalExceptionHandlerHttpStatusTest {
                 .andExpect(jsonPath("$.message").value("资源不存在"));
     }
 
+    /**
+     * Test-only controller fixture used to exercise the exception handling path.
+     */
     @RestController
     static class FailureController {
 

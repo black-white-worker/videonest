@@ -23,6 +23,9 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 【单元测试】验证 VideoResourceCleanupServiceImplLock 的核心行为与边界条件。
+ */
 @ExtendWith(MockitoExtension.class)
 class VideoResourceCleanupServiceImplLockTest {
 

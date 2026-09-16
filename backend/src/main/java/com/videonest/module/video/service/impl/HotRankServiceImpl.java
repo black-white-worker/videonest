@@ -18,6 +18,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * HotRankService 的默认业务实现。
+ */
 @Service
 @Slf4j
 public class HotRankServiceImpl implements HotRankService {

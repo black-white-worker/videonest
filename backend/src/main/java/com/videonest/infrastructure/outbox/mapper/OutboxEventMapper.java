@@ -40,7 +40,7 @@ public interface OutboxEventMapper extends BaseMapper<OutboxEvent> {
 
     /**
      * 抢占锁定一条待发送消息（分布式防重复发送）
-     * 将符合条件的消息状态改为PROCESSING处理中，相当于数据库悲观锁抢占资源
+     * 将符合条件的消息状态改为PROCESSING处理中，基于状态机的原子 UPDATE 抢占，相当于数据库悲观锁抢占资源
      * 只有原本是PENDING/FAILED且到重试时间的数据才能被抢占，返回受影响行数
      * 多服务实例并发轮询时，只有一个实例能更新成功这条数据，杜绝重复投递MQ
      * @param id 待抢占的消息主键ID

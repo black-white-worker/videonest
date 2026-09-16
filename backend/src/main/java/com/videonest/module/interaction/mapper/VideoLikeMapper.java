@@ -3,6 +3,9 @@ package com.videonest.module.interaction.mapper;
 import com.videonest.module.interaction.entity.VideoLike;
 import org.apache.ibatis.annotations.*;
 
+/**
+ * VideoLikeMapper 数据访问映射接口。
+ */
 @Mapper
 public interface VideoLikeMapper {
 

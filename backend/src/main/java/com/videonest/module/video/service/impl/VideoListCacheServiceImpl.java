@@ -182,6 +182,10 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
         ));
     }
 
+    /**
+     * 异步重建软过期的列表缓存；同一缓存键在同一时刻只允许一个回源任务。
+     * 回源失败时保留旧值，让读请求继续可用并等待下一次刷新。
+     */
     @Override
     public void refreshAsync(
             Long categoryId, long page, long size,

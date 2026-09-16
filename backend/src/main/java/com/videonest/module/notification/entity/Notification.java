@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * Notification 后端组件。
+ */
 @Data
 @TableName("notification")
 public class Notification {

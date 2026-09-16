@@ -59,14 +59,17 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
      */
     private static final DefaultRedisScript<Long> RECORD_VIEW_SCRIPT =
             new DefaultRedisScript<>("""
+                    ------ 模块1：读取/初始化 Redis 中的视频总播放数（KEYS[3]）
                     local current = redis.call('GET', KEYS[3])
                     if not current then
                         if tonumber(ARGV[1]) < 0 then
                             return -9000000000000000
                         end
+                        -- 第一次初始化：把数据库查到的持久化基数写入 Redis 作底数，并设置总过期时间
                         redis.call('SET', KEYS[3], ARGV[1], 'EX', ARGV[3])
                         current = ARGV[1]
                     end
+                    ------ 模块2：匿名用户分钟级限流（仅 ARGV[5]=='1' 即匿名时执行）
                     if ARGV[5] == '1' then
                         -- 匿名访问计数器自增
                         local rate = redis.call('INCR', KEYS[2])
@@ -79,13 +82,16 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
                             return -1
                         end
                     end
+                    ------ 模块3：播放去重（SET NX EX 原子占位）
                     -- SET NX：设置观看去重标记，EX设置去重窗口过期时间；NX仅key不存在才设置成功
                     -- 设置失败：代表这个viewerKey在去重窗口内已经看过该视频，属于重复播放
                     if not redis.call('SET', KEYS[1], '1', 'EX', ARGV[4], 'NX') then
                         -- 上层拿到负数就判定重复观看，取绝对值-1得到播放总数
                         return -tonumber(current) - 1
                     end
-                    local total = redis.call('INCRBY', KEYS[3], 1)
+                    
+                    ------ 模块4：有效播放 → 计数累加 + 脏标记
+                    local total = redis.call('INCRBY', KEYS[3], 1)      -- 总播放数 +1
                     -- 需要刷库的增量delta +1（待同步mysql的增量）
                     redis.call('INCRBY', KEYS[4], 1)
                     -- 将videoId加入脏集合，标记该视频有增量需要后续flush刷数据库
@@ -106,11 +112,13 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
             new DefaultRedisScript<>("""
                     local delta = redis.call('GET', KEYS[1])
                     -- delta为空或者等于0，直接从脏集合移除videoId，返回0
+                    ------ 增量为空或已是0 → 没有可刷的数据
                     if not delta or tonumber(delta) == 0 then
+                        -- 把videoId从脏集合移除，清理"空任务"，返回0
                         redis.call('SREM', KEYS[2], ARGV[1])
                         return 0
                     end
-                    -- 原子删除delta key，把videoId从dirty集合移除
+                    ------ 有增量 → 原子"抢走"：删掉delta key + 从脏集合移除
                     redis.call('DEL', KEYS[1])
                     redis.call('SREM', KEYS[2], ARGV[1])
                     return tonumber(delta)
@@ -319,6 +327,7 @@ public class VideoViewCountServiceImpl implements VideoViewCountService {
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8);
                             byte[] arg = rawVideoId
                                     .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                            // 执行脚本
                             connection.eval(
                                     scriptBytes,
                                     org.springframework.data.redis.connection.ReturnType.INTEGER,

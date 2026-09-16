@@ -16,6 +16,9 @@ import java.util.List;
 import java.util.Map;
 import java.time.LocalDateTime;
 
+/**
+ * VideoMapper 数据访问映射接口。
+ */
 @Mapper
 public interface VideoMapper extends BaseMapper<Video> {
 
@@ -226,6 +229,9 @@ public interface VideoMapper extends BaseMapper<Video> {
      * 标记视频审核超时，更新审核超时通知标记reviewTimeoutNotified=1，避免重复发通知
      */
     int markReviewTimedOut(@Param("videoId") Long videoId);
+
+    /** Finds historical or delayed-message-missed review timeouts for recovery. */
+    List<Long> selectDueReviewTimeoutVideoIds(@Param("limit") int limit);
 
     /**
      * 物理删除：删除该视频全部点赞记录（中间表）

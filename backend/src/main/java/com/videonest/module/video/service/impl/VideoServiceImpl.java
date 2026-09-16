@@ -54,6 +54,9 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * VideoService 的默认业务实现。
+ */
 @Service
 @Slf4j
 public class VideoServiceImpl implements VideoService {

@@ -64,6 +64,7 @@ public class AuthController {
         return ApiResponse.success(authService.login(request));
     }
 
+    /** 撤销当前请求携带的 JWT，使其在自然过期前立即失效。 */
     @PostMapping("/logout")
     public ApiResponse<Void> logout(HttpServletRequest request) {
         String authorization = request.getHeader("Authorization");

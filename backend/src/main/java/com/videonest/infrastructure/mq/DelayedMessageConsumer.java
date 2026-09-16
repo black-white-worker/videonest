@@ -6,6 +6,9 @@ import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.event.ResourcePurgeEvent;
 import com.videonest.module.video.event.ReviewTimeoutEvent;
 import com.videonest.module.video.mapper.VideoMapper;
+import com.videonest.module.user.entity.SysUser;
+import com.videonest.module.user.mapper.SysUserMapper;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.videonest.module.video.service.VideoResourceCleanupService;
 import com.videonest.infrastructure.redis.RedisKeys;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -33,19 +36,22 @@ public class DelayedMessageConsumer {
     private final VideoResourceCleanupService cleanupService;
     private final ApplicationEventPublisher eventPublisher;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final SysUserMapper sysUserMapper;
 
     public DelayedMessageConsumer(
             ObjectMapper objectMapper,
             VideoMapper videoMapper,
             VideoResourceCleanupService cleanupService,
             ApplicationEventPublisher eventPublisher,
-            RedisTemplate<String, Object> redisTemplate
+            RedisTemplate<String, Object> redisTemplate,
+            SysUserMapper sysUserMapper
     ) {
         this.objectMapper = objectMapper;
         this.videoMapper = videoMapper;
         this.cleanupService = cleanupService;
         this.eventPublisher = eventPublisher;
         this.redisTemplate = redisTemplate;
+        this.sysUserMapper = sysUserMapper;
     }
 
     /**
@@ -61,37 +67,35 @@ public class DelayedMessageConsumer {
                 ReviewTimeoutEvent.class,
                 "审核超时"
         );
+        processReviewTimeout(event.videoId());
+    }
+
+    /** Used by both delayed RabbitMQ messages and the recovery scheduler. */
+    @Transactional
+    public void processReviewTimeout(Long videoId) {
         // 更新数据库：标记视频审核超时，返回影响行数
-        int rows = videoMapper.markReviewTimedOut(event.videoId());
+        int rows = videoMapper.markReviewTimedOut(videoId);
         // 防止重复执行
         if (rows == 0) {
-            log.info("视频已审核、已删除或已处理过超时通知，videoId={}", event.videoId());
+            log.info("视频已审核、已删除或已处理过超时通知，videoId={}", videoId);
             return;
         }
 
-        Video video = videoMapper.selectById(event.videoId());
+        Video video = videoMapper.selectById(videoId);
 
-        // 视频存在，推送通知给作者
+        // 审核超时是管理员待办，通知所有启用的管理员，而非投稿作者。
         if (video != null) {
-            // 发布Spring本地事件，解耦通知发送逻辑
-            eventPublisher.publishEvent(
-                    new NotificationDomainEvent(
-                            // 组装通知事件
-                            new NotificationEvent(
-                                    UUID.randomUUID().toString(),       // 通知唯一ID
-                                    video.getAuthorId(),                // 接收人
-                                    video.getAuthorId(),                // 发送人（临时用作者代替）
-                                    "REVIEW_TIMEOUT",                   // 通知类型
-                                    video.getId(),                      // 关联视频id
-                                    null,
-                                    "你的视频等待审核已超时，管理员会尽快处理"  // 通知内容
-                            )
-                    )
-            );
+            sysUserMapper.selectList(new LambdaQueryWrapper<SysUser>()
+                            .eq(SysUser::getRole, "ADMIN").eq(SysUser::getStatus, 1))
+                    .forEach(admin -> eventPublisher.publishEvent(new NotificationDomainEvent(
+                            new NotificationEvent(UUID.randomUUID().toString(), admin.getId(), 0L,
+                                    "REVIEW_TIMEOUT", video.getId(), null,
+                                    "稿件《" + video.getTitle() + "》已超过审核截止时间，请尽快处理")
+                    )));
         }
         // Redis计数器自增，统计审核超时视频总数，用于监控
         redisTemplate.opsForValue().increment(RedisKeys.REVIEW_TIMEOUT_COUNT);
-        log.warn("视频审核超时，videoId={}", event.videoId());
+        log.warn("视频审核超时，videoId={}", videoId);
     }
 
     /**

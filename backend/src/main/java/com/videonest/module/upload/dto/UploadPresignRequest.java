@@ -46,6 +46,6 @@ public class UploadPresignRequest {
      * 最大500MB
      */
     @Min(1)
-    @Max(524288000)
+    @Max(838860800)
     private long size;
 }

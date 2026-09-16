@@ -389,5 +389,3 @@ public class RabbitMqConfig {
                 .with(RESOURCE_PURGE_DEAD_LETTER_ROUTING_KEY);
     }
 }
-
-

@@ -7,6 +7,9 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+/**
+ * 用户密码重置申请持久化对象。
+ */
 @Data
 @TableName("password_reset_request")
 public class PasswordResetRequest {

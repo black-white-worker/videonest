@@ -11,6 +11,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+/**
+ * 【单元测试】验证事务 Outbox 事件的落库内容与初始状态。
+ */
 class TransactionalOutboxServiceTest {
 
     @Test
@@ -37,6 +40,9 @@ class TransactionalOutboxServiceTest {
         assertEquals("{\"id\":42}", event.getPayload());
     }
 
+    /**
+     * 测试用的事件负载对象。
+     */
     private record TestPayload(Long id) {
     }
 }

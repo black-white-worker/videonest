@@ -679,6 +679,18 @@
           AND review_timeout_notified = 0
     </update>
 
+    <select id="selectDueReviewTimeoutVideoIds" resultType="java.lang.Long">
+        SELECT id
+        FROM video
+        WHERE status = 'PENDING'
+          AND is_deleted = 0
+          AND review_deadline IS NOT NULL
+          AND review_deadline &lt;= NOW()
+          AND review_timeout_notified = 0
+        ORDER BY review_deadline ASC
+        LIMIT #{limit}
+    </select>
+
     <!--
     功能：物理删除该视频全部点赞记录
     场景：视频物理删除时，清理关联子表数据

@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * 【单元测试】验证 MinioServiceImpl 的核心行为与边界条件。
+ */
 class MinioServiceImplTest {
 
     @Test

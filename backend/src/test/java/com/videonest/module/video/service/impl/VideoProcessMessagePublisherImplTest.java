@@ -11,6 +11,9 @@ import static org.mockito.Mockito.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+/**
+ * 【单元测试】验证 VideoProcessMessagePublisherImpl 的核心行为与边界条件。
+ */
 class VideoProcessMessagePublisherImplTest {
 
     @Test

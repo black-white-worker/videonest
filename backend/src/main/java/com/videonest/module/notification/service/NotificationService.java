@@ -3,6 +3,9 @@ package com.videonest.module.notification.service;
 import com.videonest.common.api.PageResult;
 import com.videonest.module.notification.vo.NotificationVO;
 
+/**
+ * NotificationService 业务服务接口。
+ */
 public interface NotificationService {
 
     /**

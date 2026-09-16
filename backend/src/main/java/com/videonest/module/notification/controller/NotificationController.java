@@ -14,6 +14,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Notification 接口控制器。
+ */
 @RestController
 @Validated
 @RequestMapping("/api/notifications")
@@ -25,6 +28,7 @@ public class NotificationController {
         this.notificationService = notificationService;
     }
 
+    /** 分页查询当前登录用户可见的通知。 */
     @GetMapping
     public ApiResponse<PageResult<NotificationVO>> list(
             @RequestParam(defaultValue = "1") @Min(1) long page,
@@ -35,11 +39,13 @@ public class NotificationController {
         );
     }
 
+    /** 获取当前用户的未读通知数，供前端角标展示。 */
     @GetMapping("/unread-count")
     public ApiResponse<Long> getUnreadCount() {
         return ApiResponse.success(notificationService.getMyUnreadCount());
     }
 
+    /** 将当前用户自己的指定通知标记为已读。 */
     @PutMapping("/{notificationId}/read")
     public ApiResponse<Void> markRead(
             @PathVariable @Min(1) Long notificationId

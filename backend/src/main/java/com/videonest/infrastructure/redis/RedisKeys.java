@@ -1,5 +1,8 @@
 package com.videonest.infrastructure.redis;
 
+/**
+ * RedisKeys 后端组件。
+ */
 public final class RedisKeys {
 
     private RedisKeys() {

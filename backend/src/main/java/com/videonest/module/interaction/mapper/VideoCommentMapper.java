@@ -11,6 +11,9 @@ import org.apache.ibatis.annotations.Param;
 
 import java.util.List;
 
+/**
+ * VideoCommentMapper 数据访问映射接口。
+ */
 @Mapper
 public interface VideoCommentMapper extends BaseMapper<VideoComment> {
 

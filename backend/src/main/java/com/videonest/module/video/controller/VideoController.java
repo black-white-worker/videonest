@@ -22,6 +22,9 @@ import java.util.HexFormat;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+/**
+ * Video 接口控制器。
+ */
 @RestController
 @Validated
 @RequestMapping("/api/videos")
@@ -33,6 +36,7 @@ public class VideoController {
         this.videoService = videoService;
     }
 
+    /** 分页查询已发布视频，支持按分区和标题关键词筛选。 */
     @GetMapping
     public ApiResponse<PageResult<VideoListItemVO>> list(
             @RequestParam(required = false) Long categoryId,
@@ -55,6 +59,7 @@ public class VideoController {
     }
 
 
+    /** 获取单个已发布视频的详情；服务层负责生成可访问的媒体地址。 */
     @GetMapping("/{id}")
     public ApiResponse<VideoDetailVO> detail(
             @PathVariable
@@ -66,6 +71,7 @@ public class VideoController {
         );
     }
 
+    /** 获取基于热度计算的热门视频列表。 */
     @GetMapping("/hot")
     public ApiResponse<List<VideoListItemVO>> hot(
             @RequestParam(defaultValue = "10")
@@ -76,32 +82,43 @@ public class VideoController {
         return ApiResponse.success(videoService.listHotVideos(limit));
     }
 
+    /**
+     * 上报一次视频播放事件。
+     * 已登录用户以用户 ID 去重，匿名用户以 IP 哈希去重；服务层负责限流、去重窗口和播放量累计。
+     */
     @PostMapping("/{id}/views")
     public ApiResponse<VideoViewReportVO> reportView(
             @PathVariable @Min(1) Long id,
             HttpServletRequest request
     ) {
+        // 从 Security 上下文读取已经校验完成的用户信息
         Authentication authentication = SecurityContextHolder.getContext()
                 .getAuthentication();
         LoginUser loginUser = authentication != null
                 && authentication.getPrincipal() instanceof LoginUser user
                 ? user
                 : null;
+
         String ipHash = sha256(request.getRemoteAddr());
+        // 判断是否匿名：loginUser为空=未登录游客
         boolean anonymous = loginUser == null;
         String viewerKey = anonymous
                 ? "ip:" + ipHash
                 : "user:" + loginUser.userId();
 
+        // 记录浏览
         return ApiResponse.success(
                 videoService.recordView(id, viewerKey, ipHash, anonymous)
         );
     }
 
+    /** 将原始 IP 截断哈希，避免把可识别的地址作为播放去重键存储或传递。 */
     private String sha256(String value) {
         try {
             byte[] digest = MessageDigest.getInstance("SHA-256")
+                    // 把字符串按 UTF-8 编码转成字节数组，再算出 32 字节的摘要
                     .digest(value.getBytes(StandardCharsets.UTF_8));
+                    // 从摘要的第 0 个字节开始，取 12 个字节，转成十六进制字符串返回
             return HexFormat.of().formatHex(digest, 0, 12);
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("JVM 不支持 SHA-256", e);

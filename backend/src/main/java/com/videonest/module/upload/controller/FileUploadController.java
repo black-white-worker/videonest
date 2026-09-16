@@ -5,6 +5,13 @@ import com.videonest.module.upload.vo.FileUploadVO;
 import com.videonest.module.upload.vo.UploadPresignVO;
 import com.videonest.module.upload.dto.UploadPresignRequest;
 import com.videonest.module.upload.service.UploadSessionService;
+import com.videonest.module.upload.service.MultipartUploadService;
+import com.videonest.module.upload.service.UploadMetricsService;
+import com.videonest.module.upload.dto.MultipartUploadCreateRequest;
+import com.videonest.module.upload.dto.MultipartUploadCompleteRequest;
+import com.videonest.module.upload.dto.UploadMetricRequest;
+import com.videonest.module.upload.vo.MultipartUploadSessionVO;
+import com.videonest.module.upload.vo.MultipartPartPresignVO;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,11 +37,17 @@ import org.springframework.web.bind.annotation.RestController;
 public class FileUploadController {
 
     private final UploadSessionService uploadSessionService;
+    private final MultipartUploadService multipartUploadService;
+    private final UploadMetricsService uploadMetricsService;
 
-    public FileUploadController(UploadSessionService uploadSessionService) {
+    public FileUploadController(UploadSessionService uploadSessionService, MultipartUploadService multipartUploadService,
+                                UploadMetricsService uploadMetricsService) {
         this.uploadSessionService = uploadSessionService;
+        this.multipartUploadService = multipartUploadService;
+        this.uploadMetricsService = uploadMetricsService;
     }
 
+    /** 签发浏览器直传 MinIO 临时目录所需的预签名 URL 和上传票据。 */
     @PostMapping("/presign")
     public ApiResponse<UploadPresignVO> presign(
             @Valid @RequestBody UploadPresignRequest request
@@ -42,9 +55,49 @@ public class FileUploadController {
         return ApiResponse.success(uploadSessionService.issue(request));
     }
 
+    /** 确认直传已完成，并触发对象校验、安全检测和正式路径转移。 */
     @PostMapping("/uploads/{uploadId}/complete")
     public ApiResponse<FileUploadVO> complete(@PathVariable String uploadId) {
         return ApiResponse.success(uploadSessionService.complete(uploadId));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/uploads/{uploadId}")
+    public ApiResponse<Void> cancel(@PathVariable String uploadId) {
+        uploadSessionService.cancel(uploadId);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/multipart/sessions")
+    public ApiResponse<MultipartUploadSessionVO> createMultipart(@Valid @RequestBody MultipartUploadCreateRequest request) {
+        return ApiResponse.success(multipartUploadService.create(request));
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/multipart/sessions/{sessionId}")
+    public ApiResponse<MultipartUploadSessionVO> multipartStatus(@PathVariable String sessionId) {
+        return ApiResponse.success(multipartUploadService.status(sessionId));
+    }
+
+    @PostMapping("/multipart/sessions/{sessionId}/parts/{partNumber}/presign")
+    public ApiResponse<MultipartPartPresignVO> presignPart(@PathVariable String sessionId, @PathVariable int partNumber) {
+        return ApiResponse.success(multipartUploadService.presignPart(sessionId, partNumber));
+    }
+
+    @PostMapping("/multipart/sessions/{sessionId}/complete")
+    public ApiResponse<FileUploadVO> completeMultipart(@PathVariable String sessionId,
+                                                         @Valid @RequestBody MultipartUploadCompleteRequest request) {
+        return ApiResponse.success(multipartUploadService.complete(sessionId, request));
+    }
+
+    @org.springframework.web.bind.annotation.DeleteMapping("/multipart/sessions/{sessionId}")
+    public ApiResponse<Void> cancelMultipart(@PathVariable String sessionId) {
+        multipartUploadService.cancel(sessionId);
+        return ApiResponse.success(null);
+    }
+
+    @PostMapping("/metrics")
+    public ApiResponse<Void> recordMetric(@Valid @RequestBody UploadMetricRequest request) {
+        uploadMetricsService.record(request);
+        return ApiResponse.success(null);
     }
 
 }

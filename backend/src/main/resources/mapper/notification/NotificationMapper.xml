@@ -19,7 +19,8 @@
             n.is_read AS isRead,
             n.create_time AS createTime
         FROM notification n
-        INNER JOIN sys_user actor ON actor.id = n.actor_id
+        <!-- 系统通知的 actor_id 可能没有对应用户；必须保留，否则红点计数与列表不一致。 -->
+        LEFT JOIN sys_user actor ON actor.id = n.actor_id
         LEFT JOIN video v ON v.id = n.video_id
         WHERE n.recipient_id = #{recipientId}
         ORDER BY n.is_read ASC, n.create_time DESC, n.id DESC

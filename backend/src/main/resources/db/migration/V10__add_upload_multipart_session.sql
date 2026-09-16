@@ -1,0 +1,22 @@
+CREATE TABLE upload_multipart_session (
+    id VARCHAR(36) NOT NULL,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(16) NOT NULL,
+    file_name VARCHAR(255) NOT NULL,
+    content_type VARCHAR(100) NOT NULL,
+    declared_size BIGINT NOT NULL,
+    fingerprint VARCHAR(512) NOT NULL,
+    part_size BIGINT NOT NULL,
+    total_parts INT NOT NULL,
+    staging_object_name VARCHAR(500) NOT NULL,
+    minio_upload_id VARCHAR(512) NOT NULL,
+    status VARCHAR(24) NOT NULL,
+    final_object_name VARCHAR(500) NULL,
+    detected_duration INT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (id),
+    KEY idx_upload_multipart_user_status (user_id, status),
+    KEY idx_upload_multipart_expiry (expires_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -64,6 +64,7 @@ public class TransactionalOutboxServiceImpl implements TransactionalOutboxServic
             // 序列化失败抛出自定义业务异常，触发事务回滚
             throw new MessagePublishException(eventType, "事务消息序列化失败", e);
         }
+        // 只写入本地 Outbox 表，不在业务事务内直接调用 RabbitMQ；由调度器负责后续投递。
         // MyBatis插入一条记录到outbox_event表
         outboxEventMapper.insert(event);
     }
