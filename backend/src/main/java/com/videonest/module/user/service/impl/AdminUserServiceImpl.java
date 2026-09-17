@@ -54,12 +54,21 @@ public class AdminUserServiceImpl implements AdminUserService {
     @Override
     @Transactional
     public void requestPasswordReset(Long userId) {
-        if (userMapper.selectById(userId) == null) throw new BusinessException(404, "用户不存在");
+        // 目标用户必须存在
+        if (userMapper.selectById(userId) == null) {
+            throw new BusinessException(404, "用户不存在");
+        }
+        // 同一用户不能存在多个待处理的密码重置申请
         Long count = requestMapper.selectCount(new LambdaQueryWrapper<PasswordResetRequest>()
                 .eq(PasswordResetRequest::getUserId, userId).eq(PasswordResetRequest::getStatus, "PENDING"));
-        if (count > 0) throw new BusinessException(409, "已有待处理的密码重置申请");
+        if (count > 0) {
+            throw new BusinessException(409, "已有待处理的密码重置申请");
+        }
+        // 创建待处理申请并入库
         PasswordResetRequest request = new PasswordResetRequest();
-        request.setUserId(userId); request.setStatus("PENDING"); requestMapper.insert(request);
+        request.setUserId(userId);
+        request.setStatus("PENDING");
+        requestMapper.insert(request);
     }
 
     @Override
@@ -70,11 +79,16 @@ public class AdminUserServiceImpl implements AdminUserService {
             throw new BusinessException(400, "密码重置申请不存在或已处理");
         }
         SysUser user = userMapper.selectById(userId);
-        if (user == null) throw new BusinessException(404, "用户不存在");
+        if (user == null) {
+            throw new BusinessException(404, "用户不存在");
+        }
         String temporaryPassword = randomPassword();
         user.setPassword(passwordEncoder.encode(temporaryPassword));
         userMapper.updateById(user);
-        if (requestMapper.complete(requestId, adminId) != 1) throw new BusinessException(409, "申请状态已变化，请刷新后重试");
+        // 用 UPDATE ... WHERE status='PENDING' 保证并发下只有一条申请能被处理
+        if (requestMapper.complete(requestId, adminId) != 1) {
+            throw new BusinessException(409, "申请状态已变化，请刷新后重试");
+        }
         eventPublisher.publishEvent(new NotificationDomainEvent(new NotificationEvent(
                 UUID.randomUUID().toString(), userId, adminId, "PASSWORD_RESET", null, null,
                 "管理员已初始化你的登录密码，请通过安全渠道获取临时密码，并登录后立即修改。")));

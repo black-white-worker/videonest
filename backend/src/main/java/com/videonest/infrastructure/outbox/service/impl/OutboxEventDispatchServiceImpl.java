@@ -83,7 +83,7 @@ public class OutboxEventDispatchServiceImpl implements OutboxEventDispatchServic
                         return message;
                     },
                     /*
-                    * 只在生产者当前 JVM 内部使用，MQ 本身不会存储，它专门配合 publisher-confirm-type: correlated 发布者确认机制：
+                    * 只在生产者当前 JVM 内部使用，MQ本身不会存储，它专门配合 publisher-confirm-type: correlated 发布者确认机制：
                     * 专门收 MQ 确认回执、判断投递成败用
                     * */
                     correlationData
