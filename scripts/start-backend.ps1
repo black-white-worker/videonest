@@ -2,7 +2,9 @@
 # 自动读取项目根目录 .env 文件设置环境变量，然后启动 Spring Boot
 
 $ErrorActionPreference = "Stop"
-$ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
+# 脚本位于 scripts/ 下，项目根目录是脚本所在目录的上一级
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$ProjectRoot = Split-Path -Parent $ScriptDir
 $EnvFile = Join-Path $ProjectRoot ".env"
 
 if (-not (Test-Path $EnvFile)) {

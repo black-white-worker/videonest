@@ -1,8 +1,21 @@
 # VideoNest
 
-后端的 HTTP 状态码、JWT 撤销、认证限流、Flyway 与 Transactional Outbox 设计边界见 [后端可靠性设计](docs/backend-reliability-design.md)。
+[![Java](https://img.shields.io/badge/Java-21-orange)]()
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-green)]()
+[![Vue](https://img.shields.io/badge/Vue-3.x-42b883)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6)]()
+[![MySQL](https://img.shields.io/badge/MySQL-8.4-blue)]()
+[![Redis](https://img.shields.io/badge/Redis-7.4-red)]()
+[![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-ff6600)]()
+[![MinIO](https://img.shields.io/badge/MinIO-object%20storage-yellow)]()
+[![Docker](https://img.shields.io/badge/Docker%20Compose-ready-2496ed)]()
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)]()
 
-VideoNest 是一个面向学习、作品展示与小型社区的视频平台。它以 Vue 3 和 Spring Boot 为核心，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。当前首页提供轮换视觉横幅、关键词搜索、分区筛选和热门内容流；创作者与管理员分别在个人中心和管理后台完成后续操作。
+> 一个面向学习、作品展示与小型社区的全栈视频平台：从上传、转码、审核到播放、互动、资源治理的完整闭环。
+
+VideoNest 以 **Vue 3 + Spring Boot** 为核心，采用模块化单体架构，覆盖视频从上传、转码、审核到发布、播放、互动和资源清理的完整生命周期。首页提供轮换视觉横幅、关键词搜索、分区筛选和热门内容流；创作者与管理员分别在个人中心和管理后台完成后续操作。
+
+后端的 HTTP 状态码、JWT 撤销、认证限流、Flyway 与 Transactional Outbox 设计边界见 [后端可靠性设计](docs/backend-reliability-design.md)。
 
 ![VideoNest 首页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/home.jpg)
 
@@ -275,21 +288,32 @@ node scripts/run-performance-suite.js --quick
 
 ```text
 videonest/
-├─ backend/                    # Spring Boot 后端
+├─ backend/                     # Spring Boot 后端
 │  ├─ src/main/java/.../module/ # auth、video、upload、interaction、follow、notification、admin
 │  ├─ src/main/resources/       # 配置、MyBatis Mapper 与 Flyway 迁移脚本
 │  └─ src/test/                 # 自动化测试
 ├─ frontend/                    # Vue 3 前端与 Nginx 配置
-├─ deploy/                      # 独立基础设施部署文件（RabbitMQ 等）
+├─ deploy/                      # 独立基础设施部署文件与环境变量模板
+│  └─ server.env.example         # 环境变量模板（复制为根目录 .env）
 ├─ benchmark/                   # JMeter 写链路压测计划
 ├─ docs/                        # 截图、压测报告、可靠性设计文档
-├─ scripts/                     # 可复现压测脚本与部署脚本
+├─ scripts/                     # 可复现压测脚本、部署脚本与本地启动脚本
+│  └─ start-backend.ps1         # 本地一键加载 .env 并启动后端
 ├─ sql/                         # 初始化与增量 SQL
 ├─ docker-compose.yml           # 完整服务编排
 ├─ docker-compose.benchmark.yml # 本机端口冲突覆盖配置
 ├─ docker-compose.jar.yml       # 服务器仅复制产物的覆盖配置
-└─ .env.example                 # 环境变量模板
+└─ docker-compose.test.yml      # 隔离环境写链路压测配置
 ```
+
+## 技术文档
+
+| 文档 | 说明 |
+|---|---|
+| [后端可靠性设计](docs/backend-reliability-design.md) | HTTP 状态码、JWT 撤销、认证限流、Flyway、Transactional Outbox |
+| [工程加固记录 2026-08-02](docs/engineering-hardening-2026-08-02.md) | 上线前的工程化治理项 |
+| [性能监控方案](docs/performance-monitoring.md) | 监控指标与采集方式 |
+| [压测报告合集](docs/performance-test-2026-09-04.md) | 历次只读压测结果与复现步骤 |
 
 ## 当前边界
 
