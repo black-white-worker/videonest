@@ -18,7 +18,6 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 	})
 public class VideoNestApplication {
 
-	// 注释注释
 	public static void main(String[] args) {
 		SpringApplication.run(VideoNestApplication.class, args);
 	}
