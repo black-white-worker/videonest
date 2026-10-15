@@ -6,6 +6,11 @@ import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
 import java.time.LocalDateTime;
 
+/**
+ * 分片上传会话实体
+ * 对应表 upload_multipart_session
+ * 用来记录一次完整的大文件分片上传任务信息，对接MinIO分片上传
+ */
 @Data
 @TableName("upload_multipart_session")
 public class UploadMultipartSession {

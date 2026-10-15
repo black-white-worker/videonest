@@ -257,11 +257,16 @@ public class HotVideoCacheServiceImpl implements HotVideoCacheService {
         }
     }
 
+    /**
+     * 懒加载本地缓存，双重检查锁：
+     * 第一次访问时创建 Caffeine 实例，之后所有线程走无锁快路径
+     */
     private Cache<String, List<VideoListItemVO>> localCache() {
         Cache<String, List<VideoListItemVO>> current = localCardsCache;
         if (current != null) {
             return current;
         }
+        // 加锁后做第二重检查，防止两个线程同时创建
         synchronized (localRefreshMonitor) {
             if (localCardsCache == null) {
                 localCardsCache = Caffeine.newBuilder()
