@@ -6,7 +6,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * VideoNest 后端应用启动类。
+ * VideoNest 后端应用启动类。第三个分支
  */
 @SpringBootApplication
 @EnableScheduling
