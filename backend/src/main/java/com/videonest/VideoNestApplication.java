@@ -7,6 +7,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * VideoNest 后端应用启动类
+ *
  */
 @SpringBootApplication
 @EnableScheduling
@@ -17,6 +18,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 	})
 public class VideoNestApplication {
 
+	// 注释
 	public static void main(String[] args) {
 		SpringApplication.run(VideoNestApplication.class, args);
 	}
