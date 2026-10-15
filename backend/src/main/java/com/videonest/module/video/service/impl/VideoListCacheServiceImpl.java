@@ -122,9 +122,11 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
         // 1. 本地 Caffeine 优先命中：数据未签名，签名由上层统一处理
         LocalEntry local = localCache().getIfPresent(key);
         if (local != null) {
+            // 缓存命中计数器加一
             hits.increment();
             boolean stale = System.currentTimeMillis() - local.refreshedAtMillis()
                     >= localSoftTtlSeconds * 1000L;
+            // 拷贝列表结果
             return new CacheLookup(copyRecords(local.data()), stale);
         }
         // 2. 本地未命中，读 Redis；命中则回填本地缓存

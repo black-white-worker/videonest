@@ -2,7 +2,13 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
-import { createVideo, uploadCover, uploadVideo, type UploadCancel, type UploadProgress } from '../api/creator-video'
+import {
+  createVideo,
+  uploadCover,
+  uploadVideo,
+  type UploadCancel,
+  type UploadProgress
+} from '../api/creator-video'
 import { getCategories, type VideoCategory } from '../api/video'
 import SiteHeader from '../components/SiteHeader.vue'
 import { hasValidSession } from '../utils/auth'
@@ -144,11 +150,15 @@ async function startVideoUpload(file: File) {
     videoUploadFailed.value = false
     resumeHint.value = false
 
-    const uploadResult = await uploadVideo(file, progress => {
-      videoProgress.value = progress
-    }, cancel => {
-      videoUploadCancel.value = cancel
-    })
+    const uploadResult = await uploadVideo(
+      file,
+      (progress) => {
+        videoProgress.value = progress
+      },
+      (cancel) => {
+        videoUploadCancel.value = cancel
+      }
+    )
     if (!uploadResult.detectedDuration) {
       throw new Error('后端未能探测视频时长')
     }
@@ -239,7 +249,9 @@ async function submit() {
 onMounted(() => {
   if (ensureLoggedIn()) {
     loadCategories()
-    resumeHint.value = Object.keys(localStorage).some(key => key.startsWith('videonest.multipart.'))
+    resumeHint.value = Object.keys(localStorage).some((key) =>
+      key.startsWith('videonest.multipart.')
+    )
   }
 })
 
@@ -332,17 +344,44 @@ onBeforeUnmount(() => {
               <div v-if="videoUploading" class="mask">
                 <strong>正在上传视频</strong>
                 <template v-if="videoProgress">
-                  <span>{{ Math.floor((videoProgress.loaded / videoProgress.total) * 100) }}% · {{ formatBytes(videoProgress.loaded) }} / {{ formatBytes(videoProgress.total) }}</span>
-                  <span>{{ formatBytes(videoProgress.speedBytesPerSecond) }}/s · {{ formatSeconds(videoProgress.remainingSeconds) }}</span>
-                  <span>{{ videoProgress.mode === 'multipart' ? '大文件分片上传，可重新选择同一文件继续上传' : videoProgress.attempt > 1 ? '正在重试完整文件上传' : '上传中，请保持页面开启' }}</span>
+                  <span
+                    >{{ Math.floor((videoProgress.loaded / videoProgress.total) * 100) }}% ·
+                    {{ formatBytes(videoProgress.loaded) }} /
+                    {{ formatBytes(videoProgress.total) }}</span
+                  >
+                  <span
+                    >{{ formatBytes(videoProgress.speedBytesPerSecond) }}/s ·
+                    {{ formatSeconds(videoProgress.remainingSeconds) }}</span
+                  >
+                  <span>{{
+                    videoProgress.mode === 'multipart'
+                      ? '大文件分片上传，可重新选择同一文件继续上传'
+                      : videoProgress.attempt > 1
+                        ? '正在重试完整文件上传'
+                        : '上传中，请保持页面开启'
+                  }}</span>
                 </template>
                 <span v-else>正在准备上传…</span>
               </div>
             </label>
             <div v-if="videoUploading || videoUploadFailed || resumeHint" class="upload-actions">
-              <span v-if="resumeHint && !videoUploading" class="upload-actions__hint">检测到未完成的大文件上传；重新选择同一文件后可继续上传。</span>
-              <el-button v-if="videoUploading" size="small" type="danger" plain @click.prevent="cancelVideoUpload">取消上传</el-button>
-              <el-button v-else-if="videoUploadFailed && lastVideoFile" size="small" type="primary" @click.prevent="retryVideoUpload">
+              <span v-if="resumeHint && !videoUploading" class="upload-actions__hint"
+                >检测到未完成的大文件上传；重新选择同一文件后可继续上传。</span
+              >
+              <el-button
+                v-if="videoUploading"
+                size="small"
+                type="danger"
+                plain
+                @click.prevent="cancelVideoUpload"
+                >取消上传</el-button
+              >
+              <el-button
+                v-else-if="videoUploadFailed && lastVideoFile"
+                size="small"
+                type="primary"
+                @click.prevent="retryVideoUpload"
+              >
                 {{ lastVideoFile.size > 400 * 1024 * 1024 ? '继续上传' : '重新上传' }}
               </el-button>
             </div>

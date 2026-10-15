@@ -105,6 +105,7 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     public PageResult<VideoListItemVO> listPublishedVideos(
             Long categoryId, String keyword, long page, long size
     ) {
+        // 判断走缓存的条件：前十页并且无关键词
         String normalizedKeyword = StringUtils.hasText(keyword) ? keyword.trim() : null;
         boolean cacheable = page >= 1 && page <= 10 && normalizedKeyword == null;
         if (cacheable) {

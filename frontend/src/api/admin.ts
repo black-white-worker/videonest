@@ -162,7 +162,9 @@ export async function getAdminUsers(): Promise<AdminUser[]> {
 }
 
 export async function getPasswordResetRequests(): Promise<PasswordResetRequest[]> {
-  const response = await request.get<ApiResponse<PasswordResetRequest[]>>('/admin/users/password-reset-requests')
+  const response = await request.get<ApiResponse<PasswordResetRequest[]>>(
+    '/admin/users/password-reset-requests'
+  )
   return response.data.data
 }
 

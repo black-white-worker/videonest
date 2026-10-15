@@ -388,7 +388,10 @@ onBeforeUnmount(() => {
         </template>
       </el-skeleton>
 
-      <div v-if="total > pageSize && (currentPage > 1 || videos.length === pageSize)" class="pagination">
+      <div
+        v-if="total > pageSize && (currentPage > 1 || videos.length === pageSize)"
+        class="pagination"
+      >
         <el-pagination
           v-model:current-page="currentPage"
           :page-size="pageSize"
