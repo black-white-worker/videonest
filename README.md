@@ -1,12 +1,14 @@
 # VideoNest
 
+**在线体验**：<http://101.201.208.223:8082>
+
 [![Java](https://img.shields.io/badge/Java-21-orange)]()
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-4.1-green)]()
 [![Vue](https://img.shields.io/badge/Vue-3.x-42b883)]()
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6)]()
 [![MySQL](https://img.shields.io/badge/MySQL-8.4-blue)]()
 [![Redis](https://img.shields.io/badge/Redis-7.4-red)]()
-[![RabbitMQ](https://img.shields.io/badge/RabbitMQ-3.13-ff6600)]()
+[![RabbitMQ](https://img.shields.io/badge/RabbitMQ-4.2-ff6600)]()
 [![MinIO](https://img.shields.io/badge/MinIO-object%20storage-yellow)]()
 [![Docker](https://img.shields.io/badge/Docker%20Compose-ready-2496ed)]()
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)]()
@@ -17,11 +19,20 @@ VideoNest 以 **Vue 3 + Spring Boot** 为核心，采用模块化单体架构，
 
 后端的 HTTP 状态码、JWT 撤销、认证限流、Flyway 与 Transactional Outbox 设计边界见 [后端可靠性设计](docs/backend-reliability-design.md)。
 
-![VideoNest 首页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/home.jpg)
+## 目录
 
-![VideoNest 投稿发布页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/upload.jpg)
+- 概览：[界面预览](#界面预览)｜[亮点](#亮点)｜[架构](#架构)｜[功能一览](#功能一览)｜[页面与角色](#页面与角色)
+- 上手：[技术栈](#技术栈)｜[快速开始](#快速开始)｜[服务地址](#服务地址)｜[本地开发](#本地开发)｜[常用命令](#常用命令)
+- 深入：[API 模块](#api-模块)｜[配置说明](#配置说明)｜[性能验证](#性能验证)｜[项目结构](#项目结构)
+- 参考：[技术文档](#技术文档)｜[当前边界](#当前边界)｜[安全提示](#安全提示)
 
-![VideoNest 视频详情页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@main/docs/images/video-detail.jpg)
+## 界面预览
+
+![VideoNest 首页](docs/images/home.jpg)
+
+![VideoNest 投稿发布页](docs/images/upload.jpg)
+
+![VideoNest 视频详情页](docs/images/video-detail.jpg)
 
 ## 亮点
 
@@ -130,46 +141,41 @@ docker compose -f docker-compose.yml -f docker-compose.benchmark.yml up -d --bui
 docker compose down
 ```
 
-### 本地打包、服务器只复制产物
+### 部署到服务器（产物模式）
 
-适用于不希望服务器下载 Maven/npm 依赖的部署方式。本地 PowerShell 执行：
-
-```powershell
-.\scripts\deploy.ps1
-```
-
-该命令会完成后端测试与 Jar 构建、前端生产构建、打包、上传 `.env`、数据库增量迁移以及远程 Compose 重启。远程只重新构建 `backend` 和 `frontend`，RabbitMQ、MySQL、Redis、MinIO 会复用服务器已有镜像。常用参数：
+本机编译、服务器只复制产物。为什么之前的构建慢、改造前后的实测数据见 [docs/build-speed.md](docs/build-speed.md)。
 
 ```powershell
-.\scripts\deploy.ps1 `
-  -Server "82.157.205.6" `
-  -RemoteUser "ubuntu" `
-  -RemoteDir "/opt/videonest" `
-  -IdentityFile "C:\keys\server.pem" `
-  -PublicSiteUrl "https://video.example.com"
+.\deploy.cmd
 ```
 
-重复使用已生成的压缩包可加 `-SkipBuild`；紧急部署可用 `-SkipTests`；只有明确不需要执行数据库迁移时才使用 `-SkipMigrations`。也可以只生成部署包：
+做的事：本机 `mvn package`（默认跳过测试）+ `npm run build` → 打包上传约 80MB → 服务器执行
+`deploy/server/redeploy.sh`：确保 `videonest-backend-base:latest`（JRE + ffmpeg，只建一次）→
+只 COPY jar/dist 生成两个镜像（约 1 秒）→ 重启 → 等健康检查。
+
+常用参数（`deploy.cmd` 会把参数原样传给 `scripts/deploy.ps1`）：
 
 ```powershell
-.\scripts\package-deploy.ps1 -PublicSiteUrl "https://video.example.com"
+.\deploy.cmd -SkipBuild                     # 产物没变，只上传/重建
+.\deploy.cmd -SkipUpload                    # 不重传，用服务器上已有产物重建
+.\deploy.cmd -RunTests                      # 部署前跑后端测试（需要本机 Docker）
+.\deploy.cmd -PublicSiteUrl "http://101.201.208.223:8082"
+.\deploy.cmd -Server 1.2.3.4 -RemoteUser root -RemoteDir /opt/apps/videonest -IdentityFile C:\keys\server.pem
 ```
 
-服务器解压后，使用产物构建覆盖文件启动；后端镜像只复制 Jar，前端镜像只复制 `dist`：
+默认部署到 `101.201.208.223` 的 `/opt/apps/videonest`，线上入口为 <http://101.201.208.223:8082>。`.env.prod` 需自行准备（脚本不会上传它）。
+如果必须在服务器上全量源码编译，叠加 `docker-compose.source.yml`，详见 [deploy/README-server.md](deploy/README-server.md)。
 
-```bash
-cd /opt/videonest
-tar -xzf /tmp/videonest-deploy.tar.gz -C /opt/videonest
-sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --build
-```
-
-该模式复用服务器已有的 `videonest-backend:latest` 运行镜像（其中包含 FFmpeg），因此部署构建不会再下载 Maven、npm 或 Alpine 的 FFmpeg 包。
 
 ### 服务地址
 
+线上实例：<http://101.201.208.223:8082>。前端 nginx 是页面与接口的统一入口，`/api` 反代到 `vn-backend:8080`；视频与封面通过 MinIO 预签名 URL 直接访问。
+
+本机 Docker Compose 默认端口：
+
 | 服务 | 地址 |
 |---|---|
-| VideoNest | `http://127.0.0.1` |
+| 本地 VideoNest | `http://127.0.0.1` |
 | 后端 API | `http://127.0.0.1:8080` |
 | RabbitMQ 管理台 | `http://127.0.0.1:15672` |
 | MinIO API / 管理台 | `http://127.0.0.1:9010` / `http://127.0.0.1:9011` |
@@ -180,6 +186,16 @@ sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --buil
 首次启动后，后端会通过 Flyway 自动执行 `backend/src/main/resources/db/migration` 中的版本化迁移。一键部署会在迁移前备份数据库，并对历史迁移异常做兼容性检查；生产部署前仍建议自行确认备份可用。
 
 ## 本地开发
+
+三种循环都收在 `scripts/local.ps1` 里（根目录 `local.cmd` 是薄包装），详见 [docs/local-dev.md](docs/local-dev.md)：
+
+```powershell
+.\local.cmd                          # 本地部署：jar+dist→镜像→容器，http://127.0.0.1:8082
+.\local.cmd dev                      # 起中间件 + 后端 8080 + vite 5173（改代码即时生效）
+.\local.cmd infra                    # 只起中间件，后端放 IDE 里跑
+```
+
+`-Action dev` 会新开两个窗口执行下面的手动步骤；也可以自己来：
 
 先启动基础设施：
 
