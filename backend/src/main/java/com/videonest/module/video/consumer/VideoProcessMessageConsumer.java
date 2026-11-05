@@ -276,7 +276,7 @@ public class VideoProcessMessageConsumer {
                         + "\\,ih)/2)*2",
                 "-map", "0:v:0", "-map", "0:a?",
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-threads", "1",
+                "-threads", "2",
                 "-preset", "medium",
                 "-crf", Integer.toString(profile.crf()),
                 "-maxrate", profile.maxRate(),
