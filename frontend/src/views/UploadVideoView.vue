@@ -215,11 +215,6 @@ async function submit() {
     return
   }
 
-  if (!form.coverObjectName) {
-    ElMessage.warning('请先上传视频封面')
-    return
-  }
-
   if (!form.videoObjectName || !form.duration) {
     ElMessage.warning('请先上传视频文件')
     return
@@ -296,7 +291,7 @@ onBeforeUnmount(() => {
             <span>3</span>
             <div>
               <strong>设置封面</strong
-              ><small>{{ form.coverObjectName ? '已完成' : '16:9 更吸引观众' }}</small>
+              ><small>{{ form.coverObjectName ? '已完成' : '不填将自动截取视频帧' }}</small>
             </div>
           </li>
         </ol>
@@ -443,7 +438,7 @@ onBeforeUnmount(() => {
                   <span class="step-number">03</span>
                   <h2>视频封面</h2>
                 </div>
-                <span class="required-badge">必填</span>
+                <span class="required-badge">选填</span>
               </div>
               <label
                 class="cover-upload"
@@ -473,7 +468,7 @@ onBeforeUnmount(() => {
           <div class="actions">
             <div>
               <strong>提交前请确认</strong>
-              <span>视频、标题、分区和封面均已准备完成</span>
+              <span>视频、标题和分区已准备完成</span>
             </div>
             <el-button size="large" @click="router.push('/')">取消</el-button>
             <el-button
