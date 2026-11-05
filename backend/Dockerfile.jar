@@ -1,9 +1,15 @@
-ARG BACKEND_RUNTIME_IMAGE=videonest-backend:latest
-# 复用服务器上现有的后端运行镜像（已安装 FFmpeg），避免再次访问 Alpine 海外仓库。
+# 产物模式：只把本机编译好的 jar 塞进运行镜像。
+# 服务器不再装 Maven、不再编译、不再下依赖，构建 ≈ 复制一个 79MB 文件。
+#
+# 运行镜像由 Dockerfile.base 预先生成（videonest-backend-base:latest，含 JRE + ffmpeg），
+# redeploy.sh 首次会自动构建；也可以在服务器上手动执行：
+#   docker build -f backend/Dockerfile.base -t videonest-backend-base:latest backend
+ARG BACKEND_RUNTIME_IMAGE=videonest-backend-base:latest
 FROM ${BACKEND_RUNTIME_IMAGE}
+
 WORKDIR /app
 
-# 构建产物由本地 Maven 生成；镜像构建阶段只复制 Jar，不下载 Maven/npm/FFmpeg。
+# 构建上下文由 Dockerfile.jar.dockerignore 压到只剩 target/*.jar
 COPY target/*.jar app.jar
 
 EXPOSE 8080

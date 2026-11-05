@@ -1,0 +1,20 @@
+# 源码模式覆盖文件：只在没有本机产物、必须在服务器上全量编译时才叠加。
+# 正常部署不要用它 —— 2 vCPU / 1.8GB 上 mvn + npm ci + vite 约 20 分钟。
+#
+#   docker compose -f docker-compose.server.yml -f docker-compose.source.yml \
+#     --env-file .env.prod build
+#
+# 会用到这些额外基础镜像（用 scripts/prefetch-images.sh --source 先拉）：
+#   maven:3.9.11-eclipse-temurin-21-alpine  node:24-alpine
+services:
+  vn-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+
+  vn-frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_PUBLIC_SITE_URL: ${PUBLIC_SITE_URL:-}

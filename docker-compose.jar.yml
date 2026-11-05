@@ -1,10 +1,14 @@
+# 旧版单机布局的产物模式覆盖文件（配合 docker-compose.yml 的 backend/frontend 服务名）。
+# 现在的服务器部署用 docker-compose.server.yml（服务名 vn-*），不需要再叠加这个文件。
+# 保留它只是为了兼容旧文档里的命令：
+#   docker compose -f docker-compose.yml -f docker-compose.jar.yml up -d --build
 services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.jar
       args:
-        BACKEND_RUNTIME_IMAGE: ${BACKEND_RUNTIME_IMAGE:-videonest-backend:latest}
+        BACKEND_RUNTIME_IMAGE: ${BACKEND_RUNTIME_IMAGE:-videonest-backend-base:latest}
 
   frontend:
     build:

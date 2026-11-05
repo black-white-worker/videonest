@@ -5,6 +5,7 @@ import com.videonest.security.JwtProperties;
 import com.videonest.security.RestAccessDeniedHandler;
 import com.videonest.security.RestAuthenticationEntryPoint;
 import com.videonest.security.AuthEndpointRateLimitFilter;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -21,6 +22,7 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.util.Arrays;
 import java.util.List;
 
 /**
@@ -158,15 +160,21 @@ public class SecurityConfig {
      */
 
     @Bean
-    public CorsConfigurationSource corsConfigurationSource() {
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins:http://localhost:5173,http://127.0.0.1:5173}")
+            String allowedOrigins
+    ) {
         //跨域规则实体类
         CorsConfiguration config = new CorsConfiguration();
 
-        // 允许的前端域名
-        config.setAllowedOrigins(List.of(
-                "http://localhost:5173",
-                "http://127.0.0.1:5173"
-        ));
+        // 允许的前端来源，由 CORS_ALLOWED_ORIGINS 注入（逗号分隔，空项自动忽略）。
+        // 注意：同源 POST/PUT 时浏览器同样会带 Origin 头，所以线上域名/IP 必须写在这里，
+        // 否则会被 Spring 的 CorsFilter 直接以 403 "Invalid CORS request" 拒掉。
+        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim)
+                .filter(origin -> !origin.isEmpty())
+                .toList();
+        config.setAllowedOrigins(origins);
 
         // 允许的请求方式
         config.setAllowedMethods(List.of(

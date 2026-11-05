@@ -53,7 +53,9 @@ services:
       retries: 20
 
   minio:
-    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    # Docker Hub is blocked by the local registry mirror (403). This mirror
+    # contains both the server and the mc client in the same image.
+    image: registry.cn-qingdao.aliyuncs.com/xuxiaoweicomcn/minio:RELEASE.2025-03-12T18-04-18Z
     container_name: videonest-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
@@ -68,7 +70,7 @@ services:
       - minio_data:/data
 
   minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    image: registry.cn-qingdao.aliyuncs.com/xuxiaoweicomcn/minio:RELEASE.2025-03-12T18-04-18Z
     depends_on:
       minio:
         condition: service_started
@@ -143,6 +145,9 @@ services:
       MINIO_BUCKET: ${MINIO_BUCKET}
       MINIO_PUBLIC_READ_PREFIXES: ${MINIO_PUBLIC_READ_PREFIXES:-processed/,cover/processed/}
       JWT_SECRET: ${JWT_SECRET}
+      # 浏览器 Origin 白名单：本地调试的几种入口（vite 5173、本机镜像 8082 / 80）
+      # 同源 POST 也会带 Origin，缺了就会 403 "Invalid CORS request"
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173,http://localhost:8082,http://127.0.0.1:8082,http://localhost,http://127.0.0.1}
       FFMPEG_PATH: ffmpeg
       FFPROBE_PATH: ffprobe
       VIDEO_PROCESS_CONSUMER_CONCURRENCY: ${VIDEO_PROCESS_CONSUMER_CONCURRENCY:-1}

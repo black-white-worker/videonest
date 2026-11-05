@@ -1,81 +1,101 @@
 # VideoNest 服务器部署
 
-当前脚本按单台 Ubuntu 服务器部署，默认目标为 `ubuntu@82.157.205.6:/opt/videonest`。本机负责编译 Java Jar 和前端 dist，服务器只把这两个本地产物复制进运行镜像并启动 Docker Compose。
+> 本文已按当前「产物模式」重写。为什么要这样改、实测数据是多少，见 [docs/build-speed.md](../docs/build-speed.md)。
+> 旧版单机布局（`82.157.205.6:/opt/videonest`、复用 `videonest-backend:latest`）已经不再使用。
 
-## 1. 服务器准备
+## 当前布局
 
-服务器需要安装 Docker Engine、Docker Compose 插件和 `curl`，并确保当前 SSH 用户可以执行 `sudo docker`。
+- 共享中间件（MySQL / Redis(db1) / MinIO）由 lp-infra 提供，不在本项目 Compose 里。
+- 本项目目录：服务器 `/opt/apps/videonest`，Compose 文件 `docker-compose.server.yml`，项目名 `vn-app`。
+- 三个容器：`vn-backend`、`vn-frontend`、`vn-rabbitmq`；对外端口 `8082`（`HTTP_PORT` 可改）。
 
-服务器必须保留之前已经安装 FFmpeg 的 `videonest-backend:latest` 镜像。部署脚本会先检查该镜像，只复用它作为 Java 运行环境，不会执行 `apk add ffmpeg`，也不会在服务器重新下载 FFmpeg。可以先检查：
+## 日常部署
 
-```bash
-sudo docker image inspect videonest-backend:latest
-```
-
-云服务器安全组只需开放：
-
-- `22/tcp`：SSH；
-- `80/tcp`：网站；
-- `9000/tcp`：视频和封面对象访问。
-
-不要向公网开放 `3306`、`6379`、`5672`、`15672`、`9001`、`8080`。Compose 已把这些管理端口绑定到服务器的 `127.0.0.1`。
-
-## 2. 本机配置
-
-项目根目录 `.env` 必须填写真实密码。可以参考 `deploy/server.env.example`。部署脚本会读取其中的密钥，但会在临时副本中自动把网站地址、MinIO 公网地址和 Flyway 基线改成服务器值；不会修改本机 `.env`。
-
-首次正式部署前建议把示例中的短密码换成随机强密码。`JWT_SECRET` 至少 32 个字符，投入使用后不要随意更换。
-
-## 3. 执行部署
-
-在项目根目录打开 PowerShell：
+在项目根目录：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 `
-  -Server "82.157.205.6" `
-  -RemoteUser "ubuntu" `
-  -IdentityFile "C:\你的密钥目录\server.pem"
+.\deploy.cmd
 ```
 
-如果 SSH 使用密码登录，省略 `-IdentityFile`。非默认 SSH 端口可增加 `-SshPort 端口号`。
+它会：本机 `mvn package` → 本机 `npm run build` → 打包上传（约 80MB）→ 服务器
+`deploy/server/redeploy.sh`：确保 `videonest-backend-base:latest` → build 两个镜像（只 COPY）→ 重启 → 等健康检查。
 
-脚本会依次执行测试、本机打包、上传、服务器数据库备份、后端/前端产物封装、容器更新和健康检查。启动后还会比较本机打包的 `frontend/dist` 与前端容器静态目录的整体内容哈希，只有两者一致才算部署成功；不能只根据 `Last-Modified` 判断，因为内容未变化时 Docker 可能复用缓存层。它不会重新构建 RabbitMQ，也不会下载 FFmpeg。数据库结构由 Flyway 自动迁移，不再手工执行 `sql` 目录中的脚本。已有 MySQL、MinIO、Redis 和 RabbitMQ 命名卷不会被删除。
-
-旧数据库如果留下 V5 媒体字段迁移的失败记录，脚本会在备份成功后逐一补齐缺失字段；确认三个字段完整后才修复该条 Flyway 历史。不会删除视频或其他业务数据，也不会修改已经发布的 V5 文件及其校验值。
-
-如果旧数据库还留下 V6 评论根节点迁移的失败记录，脚本会清理迁移遗留的临时存储过程，补齐两个字段和索引，并按原迁移规则回填旧回复的根评论编号；确认结构完整后才修复 V6 历史，不删除评论。
-
-部署还会检查 V7 的 Outbox 表及索引；如果存在 V7 失败记录，会保留已有事件并补建缺失的整张表。启动前必须确保 V5～V7 不再有失败记录，避免逐个版本反复部署。
-
-调试时可使用 `-SkipTests`；只有明确不需要部署前数据库备份时才使用 `-SkipBackup`。`-SkipBuild` 会复用项目根目录已有的 `videonest-deploy.tar.gz`，不要在改过代码后使用。
-
-部署完成后访问：
-
-- 网站：`http://82.157.205.6`
-- MinIO 媒体入口：`http://82.157.205.6:9000`
-
-本机数据库和本机 MinIO 数据不会自动上传到服务器。服务器会保留自己的业务数据。
-
-## 4. 查看状态和日志
-
-```bash
-cd /opt/videonest
-sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml ps
-sudo docker compose -f docker-compose.yml -f docker-compose.jar.yml logs -f --tail=200 backend frontend
-```
-
-部署前的数据库备份位于 `/opt/videonest/backups/pre-deploy-时间.sql`。
-
-## 5. 域名与 HTTPS
-
-当前参数适合 IP + HTTP。以后启用域名和 HTTPS 时，需要同时让网站和 MinIO 使用 HTTPS，否则浏览器会拦截页面中的 HTTP 视频。届时执行：
+常用参数：
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 `
-  -Server "82.157.205.6" `
-  -RemoteUser "ubuntu" `
-  -PublicSiteUrl "https://你的域名" `
-  -MinioPublicEndpoint "https://媒体域名"
+.\deploy.cmd -SkipBuild                      # 产物没变，只上传/重建
+.\deploy.cmd -SkipUpload                     # 不重传，用服务器上已有的产物重建
+.\deploy.cmd -RunTests                       # 部署前跑后端测试（需要本机 Docker）
+.\deploy.cmd -PublicSiteUrl "https://域名"    # 换前端站点地址
+.\deploy.cmd -Server 1.2.3.4 -IdentityFile C:\keys\server.pem
 ```
 
-HTTPS 还需要在服务器前面配置证书和反向代理，这部分不由当前 Compose 自动申请。
+## 服务器准备（一次性）
+
+0. **共享中间件必须先起来**。MySQL/Redis/MinIO 由 lp-infra 提供，不在本项目的 Compose 里。
+   没起的话 `vn-backend` 会报 `UnknownHostException: mysql`，健康检查失败，
+   `docker compose up` 会以 `dependency failed to start` 中止：
+
+   ```bash
+   cd /opt/apps/learningplatform/deploy/server && ./deploy.sh infra
+   ```
+
+   确认方式：`docker ps --format '{{.Names}}' | grep infra-mysql`。
+   首次启动会创建 `lp-infra` 数据卷并执行 `init/mysql/01-databases.sql`（建 `videonest` 空库），
+   Flyway 随后自动建表；**旧服务器上的业务数据不会自动过来，需要自行导入 dump**。
+
+1. Docker Engine + Compose v2，且当前 SSH 用户能直接执行 `docker`（不用 sudo）。
+2. `/opt/apps/videonest/.env.prod` 必须存在，部署脚本不会上传它。
+   其中 `MYSQL_ROOT_PASSWORD` 必须与 lp-infra 的 `.env` 一致（当前两台配置一致）。
+3. 预热基础镜像（可选但强烈建议，避免首次构建现拉）：
+
+   ```bash
+   cd /opt/apps/videonest && bash scripts/prefetch-images.sh
+   ```
+
+4. 首次部署时 `redeploy.sh` 会自动构建 `videonest-backend-base:latest`（JRE + ffmpeg，
+   约 1～3 分钟），之后每次部署都复用它，不会再碰 Alpine/ffmpeg。
+
+安全组只需开放 `22/tcp` 和 `8082/tcp`。`3306`、`6379`、`5672`、`15672`、`9001`、`8080`
+在 Compose 里都绑到 `127.0.0.1`，不要对公网开放。
+
+## 手动操作（服务器上）
+
+```bash
+cd /opt/apps/videonest
+
+bash deploy/server/redeploy.sh build      # 只重建镜像，不重启
+bash deploy/server/redeploy.sh            # 重建 + 重启 + 等健康
+
+docker compose -f docker-compose.server.yml --env-file .env.prod ps
+docker compose -f docker-compose.server.yml --env-file .env.prod logs -f --tail=200 vn-backend vn-frontend
+```
+
+## 应急：必须在服务器上全量编译
+
+没有本机产物、或要在服务器上验证源码树时：
+
+```bash
+cd /opt/apps/videonest
+docker compose -f docker-compose.server.yml -f docker-compose.source.yml \
+  --env-file .env.prod build
+```
+
+2 vCPU / 1.8GB 上这一步约 20 分钟（mvn + npm ci + vite），正常部署不要走这条路。
+
+## 数据库迁移
+
+Flyway 在应用启动时自动迁移，不需要手工执行 `sql/` 里的脚本。
+`FLYWAY_BASELINE_VERSION` 默认 3；历史失败版本（V5/V6/V7）的处理方式见 git 历史里的旧文档。
+
+空库首次启动会从 V1 一路迁到最新（2026-11-04 实测 10 个版本、13 张表、1.1 秒）。
+
+## 故障排查
+
+| 现象 | 原因 / 处理 |
+| --- | --- |
+| `dependency failed to start: container vn-backend is unhealthy` | 共享中间件没起，后端 `UnknownHostException: mysql`。执行 `cd /opt/apps/learningplatform/deploy/server && ./deploy.sh infra`，再用 `-SkipBuild -SkipUpload` 重跑部署。 |
+| `./deploy.sh infra` 报 `network lp-shared was found but has incorrect label com.docker.compose.network` | 这台机器上的 `lp-shared` 是手工建的、没有 compose 标签。先停应用容器：`cd /opt/apps/videonest && docker compose -f docker-compose.server.yml --env-file .env.prod stop vn-backend vn-frontend`，再 `docker network rm lp-shared`，然后重跑 `./deploy.sh infra`。 |
+| 后端起来了但页面空的 | 这是首次初始化的空库。旧的业务数据不会自动迁移，需要把旧库 dump 导入 `videonest` 库后重启后端。 |
+| 页面能浏览，但注册/登录/上传等 POST 返回 403 `Invalid CORS request` | 后端 `app.cors.allowed-origins` 不含站点 Origin。Compose 已用 `CORS_ALLOWED_ORIGINS=…,${PUBLIC_SITE_URL}` 注入；换域名或 IP 时改 `.env.prod` 的 `PUBLIC_SITE_URL`（或显式设 `CORS_ALLOWED_ORIGINS`），再重建后端即可。 |
+| `up -d` 报 `port is already allocated` | 8082 被别的进程占用，改 `.env.prod` 里的 `HTTP_PORT`。 |

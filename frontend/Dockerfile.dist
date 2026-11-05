@@ -1,6 +1,7 @@
+# 产物模式：前端静态文件由本机 npm run build 生成。
+# 服务器不装 node、不跑 vite、不装依赖，构建只是 COPY 1.6MB 的 dist。
 FROM nginx:1.29-alpine
 
-# 前端静态文件由本地 npm 构建；镜像构建阶段不再安装 npm 依赖。
 COPY nginx.conf /etc/nginx/nginx.conf
 RUN rm -rf /usr/share/nginx/html/*
 COPY dist/ /usr/share/nginx/html/

@@ -1,0 +1,10 @@
+# 源码构建（Dockerfile）用：不要把本地产物、IDE 和日志塞进构建上下文
+target/
+.git/
+.gitignore
+.idea/
+*.log
+logs/
+.mvn/
+HELP.md
+Dockerfile*.dockerignore

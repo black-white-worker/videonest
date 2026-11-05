@@ -15,6 +15,15 @@ const AdminUserView = () => import('../views/AdminUserView.vue')
 
 const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(_to, _from, savedPosition) {
+    // 浏览器前进/后退时恢复离开时的滚动位置；
+    // 普通点击进入新页面（如从首页进入视频详情）时回到顶部，
+    // 避免继承上一页的滚动位置导致屏幕中间显示评论区而不是播放器。
+    if (savedPosition) {
+      return savedPosition
+    }
+    return { top: 0 }
+  },
   routes: [
     {
       path: '/',

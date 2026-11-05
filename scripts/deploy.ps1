@@ -1,363 +1,224 @@
+# Deploy videonest to the shared-infra server (artifact mode).
+#
+# Before: the whole source tree was uploaded and Docker compiled it on the
+#         server (2 vCPU / 1.8 GB). One build took ~21 minutes.
+# Now: this machine builds the jar + dist, uploads ~80 MB, and the server only
+#      COPYs them into thin runtime images (build: 10-30 seconds).
+#
+# What it does:
+#   1) local mvn package (tests skipped by default, same as the old server build)
+#   2) local npm ci (only when node_modules is missing) + npm run build
+#   3) pack jar/dist/Dockerfiles/compose files into one tar.gz and upload it
+#   4) run deploy/server/redeploy.sh on the server:
+#      ensure base image -> build two images -> up -d -> wait for health
+#
+# Usage:
+#   .\deploy.cmd                      # standard deploy
+#   .\deploy.cmd -RunTests            # also run backend tests (needs local Docker, slower)
+#   .\deploy.cmd -SkipBuild           # reuse backend\target\*.jar and frontend\dist
+#   .\deploy.cmd -SkipUpload          # do not upload, just rebuild from the server copy
+#   .\deploy.cmd -PublicSiteUrl "https://example.com"   # baked into the frontend build
 param(
-    [string]$Server = "82.157.205.6",
-    [string]$RemoteUser = "ubuntu",
-    [int]$SshPort = 22,
-    [string]$RemoteDir = "/opt/videonest",
+    [string]$Server = "101.201.208.223",
+    [string]$RemoteUser = "root",
+    [string]$RemoteDir = "/opt/apps/videonest",
     [string]$IdentityFile,
-    [string]$EnvFile,
     [string]$PublicSiteUrl,
-    [string]$MinioPublicEndpoint,
+    [switch]$RunTests,
     [switch]$SkipBuild,
-    [switch]$SkipTests,
-    [switch]$SkipBackup
+    [switch]$SkipUpload
 )
 
 $ErrorActionPreference = "Stop"
+
 $ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Archive = Join-Path $ProjectRoot "videonest-deploy.tar.gz"
-$Target = "${RemoteUser}@${Server}"
-$RemoteToken = [Guid]::NewGuid().ToString("N")
-$RemoteArchive = "/tmp/videonest-deploy-$RemoteToken.tar.gz"
-$RemoteEnv = "/tmp/videonest-$RemoteToken.env"
-$GeneratedEnv = $null
+$Target = "$RemoteUser@$Server"
+$Stage = Join-Path $env:TEMP "videonest-deploy-stage"
+$Archive = Join-Path $env:TEMP "videonest-deploy.tar.gz"
 
-function Get-EnvValues([string]$Path) {
-    $Values = @{}
-    foreach ($Line in Get-Content -LiteralPath $Path) {
-        if ($Line -match '^\s*#' -or [string]::IsNullOrWhiteSpace($Line)) { continue }
-        if ($Line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$') {
-            $Value = $matches[2].Trim()
-            if (($Value.StartsWith('"') -and $Value.EndsWith('"')) -or
-                ($Value.StartsWith("'") -and $Value.EndsWith("'"))) {
-                $Value = $Value.Substring(1, $Value.Length - 2)
-            }
-            $Values[$matches[1]] = $Value
-        }
-    }
-    return $Values
-}
-
-function New-ServerEnv([string]$Source, [hashtable]$Overrides) {
-    $Destination = [System.IO.Path]::GetTempFileName()
-    $Written = @{}
-    $Output = foreach ($Line in Get-Content -LiteralPath $Source) {
-        if ($Line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=') {
-            $Key = $matches[1]
-            if ($Overrides.ContainsKey($Key)) {
-                $Written[$Key] = $true
-                "$Key=$($Overrides[$Key])"
-                continue
-            }
-        }
-        $Line
-    }
-    foreach ($Key in $Overrides.Keys) {
-        if (-not $Written.ContainsKey($Key)) {
-            $Output += "$Key=$($Overrides[$Key])"
-        }
-    }
-    [System.IO.File]::WriteAllLines($Destination, $Output, [System.Text.UTF8Encoding]::new($false))
-    return $Destination
-}
-
-if ($Server -notmatch '^[A-Za-z0-9.-]+$') { throw "Server contains unsupported characters: $Server" }
-if ($RemoteUser -notmatch '^[A-Za-z0-9._-]+$') { throw "RemoteUser contains unsupported characters: $RemoteUser" }
-if ($SshPort -lt 1 -or $SshPort -gt 65535) { throw "SshPort must be between 1 and 65535." }
-if ($RemoteDir -notmatch '^/[A-Za-z0-9._/-]+$' -or $RemoteDir -eq '/') {
-    throw "RemoteDir must be a safe absolute directory and cannot be /."
-}
-
-if (-not $EnvFile) { $EnvFile = Join-Path $ProjectRoot ".env" }
-$EnvFile = (Resolve-Path -LiteralPath $EnvFile).Path
-if (-not $PublicSiteUrl) { $PublicSiteUrl = "http://$Server" }
-if (-not $MinioPublicEndpoint) { $MinioPublicEndpoint = "http://$Server`:9010" }
-
-foreach ($Url in @($PublicSiteUrl, $MinioPublicEndpoint)) {
-    $Parsed = $null
-    if (-not [Uri]::TryCreate($Url, [UriKind]::Absolute, [ref]$Parsed) -or
-        $Parsed.Scheme -notin @('http', 'https')) {
-        throw "Only an absolute HTTP/HTTPS URL is supported: $Url"
-    }
-    if ($Parsed.Host -in @('localhost', '127.0.0.1') -and $Server -notin @('localhost', '127.0.0.1')) {
-        throw "A remote deployment cannot expose a localhost URL: $Url"
-    }
-}
-if ($PublicSiteUrl.StartsWith('https://') -and $MinioPublicEndpoint.StartsWith('http://')) {
-    throw "HTTPS pages cannot load media over HTTP. Configure MinioPublicEndpoint with HTTPS too."
-}
-
-$EnvValues = Get-EnvValues $EnvFile
-$RequiredKeys = @(
-    'DB_NAME', 'DB_USERNAME', 'DB_PASSWORD', 'MYSQL_ROOT_PASSWORD',
-    'REDIS_PASSWORD', 'RABBITMQ_USERNAME', 'RABBITMQ_PASSWORD',
-    'MINIO_ACCESS_KEY', 'MINIO_SECRET_KEY', 'MINIO_BUCKET', 'JWT_SECRET',
-    'VIDEO_REVIEW_TIMEOUT_MILLISECONDS', 'RESOURCE_RETENTION_DAYS'
-)
-foreach ($Key in $RequiredKeys) {
-    $Value = $EnvValues[$Key]
-    if ([string]::IsNullOrWhiteSpace($Value) -or $Value -match '(?i)CHANGE_ME|YOUR_|EXAMPLE') {
-        throw "$Key is missing or still uses a placeholder in $EnvFile"
-    }
-}
-if ($EnvValues['JWT_SECRET'].Length -lt 32) { throw "JWT_SECRET must contain at least 32 characters." }
-if ($EnvValues['MINIO_SECRET_KEY'].Length -lt 8) { throw "MINIO_SECRET_KEY must contain at least 8 characters." }
-if ($EnvValues['DB_USERNAME'] -ne 'root') {
-    Write-Warning "docker-compose.yml creates only the MySQL root account. Ensure DB_USERNAME already exists on the server."
-}
-if ($EnvValues['MYSQL_ROOT_PASSWORD'].Length -lt 12) {
-    Write-Warning "MYSQL_ROOT_PASSWORD is short. Use a stronger password before the first production deployment."
-}
-
-$SshArgs = @('-p', "$SshPort", '-o', 'ConnectTimeout=15')
-$ScpArgs = @('-P', "$SshPort", '-o', 'ConnectTimeout=15')
+$SshArgs = @('-o', 'ConnectTimeout=15')
 if ($IdentityFile) {
-    $ResolvedIdentity = (Resolve-Path -LiteralPath $IdentityFile).Path
-    $SshArgs += @('-i', $ResolvedIdentity)
-    $ScpArgs += @('-i', $ResolvedIdentity)
+    $SshArgs += @('-i', (Resolve-Path -LiteralPath $IdentityFile).Path)
 }
-$Sudo = if ($RemoteUser -eq 'root') { '' } else { 'sudo' }
 
-try {
-    $Overrides = @{
-        MINIO_PUBLIC_ENDPOINT = $MinioPublicEndpoint.TrimEnd('/')
-        MINIO_API_CORS_ALLOW_ORIGIN = $PublicSiteUrl.TrimEnd('/')
-        VITE_PUBLIC_SITE_URL = $PublicSiteUrl.TrimEnd('/')
-        FLYWAY_BASELINE_VERSION = '3'
-    }
-    $GeneratedEnv = New-ServerEnv $EnvFile $Overrides
-
-    if (-not $SkipBuild) {
-        & (Join-Path $PSScriptRoot "package-deploy.ps1") `
-            -OutputPath $Archive `
-            -PublicSiteUrl $PublicSiteUrl `
-            -SkipTests:$SkipTests
-        if ($LASTEXITCODE -ne 0) { throw "Local package failed" }
-    } elseif (-not (Test-Path -LiteralPath $Archive)) {
-        throw "Missing $Archive; run without -SkipBuild first."
-    } else {
-        Write-Warning "SkipBuild reuses the existing archive. Confirm it was built for $PublicSiteUrl"
-    }
-
-    Write-Host "Preparing $Target`:$RemoteDir ..."
-    $PrepareCommand = if ($Sudo) {
-        "$Sudo mkdir -p '$RemoteDir' && $Sudo chown '$RemoteUser' '$RemoteDir'"
-    } else {
-        "mkdir -p '$RemoteDir'"
-    }
-    & ssh @SshArgs $Target $PrepareCommand
-    if ($LASTEXITCODE -ne 0) { throw "Unable to prepare remote directory" }
-
-    & scp @ScpArgs $Archive "${Target}:$RemoteArchive"
-    if ($LASTEXITCODE -ne 0) { throw "Archive upload failed" }
-    & scp @ScpArgs $GeneratedEnv "${Target}:$RemoteEnv"
-    if ($LASTEXITCODE -ne 0) { throw "Environment upload failed" }
-
-    $RemoteScript = @'
-set -Eeuo pipefail
-REMOTE_DIR='__REMOTE_DIR__'
-REMOTE_ARCHIVE='__REMOTE_ARCHIVE__'
-REMOTE_ENV='__REMOTE_ENV__'
-SKIP_BACKUP='__SKIP_BACKUP__'
-DOCKER=(__DOCKER_PREFIX__ docker)
-COMPOSE=("${DOCKER[@]}" compose -f docker-compose.yml -f docker-compose.jar.yml)
-
-cleanup() {
-  rm -f "$REMOTE_ARCHIVE" "$REMOTE_ENV"
+function Invoke-OnServer {
+    param([string]$Command)
+    & ssh @SshArgs $Target $Command
+    if ($LASTEXITCODE -ne 0) { throw "Remote command failed (exit $LASTEXITCODE): $Command" }
 }
-trap cleanup EXIT
 
-command -v docker >/dev/null 2>&1 || { echo 'Docker is not installed on the server.' >&2; exit 1; }
-"${DOCKER[@]}" compose version >/dev/null
-# tar 解压不会删除上一版本中已经不存在的文件。清理的仅是可再生前端构建产物，
-# 防止旧哈希文件进入新镜像并导致用户仍加载到过期资源。
-rm -rf "$REMOTE_DIR/frontend/dist"
-tar -xzf "$REMOTE_ARCHIVE" -C "$REMOTE_DIR"
-install -m 600 "$REMOTE_ENV" "$REMOTE_DIR/.env"
-cd "$REMOTE_DIR"
-"${COMPOSE[@]}" config --quiet
+Write-Host "Target : $Target"
+Write-Host "Remote : $RemoteDir"
+Write-Host ""
 
-if [ "$SKIP_BACKUP" != 'true' ]; then
-  MYSQL_CONTAINER="$("${COMPOSE[@]}" ps -q mysql 2>/dev/null || true)"
-  if [ -z "$MYSQL_CONTAINER" ]; then
-    MYSQL_CONTAINER="$("${DOCKER[@]}" ps -q --filter name=^/videonest-mysql$ | head -n 1)"
-  fi
-  if [ -n "$MYSQL_CONTAINER" ] && [ "$("${DOCKER[@]}" inspect -f '{{.State.Running}}' "$MYSQL_CONTAINER")" = 'true' ]; then
-    mkdir -p backups
-    BACKUP_FILE="backups/pre-deploy-$(date +%Y%m%d-%H%M%S).sql"
-    echo "Backing up MySQL to $REMOTE_DIR/$BACKUP_FILE ..."
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysqldump -u root -p"$MYSQL_ROOT_PASSWORD" --single-transaction --routines --triggers "$MYSQL_DATABASE"' > "$BACKUP_FILE"
-    test -s "$BACKUP_FILE"
-  else
-    echo 'No running MySQL container found; this is treated as the first deployment.'
-  fi
-fi
+# ---------------------------------------------------------------------
+# 0) connectivity / docker checks
+# ---------------------------------------------------------------------
+& ssh @SshArgs $Target "echo CONNECT_OK" | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "Cannot connect to $Target (check SSH key and security group)." }
 
-# MySQL 的 DDL 可能在旧版 V5 失败后留下 Flyway 失败记录。先备份，再补齐 V5 的缺失字段；
-# 三个字段全部存在后才把该条历史修复为成功，保留既有字段和业务数据。
-MYSQL_CONTAINER="$("${COMPOSE[@]}" ps -q mysql 2>/dev/null || true)"
-if [ -z "$MYSQL_CONTAINER" ]; then
-  MYSQL_CONTAINER="$("${DOCKER[@]}" ps -q --filter name=^/videonest-mysql$ | head -n 1)"
-fi
-if [ -n "$MYSQL_CONTAINER" ] && [ "$("${DOCKER[@]}" inspect -f '{{.State.Running}}' "$MYSQL_CONTAINER")" = 'true' ]; then
-  FAILED_V5="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '\''5'\'' AND success = 0" 2>/dev/null' || true)"
-  if [ "$FAILED_V5" = '1' ]; then
-    echo 'Repairing the failed Flyway V5 schema; business data is not removed ...'
-    for COLUMN_NAME in original_cover_url cover_list_url cover_detail_url; do
-      COLUMN_EXISTS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c "mysql -u root -p\"\$MYSQL_ROOT_PASSWORD\" \"\$MYSQL_DATABASE\" -Nse \"SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'video' AND COLUMN_NAME = '$COLUMN_NAME'\"")"
-      if [ "$COLUMN_EXISTS" = '0' ]; then
-        case "$COLUMN_NAME" in
-          original_cover_url)
-            COLUMN_DDL="ALTER TABLE video ADD COLUMN original_cover_url VARCHAR(500) NULL COMMENT '用户上传的原始封面对象名，不直接返回给浏览器' AFTER cover_url"
-            ;;
-          cover_list_url)
-            COLUMN_DDL="ALTER TABLE video ADD COLUMN cover_list_url VARCHAR(500) NULL COMMENT '400px 列表封面对象名' AFTER original_cover_url"
-            ;;
-          cover_detail_url)
-            COLUMN_DDL="ALTER TABLE video ADD COLUMN cover_detail_url VARCHAR(500) NULL COMMENT '1080px 详情封面对象名' AFTER cover_list_url"
-            ;;
-        esac
-        "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c "exec mysql -u root -p\"\$MYSQL_ROOT_PASSWORD\" \"\$MYSQL_DATABASE\" -e \"$COLUMN_DDL\""
-      fi
-    done
-    V5_COLUMN_COUNT="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video'\'' AND COLUMN_NAME IN ('\''original_cover_url'\'', '\''cover_list_url'\'', '\''cover_detail_url'\'')"')"
-    if [ "$V5_COLUMN_COUNT" != '3' ]; then
-      echo 'Flyway V5 repair stopped because the three media columns are incomplete.' >&2
-      exit 1
-    fi
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE flyway_schema_history SET success = 1 WHERE version = '\''5'\'' AND success = 0"'
-    echo 'Flyway V5 repair completed.'
-  fi
-
-  FAILED_V6="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '\''6'\'' AND success = 0" 2>/dev/null' || true)"
-  if [ "$FAILED_V6" = '1' ]; then
-    echo 'Repairing the failed Flyway V6 schema; comment data is preserved ...'
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "DROP PROCEDURE IF EXISTS migrate_comment_root_id"'
-
-    ROOT_ID_EXISTS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video_comment'\'' AND COLUMN_NAME = '\''root_id'\''"')"
-    if [ "$ROOT_ID_EXISTS" = '0' ]; then
-      "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "ALTER TABLE video_comment ADD COLUMN root_id BIGINT NOT NULL DEFAULT 0 COMMENT '\''所属一级评论ID；一级评论为0'\'' AFTER parent_id"'
-    fi
-
-    CASCADE_ROOT_EXISTS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video_comment'\'' AND COLUMN_NAME = '\''cascade_deleted_root_id'\''"')"
-    if [ "$CASCADE_ROOT_EXISTS" = '0' ]; then
-      "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "ALTER TABLE video_comment ADD COLUMN cascade_deleted_root_id BIGINT NULL COMMENT '\''因一级评论删除而被级联删除时记录根评论ID'\'' AFTER deleted_at"'
-    fi
-
-    ROOT_INDEX_EXISTS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video_comment'\'' AND INDEX_NAME = '\''idx_comment_video_root_status_time'\''"')"
-    if [ "$ROOT_INDEX_EXISTS" = '0' ]; then
-      "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "ALTER TABLE video_comment ADD KEY idx_comment_video_root_status_time (video_id, root_id, status, created_at, id)"'
-    fi
-
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE video_comment SET root_id = parent_id WHERE parent_id <> 0 AND root_id = 0"'
-    V6_COLUMN_COUNT="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video_comment'\'' AND COLUMN_NAME IN ('\''root_id'\'', '\''cascade_deleted_root_id'\'')"')"
-    ROOT_INDEX_EXISTS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''video_comment'\'' AND INDEX_NAME = '\''idx_comment_video_root_status_time'\''"')"
-    if [ "$V6_COLUMN_COUNT" != '2' ] || [ "$ROOT_INDEX_EXISTS" = '0' ]; then
-      echo 'Flyway V6 repair stopped because the comment columns or index are incomplete.' >&2
-      exit 1
-    fi
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE flyway_schema_history SET success = 1 WHERE version = '\''6'\'' AND success = 0"'
-    echo 'Flyway V6 repair completed.'
-  fi
-
-  FAILED_V7="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM flyway_schema_history WHERE version = '\''7'\'' AND success = 0" 2>/dev/null' || true)"
-  if [ "$FAILED_V7" = '1' ]; then
-    echo 'Repairing the failed Flyway V7 outbox schema; existing events are preserved ...'
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "CREATE TABLE IF NOT EXISTS outbox_event (id BIGINT NOT NULL AUTO_INCREMENT, event_id VARCHAR(64) NOT NULL, event_type VARCHAR(64) NOT NULL, exchange_name VARCHAR(128) NOT NULL, routing_key VARCHAR(128) NOT NULL, payload TEXT NOT NULL, status VARCHAR(20) NOT NULL DEFAULT '\''PENDING'\'', retry_count INT NOT NULL DEFAULT 0, next_retry_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, last_error VARCHAR(500) NULL, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, sent_at DATETIME NULL, PRIMARY KEY (id), UNIQUE KEY uk_outbox_event_id (event_id), KEY idx_outbox_pending (status, next_retry_at, id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='\''事务消息发件箱'\''"'
-    V7_COLUMN_COUNT="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''outbox_event'\'' AND COLUMN_NAME IN ('\''id'\'', '\''event_id'\'', '\''event_type'\'', '\''exchange_name'\'', '\''routing_key'\'', '\''payload'\'', '\''status'\'', '\''retry_count'\'', '\''next_retry_at'\'', '\''last_error'\'', '\''created_at'\'', '\''updated_at'\'', '\''sent_at'\'')"')"
-    V7_INDEX_COUNT="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(DISTINCT INDEX_NAME) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '\''outbox_event'\'' AND INDEX_NAME IN ('\''PRIMARY'\'', '\''uk_outbox_event_id'\'', '\''idx_outbox_pending'\'')"')"
-    if [ "$V7_COLUMN_COUNT" != '13' ] || [ "$V7_INDEX_COUNT" != '3' ]; then
-      echo 'Flyway V7 repair stopped because the outbox table structure is incomplete.' >&2
-      exit 1
-    fi
-    "${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'exec mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -e "UPDATE flyway_schema_history SET success = 1 WHERE version = '\''7'\'' AND success = 0"'
-    echo 'Flyway V7 repair completed.'
-  fi
-
-  FAILED_CURRENT_MIGRATIONS="$("${DOCKER[@]}" exec "$MYSQL_CONTAINER" sh -c 'mysql -u root -p"$MYSQL_ROOT_PASSWORD" "$MYSQL_DATABASE" -Nse "SELECT COUNT(*) FROM flyway_schema_history WHERE version IN ('\''5'\'', '\''6'\'', '\''7'\'') AND success = 0" 2>/dev/null' || true)"
-  if [ "${FAILED_CURRENT_MIGRATIONS:-0}" != '0' ]; then
-    echo 'Flyway repair stopped because V5-V7 still contain failed history entries.' >&2
-    exit 1
-  fi
-  echo 'Flyway V5-V7 preflight passed.'
-fi
-
-BACKEND_RUNTIME_IMAGE="$(sed -n 's/^BACKEND_RUNTIME_IMAGE=//p' .env | tail -n 1)"
-BACKEND_RUNTIME_IMAGE="${BACKEND_RUNTIME_IMAGE:-videonest-backend:latest}"
-if ! "${DOCKER[@]}" image inspect "$BACKEND_RUNTIME_IMAGE" >/dev/null 2>&1; then
-  echo "Missing server runtime image: $BACKEND_RUNTIME_IMAGE" >&2
-  echo 'This deployment intentionally does not download FFmpeg. Keep the previously built FFmpeg backend image on the server.' >&2
-  exit 1
-fi
-
-echo 'Building backend and frontend from local packaged artifacts ...'
-"${COMPOSE[@]}" build backend frontend
-if ! "${COMPOSE[@]}" up -d --no-build --remove-orphans; then
-  echo 'Container startup failed. Backend diagnostics follow:' >&2
-  "${COMPOSE[@]}" ps -a >&2 || true
-  "${COMPOSE[@]}" logs --tail=240 backend mysql redis rabbitmq minio >&2 || true
-  BACKEND_CONTAINER="$("${COMPOSE[@]}" ps -q backend 2>/dev/null || true)"
-  if [ -n "$BACKEND_CONTAINER" ]; then
-    "${DOCKER[@]}" inspect --format '{{json .State.Health}}' "$BACKEND_CONTAINER" >&2 || true
-  fi
-  exit 1
-fi
-
-HTTP_PORT="$(sed -n 's/^HTTP_PORT=//p' .env | tail -n 1)"
-HTTP_PORT="${HTTP_PORT:-80}"
-# MinIO API 在宿主机上映射为 9010（docker-compose.yml 中 127.0.0.1:9010->9000）
-MINIO_API_PORT="$(sed -n 's/^MINIO_API_PORT=//p' .env | tail -n 1)"
-MINIO_API_PORT="${MINIO_API_PORT:-9010}"
-ready='false'
-for _ in $(seq 1 60); do
-  if curl -fsS "http://127.0.0.1:${HTTP_PORT}/api/videos?page=1&size=1" >/dev/null 2>&1 &&
-     curl -fsS "http://127.0.0.1:${MINIO_API_PORT}/minio/health/live" >/dev/null 2>&1; then
-    ready='true'
-    break
-  fi
-  sleep 3
-done
-
-if [ "$ready" != 'true' ]; then
-  echo 'Deployment health check failed.' >&2
-  "${COMPOSE[@]}" ps >&2
-  "${COMPOSE[@]}" logs --tail=160 backend frontend minio >&2
-  exit 1
-fi
-
-# 不能只依赖 Last-Modified 判断前端是否部署。内容未变化时 Docker 可能复用缓存层，
-# 文件时间也会保持不变；这里比较整个 dist 目录的内容哈希，确保打包产物已进入运行容器。
-FRONTEND_CONTAINER=''
-FRONTEND_CONTAINER="$("${COMPOSE[@]}" ps -q frontend 2>/dev/null || true)"
-if [ -z "${FRONTEND_CONTAINER:-}" ]; then
-  echo 'Frontend verification failed: no frontend container was found.' >&2
-  exit 1
-fi
-EXPECTED_FRONTEND_HASH="$(cd frontend/dist && find . -type f -exec sha256sum {} \; | sort | sha256sum | awk '{print $1}')"
-ACTUAL_FRONTEND_HASH="$("${DOCKER[@]}" exec "$FRONTEND_CONTAINER" sh -c 'cd /usr/share/nginx/html && find . -type f -exec sha256sum {} \; | sort | sha256sum' | awk '{print $1}')"
-if [ -z "$EXPECTED_FRONTEND_HASH" ] || [ "$EXPECTED_FRONTEND_HASH" != "$ACTUAL_FRONTEND_HASH" ]; then
-  echo 'Frontend verification failed: packaged dist does not match the running container.' >&2
-  echo "Expected: $EXPECTED_FRONTEND_HASH" >&2
-  echo "Actual:   $ACTUAL_FRONTEND_HASH" >&2
-  exit 1
-fi
-echo "Frontend artifact verification passed: $ACTUAL_FRONTEND_HASH"
-
-"${COMPOSE[@]}" ps
-echo 'Deployment health check passed.'
-'@
-    $RemoteScript = $RemoteScript.Replace('__REMOTE_DIR__', $RemoteDir)
-    $RemoteScript = $RemoteScript.Replace('__REMOTE_ARCHIVE__', $RemoteArchive)
-    $RemoteScript = $RemoteScript.Replace('__REMOTE_ENV__', $RemoteEnv)
-    $RemoteScript = $RemoteScript.Replace('__SKIP_BACKUP__', $SkipBackup.IsPresent.ToString().ToLowerInvariant())
-    $RemoteScript = $RemoteScript.Replace('__DOCKER_PREFIX__', $Sudo)
-
-    $RemoteScript | & ssh @SshArgs $Target 'bash -s'
-    if ($LASTEXITCODE -ne 0) { throw "Remote deployment failed" }
-
-    Write-Host "Deployment complete: $PublicSiteUrl"
-    Write-Host "Media endpoint: $MinioPublicEndpoint"
-} finally {
-    if ($GeneratedEnv -and (Test-Path -LiteralPath $GeneratedEnv)) {
-        Remove-Item -LiteralPath $GeneratedEnv -Force
-    }
+$DockerOk = ((& ssh @SshArgs $Target "command -v docker >/dev/null 2>&1 && echo YES || echo NO") | Out-String).Trim()
+if ($DockerOk -ne "YES") {
+    throw "Docker is not installed on the server. Run first: bash /opt/apps/learningplatform/deploy/server/bootstrap.sh"
 }
+
+$Total = [Diagnostics.Stopwatch]::StartNew()
+
+# ---------------------------------------------------------------------
+# 1) local builds
+# ---------------------------------------------------------------------
+if (-not $SkipBuild) {
+    Write-Host "[1/5] build backend jar locally"
+
+    $Maven = $null
+    foreach ($candidate in @('mvn.cmd', 'mvn')) {
+        if (Get-Command $candidate -ErrorAction SilentlyContinue) { $Maven = $candidate; break }
+    }
+    if (-not $Maven) {
+        $wrapper = Join-Path $ProjectRoot "backend\mvnw.cmd"
+        if (Test-Path -LiteralPath $wrapper) { $Maven = $wrapper }
+    }
+    if (-not $Maven) { throw "Maven not found. Install Maven or keep backend\mvnw.cmd." }
+
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $MavenArgs = @("-B", "-f", (Join-Path $ProjectRoot "backend\pom.xml"), "clean", "package")
+    if (-not $RunTests) { $MavenArgs += "-DskipTests" }
+    & $Maven @MavenArgs
+    if ($LASTEXITCODE -ne 0) {
+        if ($RunTests) {
+            Write-Host "Backend tests/build failed. See backend\target\surefire-reports." -ForegroundColor Red
+        }
+        throw "Backend package failed (exit code $LASTEXITCODE)"
+    }
+    Write-Host ("      jar  done in {0:N0}s" -f $sw.Elapsed.TotalSeconds)
+
+    Write-Host "[2/5] build frontend dist locally"
+    $sw.Restart()
+
+    $Npm = $null
+    foreach ($candidate in @('npm.cmd', 'npm')) {
+        if (Get-Command $candidate -ErrorAction SilentlyContinue) { $Npm = $candidate; break }
+    }
+    if (-not $Npm) { throw "npm not found." }
+
+    $FrontendDir = Join-Path $ProjectRoot "frontend"
+    $PreviousSiteUrl = [Environment]::GetEnvironmentVariable("VITE_PUBLIC_SITE_URL", "Process")
+    if ($PublicSiteUrl) { $env:VITE_PUBLIC_SITE_URL = $PublicSiteUrl }
+    try {
+        if (-not (Test-Path (Join-Path $FrontendDir "node_modules\.bin\vite.cmd"))) {
+            & $Npm --prefix $FrontendDir ci --no-audit --no-fund --registry https://registry.npmmirror.com
+            if ($LASTEXITCODE -ne 0) { throw "npm ci failed (exit $LASTEXITCODE)" }
+        }
+        & $Npm --prefix $FrontendDir run build
+        if ($LASTEXITCODE -ne 0) { throw "Frontend build failed (exit $LASTEXITCODE)" }
+    }
+    finally {
+        if ($null -eq $PreviousSiteUrl) {
+            Remove-Item Env:\VITE_PUBLIC_SITE_URL -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:VITE_PUBLIC_SITE_URL = $PreviousSiteUrl
+        }
+    }
+    Write-Host ("      dist done in {0:N0}s" -f $sw.Elapsed.TotalSeconds)
+}
+else {
+    Write-Host "[1/5] -SkipBuild: reuse existing jar"
+    Write-Host "[2/5] -SkipBuild: reuse existing dist"
+}
+
+# ---------------------------------------------------------------------
+# 3) validate artifacts + stage them
+# ---------------------------------------------------------------------
+$Jar = Get-ChildItem (Join-Path $ProjectRoot "backend\target") -Filter "*.jar" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -notmatch '(-sources|-javadoc|\.original)$' } |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if (-not $Jar) { throw "backend\target\*.jar not found. Run again without -SkipBuild." }
+
+$Dist = Join-Path $ProjectRoot "frontend\dist"
+if (-not (Test-Path -LiteralPath $Dist)) { throw "frontend\dist not found. Run again without -SkipBuild." }
+
+Write-Host ("[3/5] stage artifacts (jar {0:N1} MB)" -f ($Jar.Length / 1MB))
+
+if (Test-Path $Stage) { Remove-Item $Stage -Recurse -Force }
+foreach ($dir in @("backend\target", "frontend", "deploy\server")) {
+    New-Item -ItemType Directory -Force -Path (Join-Path $Stage $dir) | Out-Null
+}
+
+Copy-Item $Jar.FullName (Join-Path $Stage "backend\target\app.jar") -Force
+Copy-Item $Dist (Join-Path $Stage "frontend\dist") -Recurse -Force
+
+$UploadFiles = @(
+    "backend\Dockerfile.jar",
+    "backend\Dockerfile.base",
+    "backend\Dockerfile.jar.dockerignore",
+    "backend\Dockerfile.base.dockerignore",
+    "frontend\Dockerfile.dist",
+    "frontend\Dockerfile.dist.dockerignore",
+    "frontend\nginx.conf",
+    "deploy\server\nginx.conf",
+    "deploy\server\redeploy.sh",
+    "scripts\prefetch-images.sh",
+    "deploy\rabbitmq\Dockerfile",
+    "docker-compose.server.yml",
+    "docker-compose.source.yml"
+)
+foreach ($relative in $UploadFiles) {
+    $source = Join-Path $ProjectRoot $relative
+    if (-not (Test-Path -LiteralPath $source)) { throw "Missing file: $relative" }
+    $destination = Join-Path $Stage $relative
+    New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
+    Copy-Item $source $destination -Force
+}
+
+# ---------------------------------------------------------------------
+# 4) pack + upload
+# ---------------------------------------------------------------------
+if ($SkipUpload) {
+    Write-Host "[4/5] -SkipUpload: nothing uploaded"
+}
+else {
+    Write-Host "[4/5] upload artifacts"
+    if (Test-Path $Archive) { Remove-Item $Archive -Force }
+    Push-Location $Stage
+    try {
+        & tar -czf $Archive .
+        if ($LASTEXITCODE -ne 0) { throw "Packaging failed." }
+    }
+    finally {
+        Pop-Location
+    }
+
+    $ArchiveMb = [math]::Round((Get-Item $Archive).Length / 1MB, 1)
+    Write-Host "      archive $ArchiveMb MB"
+
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    & scp @SshArgs $Archive "${Target}:/tmp/videonest-deploy.tar.gz"
+    if ($LASTEXITCODE -ne 0) { throw "Upload failed." }
+
+    $remoteCommand = "set -e; mkdir -p '$RemoteDir'; tar -xzf /tmp/videonest-deploy.tar.gz -C '$RemoteDir'; rm -f /tmp/videonest-deploy.tar.gz; sed -i 's/\r$//' '$RemoteDir/deploy/server/redeploy.sh' '$RemoteDir/scripts/prefetch-images.sh'; chmod +x '$RemoteDir/deploy/server/redeploy.sh' '$RemoteDir/scripts/prefetch-images.sh'"
+    Invoke-OnServer $remoteCommand
+    Write-Host ("      uploaded and extracted in {0:N0}s" -f $sw.Elapsed.TotalSeconds)
+}
+
+# ---------------------------------------------------------------------
+# 5) rebuild on the server
+# ---------------------------------------------------------------------
+$EnvOk = ((& ssh @SshArgs $Target "test -f '$RemoteDir/.env.prod' && echo YES || echo NO") | Out-String).Trim()
+if ($EnvOk -ne "YES") {
+    throw "$RemoteDir/.env.prod is missing on the server. Create it before deploying."
+}
+
+Write-Host "[5/5] rebuild on the server (COPY only)"
+& ssh @SshArgs $Target "bash '$RemoteDir/deploy/server/redeploy.sh'"
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "Server rebuild failed. Most common cause: the shared middleware (lp-infra) is not running," -ForegroundColor Red
+    Write-Host "so vn-backend cannot resolve 'mysql' and the health check fails." -ForegroundColor Red
+    Write-Host "Start it first, then re-run with -SkipBuild -SkipUpload:" -ForegroundColor Yellow
+    Write-Host "  ssh $Target 'cd /opt/apps/learningplatform/deploy/server && ./deploy.sh infra'" -ForegroundColor Yellow
+    throw "Remote deploy failed (exit $LASTEXITCODE)"
+}
+
+Write-Host ""
+Write-Host ("Done in {0:N1} min: http://{1}:8082/" -f $Total.Elapsed.TotalMinutes, $Server)

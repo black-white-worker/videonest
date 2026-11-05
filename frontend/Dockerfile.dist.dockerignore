@@ -1,0 +1,5 @@
+# 产物模式（Dockerfile.dist）用：上下文里只留 dist 和 nginx.conf，
+# 否则整个 frontend 目录（含 node_modules）都会被发给 docker。
+*
+!dist
+!nginx.conf

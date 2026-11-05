@@ -91,6 +91,12 @@ mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
 
+app:
+  cors:
+    # 浏览器请求白名单（逗号分隔）。同源 POST 也会带 Origin，线上域名必须加进来，
+    # 否则后端会返回 403 "Invalid CORS request"。服务器部署时由 docker-compose 注入。
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
+
 jwt:
   secret: ${JWT_SECRET}
   expire-minutes: ${JWT_EXPIRE_MINUTES:120}

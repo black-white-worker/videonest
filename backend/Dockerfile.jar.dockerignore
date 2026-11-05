@@ -1,2 +1,5 @@
+# 产物模式（Dockerfile.jar）用：上下文只保留 target 下的 jar，
+# 否则 target/、src/、.git 都会被打包发给 docker。
 *
+!target
 !target/*.jar

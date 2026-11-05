@@ -1,3 +1,12 @@
+# 运行时基础镜像：JRE + ffmpeg，整个项目只构建一次。
+#   docker build -f backend/Dockerfile.base -t videonest-backend-base:latest backend
+# 之后每次部署都用 Dockerfile.jar 在这一层之上只 COPY 一个 jar（秒级完成）。
+# 改了 Java 版本或 ffmpeg 版本时才需要重建（先 docker rmi videonest-backend-base:latest）。
 FROM eclipse-temurin:21-jre-alpine
 
-RUN apk add --no-cache ffmpeg
+# apk 走阿里云镜像：ffmpeg 及其依赖解包后约 130MB，官方源在国内很慢
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+    && apk add --no-cache ffmpeg \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app

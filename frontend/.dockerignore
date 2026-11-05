@@ -1,0 +1,8 @@
+# 源码构建（Dockerfile）用：node_modules 动辄几百 MB，绝不能进构建上下文
+node_modules/
+dist/
+.git/
+.gitignore
+*.log
+.vscode/
+Dockerfile*.dockerignore
