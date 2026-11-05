@@ -73,7 +73,7 @@ services:
       # ---- MinIO（共享实例，桶 videonest）----
       MINIO_ENDPOINT: http://minio:9000
       # 预签名 URL 会把 host:port 写进签名，必须是浏览器能直达的地址
-      MINIO_PUBLIC_ENDPOINT: http://${PUBLIC_HOST}:9010
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://${PUBLIC_HOST}:9010}
       MINIO_REGION: us-east-1
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}

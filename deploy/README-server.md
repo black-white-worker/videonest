@@ -56,8 +56,14 @@
 4. 首次部署时 `redeploy.sh` 会自动构建 `videonest-backend-base:latest`（JRE + ffmpeg，
    约 1～3 分钟），之后每次部署都复用它，不会再碰 Alpine/ffmpeg。
 
-安全组只需开放 `22/tcp` 和 `8082/tcp`。`3306`、`6379`、`5672`、`15672`、`9001`、`8080`
-在 Compose 里都绑到 `127.0.0.1`，不要对公网开放。
+安全组需开放 `22/tcp`、`8082/tcp` 和 `9010/tcp`。VideoNest 用浏览器直连 MinIO：后端
+签发的上传 URL 指向 `http://<PUBLIC_HOST>:9010`，视频和封面数据不会经过 8082 的 Nginx。
+共享 MinIO 必须发布 `9010:9000` 且允许 VideoNest 来源的 S3 CORS（PUT、ETag）；当前
+`learningplatform` 的 infra Compose 映射了 9010 并将 MinIO CORS 设为 `*`。`3306`、`6379`、
+`5672`、`15672`、`9001`、`8080` 在 Compose 里都绑到 `127.0.0.1`，不要对公网开放。
+
+若 MinIO 的公网地址不同，可在 `.env.prod` 设置 `MINIO_PUBLIC_ENDPOINT`，例如
+`http://101.201.208.223:9010`；该值必须与浏览器可访问的主机、端口一致。修改后重建后端。
 
 ## 手动操作（服务器上）
 
@@ -99,3 +105,4 @@ Flyway 在应用启动时自动迁移，不需要手工执行 `sql/` 里的脚�
 | 后端起来了但页面空的 | 这是首次初始化的空库。旧的业务数据不会自动迁移，需要把旧库 dump 导入 `videonest` 库后重启后端。 |
 | 页面能浏览，但注册/登录/上传等 POST 返回 403 `Invalid CORS request` | 后端 `app.cors.allowed-origins` 不含站点 Origin。Compose 已用 `CORS_ALLOWED_ORIGINS=…,${PUBLIC_SITE_URL}` 注入；换域名或 IP 时改 `.env.prod` 的 `PUBLIC_SITE_URL`（或显式设 `CORS_ALLOWED_ORIGINS`），再重建后端即可。 |
 | `up -d` 报 `port is already allocated` | 8082 被别的进程占用，改 `.env.prod` 里的 `HTTP_PORT`。 |
+| 上传停在“正在准备上传”或对象存储请求失败 | 浏览器开发者工具 Network 查看 `/api/files/presign` 或 `/api/files/multipart/sessions` 状态；若后端成功，再检查浏览器能否访问 `http://<PUBLIC_HOST>:9010`、安全组/防火墙是否开放 9010，以及 MinIO CORS 是否允许站点 Origin 的 PUT 并暴露 ETag。 |

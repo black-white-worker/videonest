@@ -213,8 +213,13 @@ async function multipart(
       ? (await request.get<ApiResponse<MultipartSession>>(`/files/multipart/sessions/${id}`)).data
           .data
       : await create()
-  } catch {
+  } catch (error) {
     localStorage.removeItem(key)
+    // A stale resume token is recoverable, but a network/auth/server failure is not.
+    // Do not hide it by immediately retrying session creation and showing a generic error.
+    if (error instanceof Error && error.message !== '上传会话不存在') {
+      throw error
+    }
     session = await create()
   }
 
