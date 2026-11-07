@@ -2,6 +2,8 @@ package com.videonest.module.video.service.impl;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.videonest.common.api.PageResult;
 import com.videonest.common.exception.BusinessException;
 import com.videonest.infrastructure.oss.service.MinioService;
@@ -69,7 +71,19 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     private final VideoListCacheService videoListCacheService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
-    private final Object firstPageRebuildMonitor = new Object();
+
+    /**
+     * 回源重建锁，按「分类 + 页码 + 页大小」分片。
+     *
+     * <p>原实现用单个 {@code Object} 监视器锁住所有未命中请求：只要有一次写操作触发
+     * 列表缓存失效，所有分类、所有页码的并发请求就排成一列等同一次数据库查询，
+     * 吞吐被压到「1 / 回源耗时」。按 key 分片后，不同页之间互不阻塞，
+     * 同一个 key 仍然只有一个线程回源（防击穿的目标不变）。</p>
+     */
+    private final Cache<String, Object> rebuildLocks = Caffeine.newBuilder()
+            .maximumSize(512)
+            .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
 
     public VideoDiscoveryServiceImpl(
             VideoMapper videoMapper,
@@ -134,14 +148,19 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
             }
             return sign(cached.data());
         }
-        // 完全 miss：加单机锁防止缓存击穿，二次检查后只有一个线程回源
-        synchronized (firstPageRebuildMonitor) {
+        // 完全 miss：按 key 加锁防止缓存击穿，二次检查后同一个 key 只有一个线程回源
+        String rebuildLockKey = (categoryId == null ? "all" : categoryId)
+                + ":" + page + ":" + size;
+        Object rebuildLock = rebuildLocks.get(rebuildLockKey, ignored -> new Object());
+        synchronized (rebuildLock) {
             cached = videoListCacheService.getPage(categoryId, page, size);
             if (cached != null) {
                 return sign(cached.data());
             }
+            String rebuildVersion = videoListCacheService.currentVersion();
             PageResult<VideoListItemVO> rebuilt = queryRaw(categoryId, null, page, size);
-            videoListCacheService.putPage(categoryId, page, size, rebuilt);
+            // 带着回源前的版本号写入：若这期间有写操作提交，putPage 会丢弃这批旧数据
+            videoListCacheService.putPage(categoryId, page, size, rebuilt, rebuildVersion);
             return sign(rebuilt);
         }
     }

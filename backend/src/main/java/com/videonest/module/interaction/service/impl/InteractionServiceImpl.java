@@ -17,11 +17,15 @@ import com.videonest.module.video.vo.VideoDetailVO;
 import com.videonest.security.LoginUser;
 import com.videonest.security.SecurityUtils;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.UUID;
 
@@ -103,46 +107,39 @@ public class InteractionServiceImpl implements InteractionService {
 
     /**
      * 视频点赞操作接口
-     * 加事务保证：新增点赞记录、视频计数+1、缓存更新原子性
+     * 幂等由唯一键 uk_user_video_like 保证：直接插入，冲突即已点过赞，省掉一次“先查再插”。
+     * 事务内只做 插入 + 计数自增；Redis 计数、热搜、通知等副作用全部推迟到提交之后，
+     * 避免回滚后缓存已经写着“已点赞”、也避免把 Redis 往返时长算进行锁持有时间。
      * @param videoId 被点赞的视频ID
      */
     @Override
     @Transactional
     public void like(Long videoId) {
         LoginUser currentUser = SecurityUtils.getCurrentUser();
-        getPublishedVideo(videoId);
-
-        // 数据库查询是否已经点过赞，防止重复点赞
-        if (videoLikeMapper.countByUserIdAndVideoId(
-                currentUser.userId(), videoId
-        ) > 0) {
-            return;
-        }
+        Video video = getPublishedVideo(videoId);
 
         VideoLike videoLike = new VideoLike();
         videoLike.setUserId(currentUser.userId());
         videoLike.setVideoId(videoId);
 
-        videoLikeMapper.insert(videoLike);
+        try {
+            videoLikeMapper.insert(videoLike);
+        } catch (DuplicateKeyException alreadyLiked) {
+            // 重复点赞（含并发双写）只是一次空操作，不应打断请求
+            return;
+        }
+
         videoMapper.changeLikeCount(videoId, 1);
+        Long likeCount = likeCountOf(videoId);
 
-        Video video = videoMapper.selectById(videoId);
-
-        // 刷新Redis点赞状态缓存和点赞总数缓存
-        refreshLikeCache(
-                videoId,
-                currentUser.userId(),
-                true,
-                video.getLikeCount()
-        );
-
-        // 更新Redis中视频详情缓存里的点赞数值，保证详情页缓存数据一致性
-        updateDetailLikeCount(videoId, video.getLikeCount());
-        // 给视频增加热度分值，用于排行榜统计
-        hotRankService.addLikeScore(videoId);
-        // 推送消息
-        publishNotification(video, currentUser.userId(), "LIKE", "点赞了你的视频");
-        log.info("视频点赞成功，videoId={}，userId={}", videoId, currentUser.userId());
+        Long userId = currentUser.userId();
+        runAfterCommit(() -> {
+            refreshLikeCache(videoId, userId, true, likeCount);
+            updateDetailLikeCount(videoId, likeCount);
+            hotRankService.addLikeScore(videoId);
+            publishNotification(video, userId, "LIKE", "点赞了你的视频");
+        });
+        log.info("视频点赞成功，videoId={}，userId={}", videoId, userId);
     }
 
     /**
@@ -167,56 +164,44 @@ public class InteractionServiceImpl implements InteractionService {
 
         // video主表点赞数量 -1
         videoMapper.changeLikeCount(videoId, -1);
+        Long likeCount = likeCountOf(videoId);
 
-        Video video = videoMapper.selectById(videoId);
-
-        refreshLikeCache(
-                videoId,
-                currentUser.userId(),
-                false,
-                video.getLikeCount()
-        );
-
-        updateDetailLikeCount(videoId, video.getLikeCount());
-        log.info("取消视频点赞成功，videoId={}，userId={}", videoId, currentUser.userId());
+        Long userId = currentUser.userId();
+        runAfterCommit(() -> {
+            refreshLikeCache(videoId, userId, false, likeCount);
+            updateDetailLikeCount(videoId, likeCount);
+        });
+        log.info("取消视频点赞成功，videoId={}，userId={}", videoId, userId);
     }
 
     @Override
     @Transactional
     public void favorite(Long videoId) {
         LoginUser currentUser = SecurityUtils.getCurrentUser();
-        getPublishedVideo(videoId);
-
-        // 判断是否已经收藏过，防止重复收藏
-        if (videoFavoriteMapper.countByUserIdAndVideoId(
-                currentUser.userId(), videoId
-        ) > 0) {
-            return;
-        }
+        Video video = getPublishedVideo(videoId);
 
         VideoFavorite videoFavorite = new VideoFavorite();
         videoFavorite.setUserId(currentUser.userId());
         videoFavorite.setVideoId(videoId);
 
-        videoFavoriteMapper.insert(videoFavorite);
+        try {
+            videoFavoriteMapper.insert(videoFavorite);
+        } catch (DuplicateKeyException alreadyFavorited) {
+            // 唯一键 uk_user_video_favorite 兜底：并发重复收藏只算一次
+            return;
+        }
+
         videoMapper.changeFavoriteCount(videoId, 1);
+        Long favoriteCount = favoriteCountOf(videoId);
 
-        Video video = videoMapper.selectById(videoId);
-
-        refreshFavoriteCache(
-                videoId,
-                currentUser.userId(),
-                true,
-                video.getFavoriteCount()
-        );
-
-        // 更新视频详情缓存里的收藏数量
-        updateDetailFavoriteCount(videoId, video.getFavoriteCount());
-        // 增加视频热度分值
-        hotRankService.addFavoriteScore(videoId);
-        // 发布收藏通知给作者
-        publishNotification(video, currentUser.userId(), "FAVORITE", "收藏了你的视频");
-        log.info("视频收藏成功，videoId={}，userId={}", videoId, currentUser.userId());
+        Long userId = currentUser.userId();
+        runAfterCommit(() -> {
+            refreshFavoriteCache(videoId, userId, true, favoriteCount);
+            updateDetailFavoriteCount(videoId, favoriteCount);
+            hotRankService.addFavoriteScore(videoId);
+            publishNotification(video, userId, "FAVORITE", "收藏了你的视频");
+        });
+        log.info("视频收藏成功，videoId={}，userId={}", videoId, userId);
     }
 
     /**
@@ -239,18 +224,49 @@ public class InteractionServiceImpl implements InteractionService {
         }
 
         videoMapper.changeFavoriteCount(videoId, -1);
+        Long favoriteCount = favoriteCountOf(videoId);
 
-        Video video = videoMapper.selectById(videoId);
+        Long userId = currentUser.userId();
+        runAfterCommit(() -> {
+            refreshFavoriteCache(videoId, userId, false, favoriteCount);
+            updateDetailFavoriteCount(videoId, favoriteCount);
+        });
+        log.info("取消视频收藏成功，videoId={}，userId={}", videoId, userId);
+    }
 
-        refreshFavoriteCache(
-                videoId,
-                currentUser.userId(),
-                false,
-                video.getFavoriteCount()
+    /** 只读单列计数，取不到时按 0 处理（视频被并发下架等边界）。 */
+    private Long likeCountOf(Long videoId) {
+        Long count = videoMapper.selectLikeCountById(videoId);
+        return count == null ? 0L : count;
+    }
+
+    private Long favoriteCountOf(Long videoId) {
+        Long count = videoMapper.selectFavoriteCountById(videoId);
+        return count == null ? 0L : count;
+    }
+
+    /**
+     * 把缓存/热度/通知等副作用推迟到事务提交成功之后执行。
+     * 没有事务时（例如被非事务调用方直接调用）立即执行，保持原行为。
+     */
+    private void runAfterCommit(Runnable action) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            action.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(
+                new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            action.run();
+                        } catch (RuntimeException e) {
+                            // 提交已经成功，副作用失败只能降级：缓存由 TTL 自愈，通知由 Outbox 重试
+                            log.warn("点赞/收藏提交后置动作执行失败，将由缓存 TTL 与 Outbox 重试兜底", e);
+                        }
+                    }
+                }
         );
-
-        updateDetailFavoriteCount(videoId, video.getFavoriteCount());
-        log.info("取消视频收藏成功，videoId={}，userId={}", videoId, currentUser.userId());
     }
 
     /**
@@ -341,12 +357,14 @@ public class InteractionServiceImpl implements InteractionService {
             return count.longValue();
         }
 
-        // 缓存不存在，把数据库值存入Redis，过期30分钟
+        // 缓存不存在，把数据库值存入Redis。TTL 加 0~300 秒抖动：
+        // 热门视频的计数缓存是同一时刻批量回填的，固定 30 分钟会让它们同一秒集体过期，
+        // 下一波请求全部回表和回写，形成可预测的尖峰。
         redisTemplate.opsForValue().set(
                 key,
                 databaseCount,
-                30,
-                TimeUnit.MINUTES
+                30 * 60L + ThreadLocalRandom.current().nextLong(0, 300),
+                TimeUnit.SECONDS
         );
 
         return databaseCount;
@@ -413,29 +431,29 @@ public class InteractionServiceImpl implements InteractionService {
     }
 
     /**
-     * 私有工具：更新Redis中视频详情缓存VO里的点赞数，保证详情页展示一致
+     * 私有工具：更新Redis中视频详情缓存VO里的点赞数，保证详情页展示一致。
+     * 保留原 key 剩余 TTL：原来每次点赞都把 TTL 重置成 30 分钟，热点视频的详情缓存
+     * 会因此永不过期，与“详情缓存 25~36 分钟抖动静默过期”的设计相冲突。
      * @param videoId 视频ID
      * @param likeCount 最新点赞数量
      */
     private void updateDetailLikeCount(Long videoId, Long likeCount) {
         String key = RedisKeys.videoDetail(videoId);
-        // 读取缓存中的VideoDetailVO对象
         Object cachedValue = redisTemplate.opsForValue().get(key);
 
         if (cachedValue instanceof VideoDetailVO videoDetail) {
             videoDetail.setLikeCount(likeCount);
-
             redisTemplate.opsForValue().set(
                     key,
                     videoDetail,
-                    30,
-                    TimeUnit.MINUTES
+                    remainingTtlSeconds(key),
+                    TimeUnit.SECONDS
             );
         }
     }
 
     /**
-     * 私有工具：更新Redis视频详情缓存VO中的收藏数量
+     * 私有工具：更新Redis视频详情缓存VO中的收藏数量（同样保留剩余 TTL）
      * @param videoId 视频ID
      * @param favoriteCount 最新收藏总数
      */
@@ -444,20 +462,27 @@ public class InteractionServiceImpl implements InteractionService {
             Long favoriteCount
     ) {
         String key = RedisKeys.videoDetail(videoId);
-        // 读取缓存中的VideoDetailVO对象
         Object cachedValue = redisTemplate.opsForValue().get(key);
 
         if (cachedValue instanceof VideoDetailVO videoDetail) {
-            // 取出 Redis 里缓存的VideoDetailVO详情对象，修改对象内部的收藏数字段为数据库最新的收藏总数，
-            // 再把更新完的完整对象回写到 Redis，让前端查询视频详情时拿到最新收藏数值，保持缓存和数据库数据一致。
+            // 取出缓存对象，改计数后按原剩余 TTL 回写，避免顺手把过期时间重置成 30 分钟
             videoDetail.setFavoriteCount(favoriteCount);
-
             redisTemplate.opsForValue().set(
                     key,
                     videoDetail,
-                    30,
-                    TimeUnit.MINUTES
+                    remainingTtlSeconds(key),
+                    TimeUnit.SECONDS
             );
+        }
+    }
+
+    /** 取详情缓存剩余 TTL；key 已无过期时间或查询失败时退回 30 分钟。 */
+    private long remainingTtlSeconds(String key) {
+        try {
+            Long remaining = redisTemplate.getExpire(key, TimeUnit.SECONDS);
+            return remaining != null && remaining > 0 ? remaining : 1800L;
+        } catch (RuntimeException e) {
+            return 1800L;
         }
     }
 

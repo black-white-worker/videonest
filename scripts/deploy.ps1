@@ -171,6 +171,27 @@ foreach ($relative in $UploadFiles) {
     Copy-Item $source $destination -Force
 }
 
+# Optional files: absent they do not break the normal (idle-profile) deploy, they
+# only make PROFILE=bench unusable on the server. Warn instead of throwing so the
+# benchmark overlay is not coupled to every release.
+# NOTE: keep this block ASCII. These two scripts are stored as BOM-less UTF-8, so
+# Windows PowerShell 5.1 decodes them as ANSI/GBK and a multibyte character whose
+# trailing byte lands on the newline swallows that newline (comment eats next line).
+$OptionalUploadFiles = @(
+    "docker-compose.bench.yml"
+)
+foreach ($relative in $OptionalUploadFiles) {
+    $source = Join-Path $ProjectRoot $relative
+    if (Test-Path -LiteralPath $source) {
+        $destination = Join-Path $Stage $relative
+        New-Item -ItemType Directory -Force -Path (Split-Path $destination) | Out-Null
+        Copy-Item $source $destination -Force
+    }
+    else {
+        Write-Warning "Optional file missing: $relative (PROFILE=bench will not work on the server)"
+    }
+}
+
 # ---------------------------------------------------------------------
 # 4) pack + upload
 # ---------------------------------------------------------------------

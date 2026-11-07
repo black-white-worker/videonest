@@ -1,6 +1,5 @@
 package com.videonest.module.notification.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.videonest.infrastructure.mq.RabbitMqConfig;
 import com.videonest.module.notification.entity.Notification;
 import com.videonest.module.notification.event.NotificationEvent;
@@ -60,19 +59,9 @@ public class NotificationMessageConsumerServiceImpl
             return;
         }
 
-        // 幂等性校验：根据eventId查询数据库是否已经存在该通知
-        Long count = notificationMapper.selectCount(
-                //LambdaQueryWrapper ：MyBatis-Plus Lambda条件构造器，通过实体类方法引用绑定字段
-                new LambdaQueryWrapper<Notification>()
-                        .eq(Notification::getEventId, event.eventId())
-        );
-
-        if (count > 0) {
-            log.info("通知消息已消费，跳过重复投递，eventId={}", event.eventId());
-            return;
-        }
-
-        // 将MQ事件对象event 转换为数据库Notification实体
+        // 幂等只靠唯一索引 uk_notification_event_id：
+        // 原来的“先 selectCount 再 insert”是 2 次往返，而且两步之间仍有竞态，
+        // 真正兜底的本来就是唯一键。这里直接用插入结果判定，重复投递捕获 DuplicateKeyException。
         Notification notification = new Notification();
         notification.setEventId(event.eventId());
         notification.setRecipientId(event.recipientId());

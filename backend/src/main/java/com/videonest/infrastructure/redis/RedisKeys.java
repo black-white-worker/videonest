@@ -86,10 +86,20 @@ public final class RedisKeys {
             "videonest:video:hot:cards:v2";
 
     public static final String VIDEO_LIST_FIRST_PAGE_PREFIX =
-            "videonest:video:list:first:v2:";
+            "videonest:video:list:first:v3:";
 
     public static final String VIDEO_LIST_CACHE_KEYS_KEY =
             "videonest:video:list:cache-keys:v2";
+
+    /**
+     * 视频列表缓存版本号。
+     *
+     * <p>任何改变列表内容的写操作只需 INCR 这个 key，所有缓存 key 随即整体切到新版本，
+     * 旧 key 由 TTL 自然淘汰。相比“遍历 key 集合逐个 DEL”，失效是 O(1)、原子，
+     * 也不存在“边删边写漏掉新 key”的竞态。</p>
+     */
+    public static final String VIDEO_LIST_VERSION_KEY =
+            "videonest:video:list:ver:v3";
 
     public static final String VIDEO_HOT_REFRESH_LOCK =
             "videonest:lock:video-hot-refresh";
@@ -148,8 +158,9 @@ public final class RedisKeys {
         return VIDEO_DETAIL_PREFIX + videoId;
     }
 
-    public static String videoListPage(Long categoryId, long page, long size) {
+    public static String videoListPage(Long categoryId, long page, long size, String version) {
         return VIDEO_LIST_FIRST_PAGE_PREFIX
+                + "v" + (version == null || version.isBlank() ? "0" : version) + ":"
                 + (categoryId == null ? "all" : categoryId)
                 + ":" + page + ":" + size;
     }

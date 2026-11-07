@@ -1,0 +1,57 @@
+# =====================================================================
+# videonest 压测叠层（bench overlay）
+# 只在"对着 vn 单项目打流量"的时候叠加使用，平时（含另外两个项目同时挂着）不要带它：
+#   docker compose -f docker-compose.server.yml -f docker-compose.bench.yml \
+#     --env-file .env.prod up -d --no-deps vn-backend
+#   测完还原：
+#   docker compose -f docker-compose.server.yml -f docker-compose.bench.yml \
+#     --env-file .env.prod up -d --no-deps vn-backend    # 去掉 -f bench 再 up 一次
+#
+# 两条硬约束：
+#   1) 必须重进容器（up -d 会重建 vn-backend），环境变量改了 JVM 参数，reload 不够，
+#      一次 45~90 秒；不要在演示中途切档。
+#   2) memswap_limit 与 mem_limit 相等 = 本容器禁用 swap。压测要的是纯内存延迟，
+#      一旦 p99 里混进换页就是废数据；代价是转码尖峰不再能溢出，测压测时别同时上传视频。
+# =====================================================================
+services:
+  vn-backend:
+    environment:
+      # 堆从 256M 抬到 288M：让 400 条视频列表缓存 + 200 个 Tomcat 线程的驻留量有地方放
+      JAVA_TOOL_OPTIONS: >-
+        -Xms192m -Xmx288m
+        -XX:MaxMetaspaceSize=128m
+        -XX:ReservedCodeCacheSize=64m
+        -Xss512k
+        -XX:+ExitOnOutOfMemoryError
+      DB_POOL_MAX_SIZE: "24"
+      DB_POOL_MIN_IDLE: "8"
+      TOMCAT_MAX_THREADS: "200"
+      TOMCAT_MIN_SPARE_THREADS: "20"
+      TOMCAT_ACCEPT_COUNT: "200"
+      TOMCAT_MAX_CONNECTIONS: "1000"
+      REDIS_POOL_MAX_ACTIVE: "24"
+      REDIS_POOL_MAX_IDLE: "12"
+      REDIS_POOL_MIN_IDLE: "6"
+      VIDEO_LIST_CACHE_LOCAL_MAX_SIZE: "400"
+      # 还原 300s：压测测的是稳态命中路径，45s 的演示档 TTL 会人为制造 DB 回源
+      VIDEO_LIST_CACHE_TTL_SECONDS: "300"
+      HOT_RANK_LOCAL_CACHE_MILLISECONDS: "8000"
+      # 后台任务全部还原默认频率，否则测出来的吞吐没有代表性
+      SCHEDULING_POOL_SIZE: "2"
+      OUTBOX_DISPATCH_INTERVAL_MILLISECONDS: "1000"
+      HOT_RANK_REFRESH_INTERVAL_MS: "45000"
+      VIDEO_VIEW_COUNT_FLUSH_DELAY_MILLISECONDS: "10000"
+      COVER_BACKFILL_FIXED_DELAY_MILLISECONDS: "300000"
+      VIDEO_REVIEW_TIMEOUT_RECOVERY_FIXED_DELAY_MS: "300000"
+      RESOURCE_CLEANUP_FIXED_DELAY_MILLISECONDS: "3600000"
+      UPLOAD_CLEANUP_FIXED_DELAY_MILLISECONDS: "600000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/videos/hot?limit=1"]
+      interval: 20s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    mem_limit: 704m
+    memswap_limit: 704m
+    # 448m 常驻下限：测的时候把另外两个栈挤出热内存，vn 独占 2 核
+    mem_reservation: 448m

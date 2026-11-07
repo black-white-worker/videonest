@@ -25,9 +25,29 @@ public interface VideoListCacheService {
     CacheLookup getPage(Long categoryId, long page, long size);
 
     /**
-     * 写入缓存（Redis + 本地 Caffeine），同时刷新本地时间戳用于软过期判定。
+     * 当前列表缓存版本号快照（本地缓存 1 秒）。
+     * 回源前取一次、回源后连同数据一起交给 {@link #putPage}，
+     * 用来判断“回源期间是否发生过写操作失效”。
      */
-    void putPage(Long categoryId, long page, long size, PageResult<VideoListItemVO> pageResult);
+    String currentVersion();
+
+    /**
+     * 写入缓存，并要求版本号与写入时一致。
+     *
+     * <p>回源是“先读版本 → 查库 → 再写缓存”，中间这 200~300ms 里如果发生写操作，
+     * 手里的数据就可能早于最新提交。此时直接丢弃、不写缓存：
+     * 下一个请求会重新回源一次，代价远小于把旧数据写进新版本、再存活一整个 TTL。</p>
+     */
+    void putPage(Long categoryId, long page, long size,
+                 PageResult<VideoListItemVO> pageResult, String version);
+
+    /**
+     * 写入缓存（以调用瞬间的版本号为准），同时刷新本地时间戳用于软过期判定。
+     */
+    default void putPage(Long categoryId, long page, long size,
+                         PageResult<VideoListItemVO> pageResult) {
+        putPage(categoryId, page, size, pageResult, currentVersion());
+    }
 
     /**
      * SWR（Stale-While-Revalidate）：

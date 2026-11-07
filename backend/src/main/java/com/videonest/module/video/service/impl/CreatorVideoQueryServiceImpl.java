@@ -1,15 +1,14 @@
 package com.videonest.module.video.service.impl;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.videonest.common.api.PageResult;
 import com.videonest.infrastructure.oss.service.MinioService;
-import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.mapper.VideoMapper;
 import com.videonest.module.video.service.CreatorVideoQueryService;
 import com.videonest.module.video.vo.CreatorProfileVO;
 import com.videonest.module.video.vo.CreatorVideoListVO;
+import com.videonest.module.video.vo.CreatorVideoStatusCountsVO;
 import com.videonest.module.video.vo.VideoListItemVO;
 import com.videonest.security.LoginUser;
 import com.videonest.security.SecurityUtils;
@@ -38,38 +37,19 @@ public class CreatorVideoQueryServiceImpl implements CreatorVideoQueryService {
         LoginUser currentUser = SecurityUtils.getCurrentUser();
         Long userId = currentUser.userId();
 
-        // 查询该用户全部视频总数量
-        Long totalVideoCount = videoMapper.selectCount(
-                new LambdaQueryWrapper<Video>().eq(Video::getAuthorId, userId)
-        );
-        // 查询状态=PENDING 待审核视频数量
-        Long pendingVideoCount = videoMapper.selectCount(
-                new LambdaQueryWrapper<Video>()
-                        .eq(Video::getAuthorId, userId)
-                        .eq(Video::getStatus, "PENDING")
-        );
-        // 查询状态=PUBLISHED 已发布视频数量
-        Long publishedVideoCount = videoMapper.selectCount(
-                new LambdaQueryWrapper<Video>()
-                        .eq(Video::getAuthorId, userId)
-                        .eq(Video::getStatus, "PUBLISHED")
-        );
-        // 查询状态=REJECTED 审核驳回视频数量
-        Long rejectedVideoCount = videoMapper.selectCount(
-                new LambdaQueryWrapper<Video>()
-                        .eq(Video::getAuthorId, userId)
-                        .eq(Video::getStatus, "REJECTED")
-        );
+        // 一次聚合查询拿齐 4 个状态计数：原来 4 条独立 COUNT 会把同一批作者行扫 4 遍。
+        CreatorVideoStatusCountsVO counts =
+                videoMapper.selectCreatorVideoStatusCounts(userId);
 
         return new CreatorProfileVO(
                 currentUser.userId(),
                 currentUser.username(),
                 currentUser.username(),
                 currentUser.role(),
-                totalVideoCount,
-                pendingVideoCount,
-                publishedVideoCount,
-                rejectedVideoCount
+                counts == null ? 0L : counts.getTotal(),
+                counts == null ? 0L : counts.getPending(),
+                counts == null ? 0L : counts.getPublished(),
+                counts == null ? 0L : counts.getRejected()
         );
     }
 

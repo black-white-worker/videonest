@@ -32,4 +32,44 @@ class MinioServiceImplTest {
                 service.getAccessUrl("cover/processed/42/封面.jpg")
         );
     }
+
+    @Test
+    void cdnEndpointOverridesPublicEndpointOnlyForPublicReadObjects() {
+        MinioProperties properties = new MinioProperties();
+        properties.setEndpoint("http://minio:9000");
+        properties.setPublicEndpoint("http://101.201.208.223:9010");
+        properties.setCdnEndpoint("https://media.example.com/");
+        properties.setRegion("us-east-1");
+        properties.setAccessKey("videonest");
+        properties.setSecretKey("videonest-secret");
+        properties.setBucketName("videonest");
+        properties.setPublicReadPrefixes("processed/,cover/processed/");
+
+        MinioServiceImpl service = new MinioServiceImpl(null, properties);
+
+        assertEquals(
+                "https://media.example.com/videonest/processed/42/720p.mp4",
+                service.getAccessUrl("processed/42/720p.mp4")
+        );
+    }
+
+    @Test
+    void blankCdnEndpointFallsBackToPublicEndpoint() {
+        MinioProperties properties = new MinioProperties();
+        properties.setEndpoint("http://minio:9000");
+        properties.setPublicEndpoint("http://101.201.208.223:9010");
+        properties.setCdnEndpoint("");
+        properties.setRegion("us-east-1");
+        properties.setAccessKey("videonest");
+        properties.setSecretKey("videonest-secret");
+        properties.setBucketName("videonest");
+        properties.setPublicReadPrefixes("processed/,cover/processed/");
+
+        MinioServiceImpl service = new MinioServiceImpl(null, properties);
+
+        assertEquals(
+                "http://101.201.208.223:9010/videonest/processed/42/720p.mp4",
+                service.getAccessUrl("processed/42/720p.mp4")
+        );
+    }
 }

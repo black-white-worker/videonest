@@ -4,6 +4,7 @@ import com.videonest.infrastructure.redis.RedisKeys;
 import com.videonest.module.video.config.HotRankProperties;
 import com.videonest.module.video.service.HotRankService;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
 
@@ -28,6 +29,18 @@ public class HotRankServiceImpl implements HotRankService {
     // 时间桶格式化
     private static final DateTimeFormatter BUCKET_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHH");
+
+    /**
+     * 一次往返完成“加分数 + 续期”：
+     * 原来 addScore 是 ZINCRBY 与 EXPIRE 两条命令，每次播放/点赞/收藏/评论都要付两次 RTT，
+     * 而且点赞/评论这几条路径还在数据库事务里调用它。合成一个 Lua 后事务内的 Redis 等待减半。
+     */
+    private static final DefaultRedisScript<Long> ADD_SCORE_SCRIPT =
+            new DefaultRedisScript<>("""
+                    redis.call('ZINCRBY', KEYS[1], ARGV[2], ARGV[1])
+                    redis.call('EXPIRE', KEYS[1], ARGV[3])
+                    return 1
+                    """, Long.class);
 
     private final StringRedisTemplate stringRedisTemplate;
     private final HotRankProperties properties;
@@ -241,17 +254,12 @@ public class HotRankServiceImpl implements HotRankService {
 
         try {
             String key = bucketKey(LocalDateTime.now());
-            // ZSet 分数自增
-            stringRedisTemplate.opsForZSet().incrementScore(
-                    key,
+            stringRedisTemplate.execute(
+                    ADD_SCORE_SCRIPT,
+                    List.of(key),
                     videoId.toString(),
-                    score
-            );
-            // 多保留两个小时，覆盖边界时钟偏差；排名只读取最近 24 个桶。
-            stringRedisTemplate.expire(
-                    key,
-                    properties.getWindowHours() + 2L,
-                    TimeUnit.HOURS
+                    Double.toString(score),
+                    Long.toString(properties.getWindowHours() + 2L)
             );
         } catch (RuntimeException e) {
             log.warn("写入热度桶失败，videoId={}，score={}", videoId, score, e);

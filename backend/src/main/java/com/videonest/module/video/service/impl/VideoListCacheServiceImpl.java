@@ -29,17 +29,28 @@ import java.util.function.Supplier;
 /**
  * 视频列表缓存服务：本地 Caffeine 二级缓存 + Redis 一级缓存。
  *
- * 缓存链：本地 Caffeine（限大小、短 TTL、SWR 异步刷新）→ Redis → 回源数据库。
- * 1. 缓存里存的是【原始未签名】数据（coverUrl 为 MinIO 对象名），签名由上层返回前统一生成，
- *    避免把会过期的预签名 URL 长期缓存，也避免每次回源都调 MinIO 生成签名。
- * 2. 软过期（SWR）：本地数据超过 soft TTL 后，命中时仍返回旧值，同时后台异步重建新缓存，
- *    请求不阻塞，直接消除原来 synchronized 全局锁排队导致的 P95 长尾。
- * 3. 硬过期：本地缓存条目超过 hard TTL 后被 Caffeine 驱逐，兜底走 Redis / 数据库。
- * 4. 限大小：maximumSize 限制本地缓存条目数，2G 小内存机器上防止堆内存被缓存吃满触发 GC。
+ * <p>缓存链：本地 Caffeine（限大小、短 TTL、SWR 异步刷新）→ Redis → 回源数据库。</p>
+ *
+ * <p>失效模型改为<b>版本号</b>：缓存 key 里带一个全局版本号，写操作只做一次
+ * {@code INCR videonest:video:list:ver:v3}，所有实例下一次取 key 时自然落到新版本，
+ * 旧版本 key 交给 TTL 淘汰。相比原来的「SMEMBERS 列出全部 key 再 DEL」，这条路径
+ * 是 O(1)、单条命令、原子，也不会出现“列完 key 之后又有新 key 写进来、删不掉”的漏网。</p>
+ *
+ * <p>版本号本地缓存 1 秒：列表页缓存命中时不再产生任何 Redis 往返；跨实例失效
+ * 最迟 1 秒后生效，对 45~300 秒的列表 TTL 来说足够。</p>
+ *
+ * <p>存放的始终是【原始未签名】数据（coverUrl 为 MinIO 对象名），签名由上层返回前统一生成，
+ * 避免把会过期的预签名 URL 长期缓存。</p>
  */
 @Service
 @Slf4j
 public class VideoListCacheServiceImpl implements VideoListCacheService {
+
+    /** 版本号 key 不存在时的初始版本。 */
+    private static final String INITIAL_VERSION = "0";
+
+    /** 版本号在本地缓存多久（毫秒）：越小跨实例失效越快，越大 Redis 往返越少。 */
+    private static final long VERSION_LOCAL_TTL_MILLIS = 1_000L;
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final StringRedisTemplate stringRedisTemplate;
@@ -47,7 +58,7 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
     private final Counter misses;
 
     /** Redis 列表缓存 TTL（秒），生产通过 VIDEO_LIST_CACHE_TTL_SECONDS 配置。 */
-    @Value("${video-list-cache.ttl-seconds:150}")
+    @Value("${video-list-cache.ttl-seconds:300}")
     private long ttlSeconds;
 
     /** 本地 Caffeine 缓存条目上限，防止缓存无限堆积吃满堆内存。 */
@@ -56,7 +67,6 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
 
     /**
      * 本地软过期（秒）：数据写入超过该时长后，命中时返回旧值并触发一次后台异步刷新（SWR）。
-     * 值越小数据越新鲜，但刷新越频繁；列表场景 15~30 秒是合理区间。
      */
     @Value("${video-list-cache.local-soft-ttl-seconds:15}")
     private long localSoftTtlSeconds;
@@ -69,17 +79,24 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
     private volatile Cache<String, LocalEntry> localCache;
 
     /**
-     * 单线程守护线程池：2 核小机器上避免开过多线程，仅用于 SWR 后台异步重建列表缓存。
+     * 2 个线程：单线程时所有页面的 SWR 重建串行排队，热点分类一多就会积压；
+     * 2 核小机器上再高只会和 Web 线程抢 CPU。
      */
     private final ExecutorService refreshExecutor =
-            Executors.newSingleThreadExecutor(r -> {
-                Thread t = new Thread(r, "video-list-cache-refresh");
-                t.setDaemon(true);
-                return t;
+            Executors.newFixedThreadPool(2, runnable -> {
+                Thread thread = new Thread(runnable, "video-list-cache-refresh");
+                thread.setDaemon(true);
+                return thread;
             });
 
     /** 正在异步刷新中的缓存 key，保证同一 key 同时只有一个重建任务，避免重复回源。 */
     private final Set<String> refreshingKeys = ConcurrentHashMap.newKeySet();
+
+    /** 当前版本号 + 取到它的时间戳。 */
+    private record VersionStamp(String version, long fetchedAtMillis) {
+    }
+
+    private volatile VersionStamp versionStamp;
 
     /** 本地缓存条目：数据 + 上次写入时间戳（用于软过期判定）。 */
     private record LocalEntry(PageResult<VideoListItemVO> data, long refreshedAtMillis) {
@@ -116,17 +133,40 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
         }
     }
 
+    /**
+     * 读取当前列表缓存版本号：本地 1 秒内直接复用，超时读一次 Redis。
+     * Redis 异常时沿用上一次已知版本（首次则用初始版本），保证读路径永不因缓存故障失败。
+     */
+    @Override
+    public String currentVersion() {
+        long now = System.currentTimeMillis();
+        VersionStamp stamp = versionStamp;
+        if (stamp != null && now - stamp.fetchedAtMillis() < VERSION_LOCAL_TTL_MILLIS) {
+            return stamp.version();
+        }
+        try {
+            String stored = stringRedisTemplate.opsForValue()
+                    .get(RedisKeys.VIDEO_LIST_VERSION_KEY);
+            String version = stored == null || stored.isBlank() ? INITIAL_VERSION : stored;
+            versionStamp = new VersionStamp(version, now);
+            return version;
+        } catch (RuntimeException e) {
+            log.warn("读取视频列表缓存版本号失败，沿用上一次已知版本", e);
+            String fallback = stamp == null ? INITIAL_VERSION : stamp.version();
+            versionStamp = new VersionStamp(fallback, now);
+            return fallback;
+        }
+    }
+
     @Override
     public CacheLookup getPage(Long categoryId, long page, long size) {
-        String key = RedisKeys.videoListPage(categoryId, page, size);
+        String key = RedisKeys.videoListPage(categoryId, page, size, currentVersion());
         // 1. 本地 Caffeine 优先命中：数据未签名，签名由上层统一处理
         LocalEntry local = localCache().getIfPresent(key);
         if (local != null) {
-            // 缓存命中计数器加一
             hits.increment();
             boolean stale = System.currentTimeMillis() - local.refreshedAtMillis()
                     >= localSoftTtlSeconds * 1000L;
-            // 拷贝列表结果
             return new CacheLookup(copyRecords(local.data()), stale);
         }
         // 2. 本地未命中，读 Redis；命中则回填本地缓存
@@ -150,9 +190,15 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
 
     @Override
     public void putPage(
-            Long categoryId, long page, long size, PageResult<VideoListItemVO> pageResult
+            Long categoryId, long page, long size,
+            PageResult<VideoListItemVO> pageResult, String version
     ) {
-        String key = RedisKeys.videoListPage(categoryId, page, size);
+        // 版本号对不上说明回源期间有写操作提交过，这批数据可能已经过期，直接丢弃。
+        if (version == null || !version.equals(currentVersion())) {
+            log.debug("回源期间列表缓存已失效，丢弃本次结果，categoryId={}，page={}", categoryId, page);
+            return;
+        }
+        String key = RedisKeys.videoListPage(categoryId, page, size, version);
         long effectiveTtl = Math.max(1, ttlSeconds)
                 + ThreadLocalRandom.current().nextLong(0, 16);
         try {
@@ -163,12 +209,6 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
                             pageResult.total(), pageResult.page(), pageResult.size(), pageResult.pages()
                     ),
                     effectiveTtl,
-                    TimeUnit.SECONDS
-            );
-            stringRedisTemplate.opsForSet().add(RedisKeys.VIDEO_LIST_CACHE_KEYS_KEY, key);
-            stringRedisTemplate.expire(
-                    RedisKeys.VIDEO_LIST_CACHE_KEYS_KEY,
-                    effectiveTtl + 60,
                     TimeUnit.SECONDS
             );
         } catch (RuntimeException e) {
@@ -193,7 +233,8 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
             Long categoryId, long page, long size,
             Supplier<PageResult<VideoListItemVO>> loader
     ) {
-        String key = RedisKeys.videoListPage(categoryId, page, size);
+        String version = currentVersion();
+        String key = RedisKeys.videoListPage(categoryId, page, size, version);
         // 同一 key 已有刷新任务在途，直接跳过，避免并发重复回源打爆数据库
         if (!refreshingKeys.add(key)) {
             return;
@@ -202,7 +243,7 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
             try {
                 PageResult<VideoListItemVO> rebuilt = loader.get();
                 if (rebuilt != null) {
-                    putPage(categoryId, page, size, rebuilt);
+                    putPage(categoryId, page, size, rebuilt, version);
                 }
             } catch (RuntimeException e) {
                 // 刷新失败保留旧缓存，下次命中仍会再触发，不阻断业务
@@ -213,19 +254,19 @@ public class VideoListCacheServiceImpl implements VideoListCacheService {
         });
     }
 
+    /**
+     * 主动失效：本地直接清空，Redis 只做一次版本号自增。
+     * 版本号切换是原子的，不需要再扫描/删除任何列表 key。
+     */
     @Override
     public void invalidateAll() {
-        // 先清本地，再清 Redis；写操作后调用，保证数据一致
         localCache().invalidateAll();
         try {
-            Set<String> keys = stringRedisTemplate.opsForSet()
-                    .members(RedisKeys.VIDEO_LIST_CACHE_KEYS_KEY);
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
-            }
-            stringRedisTemplate.delete(RedisKeys.VIDEO_LIST_CACHE_KEYS_KEY);
+            stringRedisTemplate.opsForValue().increment(RedisKeys.VIDEO_LIST_VERSION_KEY);
+            // 本实例立刻生效；其它实例最多 1 秒后读到新版本
+            versionStamp = null;
         } catch (RuntimeException e) {
-            log.warn("主动失效视频列表缓存失败，TTL 将负责兜底", e);
+            log.warn("视频列表缓存版本号自增失败，将由 TTL 兜底", e);
         }
     }
 

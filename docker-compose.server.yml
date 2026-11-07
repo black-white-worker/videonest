@@ -36,6 +36,11 @@ services:
       retries: 30
     mem_limit: 192m
     memswap_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
     networks: [default]
 
   vn-backend:
@@ -74,6 +79,9 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       # 预签名 URL 会把 host:port 写进签名，必须是浏览器能直达的地址
       MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-http://${PUBLIC_HOST}:9010}
+      # 播放/封面的公开读地址（CDN 加速域名）。留空则沿用上一行的公网 MinIO 地址，
+      # 直传预签名 PUT 始终走 MINIO_PUBLIC_ENDPOINT，不会被带到 CDN。
+      MINIO_CDN_ENDPOINT: ${MINIO_CDN_ENDPOINT:-}
       MINIO_REGION: us-east-1
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
@@ -92,15 +100,48 @@ services:
       RESOURCE_RETENTION_DAYS: ${RESOURCE_RETENTION_DAYS:-7}
       UPLOAD_MAX_VIDEO_SIZE_BYTES: ${UPLOAD_MAX_VIDEO_SIZE_BYTES:-838860800}
       UPLOAD_MINIMUM_FREE_DISK_BYTES: ${UPLOAD_MINIMUM_FREE_DISK_BYTES:-5368709120}
-      JAVA_TOOL_OPTIONS: "-XX:MaxRAMPercentage=60 -XX:+ExitOnOutOfMemoryError"
-      # 小内存机器：连接池和线程数都收一收
-      DB_POOL_MAX_SIZE: "8"
-      DB_POOL_MIN_IDLE: "2"
-      TOMCAT_MAX_THREADS: "80"
+      # 显式给堆，不用 MaxRAMPercentage：后者会随 mem_limit 一起漂，改配额就等于改 GC 行为。
+      # 256M 堆 + 128M 元空间 + 64M 代码缓存 + 线程栈 ≈ 460M RSS，剩下的余量给 ffmpeg 子进程
+      # （转码是外部进程，只占容器内存，不占堆）。
+      JAVA_TOOL_OPTIONS: >-
+        -Xms192m -Xmx256m
+        -XX:MaxMetaspaceSize=128m
+        -XX:ReservedCodeCacheSize=64m
+        -Xss512k
+        -XX:+ExitOnOutOfMemoryError
+      # 演示档配额：优先级最高，所以不给到共享方案当初砍出来的 8 连接，
+      # 而是回抬到能撑住 100 并发读的水平（压测档见 docker-compose.bench.yml）。
+      DB_POOL_MAX_SIZE: "16"
+      DB_POOL_MIN_IDLE: "4"
+      TOMCAT_MAX_THREADS: "100"
       TOMCAT_MIN_SPARE_THREADS: "10"
-      TOMCAT_ACCEPT_COUNT: "100"
-      TOMCAT_MAX_CONNECTIONS: "500"
-      VIDEO_LIST_CACHE_LOCAL_MAX_SIZE: "100"
+      TOMCAT_ACCEPT_COUNT: "150"
+      TOMCAT_MAX_CONNECTIONS: "800"
+      REDIS_POOL_MAX_ACTIVE: "16"
+      REDIS_POOL_MAX_IDLE: "8"
+      REDIS_POOL_MIN_IDLE: "4"
+      VIDEO_LIST_CACHE_LOCAL_MAX_SIZE: "200"
+      # 演示要"上传后马上能看到"，TTL 从 300s 收到 45s；靠本地 Caffeine + SWR 兜住 DB 压力
+      VIDEO_LIST_CACHE_TTL_SECONDS: "45"
+      HOT_RANK_LOCAL_CACHE_MILLISECONDS: "2000"
+      # HOT_RANK_REFRESH_INTERVAL_MS 不降频（沿用应用默认 45s）：热榜的 Redis 卡片键 TTL 是 60s、
+      # 榜单键 180s，刷新周期一旦超过 TTL，键会在两次刷新之间过期，请求就要现查 DB 重建，
+      # 降频省下的调度反而变成每个请求的延迟。要省这份开销只能同时把 HOT_RANK_CARDS_TTL_SECONDS
+      # 调到比刷新周期大，两个值必须一起动。
+      # 空闲档把所有一轮式的后台任务降成"每天一次"：它们每次都要抢 DB 连接和写放大，
+      # 演示时只会添乱。bench 叠层会全部还原。
+      #
+      # 池大小从 1 调到 4：@Scheduled 默认共用一个池，Outbox 派发是"逐条发送 + 阻塞等
+      # publisher confirm（最长 5s/条）"，池=1 时它会和热榜刷新、播放量刷库、审核兜底排同一条队。
+      # 热榜刷新一旦被推迟到 60s 之后，热榜卡片 key 会先过期，请求全部回源数据库重建，
+      # 表现为热门接口偶发长尾。4 条线程 × Xss512k ≈ 2MB，2 核机器上可接受。
+      SCHEDULING_POOL_SIZE: "4"
+      OUTBOX_DISPATCH_INTERVAL_MILLISECONDS: "5000"
+      VIDEO_VIEW_COUNT_FLUSH_DELAY_MILLISECONDS: "60000"
+      COVER_BACKFILL_FIXED_DELAY_MILLISECONDS: "86400000"
+      VIDEO_REVIEW_TIMEOUT_RECOVERY_FIXED_DELAY_MS: "86400000"
+      RESOURCE_CLEANUP_FIXED_DELAY_MILLISECONDS: "86400000"
+      UPLOAD_CLEANUP_FIXED_DELAY_MILLISECONDS: "86400000"
       LOG_PATH: /app/logs
       TZ: Asia/Shanghai
     volumes:
@@ -109,13 +150,20 @@ services:
       - "127.0.0.1:8080:8080"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/videos/hot?limit=1"]
-      interval: 20s
+      interval: 60s
       timeout: 5s
       retries: 20
       start_period: 60s
-    # 无显式 -Xmx，用 JAVA_TOOL_OPTIONS 给到 60%，约 340M 堆（转码是外部进程，不占堆）
-    mem_limit: 576m
-    memswap_limit: 1280m
+    # reservation=256m：三个项目同时挂着时，内核优先回收其他栈的页，让 vn 常驻不退
+    # memswap 896m = 640m 常驻 + 256m 可换出（转码尖峰用），比之前的 1280m 少占 384m 交换区
+    mem_limit: 640m
+    memswap_limit: 896m
+    mem_reservation: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
     networks: [default, shared]
 
   vn-frontend:
@@ -134,6 +182,11 @@ services:
       # 整文件覆盖 /etc/nginx/nginx.conf
       - ./deploy/server/nginx.conf:/etc/nginx/nginx.conf:ro
     mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
     networks: [default]
 
 volumes:

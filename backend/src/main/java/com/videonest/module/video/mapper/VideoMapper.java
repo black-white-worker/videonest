@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.videonest.module.video.entity.Video;
 import com.videonest.module.video.vo.AdminVideoReviewVO;
 import com.videonest.module.video.vo.CreatorVideoListVO;
+import com.videonest.module.video.vo.CreatorVideoStatusCountsVO;
 import com.videonest.module.video.vo.VideoDetailVO;
 import com.videonest.module.video.vo.VideoListItemVO;
 import com.videonest.module.video.vo.DeletedVideoVO;
@@ -63,6 +64,20 @@ public interface VideoMapper extends BaseMapper<Video> {
     Long selectPublishedViewCountById(@Param("videoId") Long videoId);
 
     /**
+     * 只读点赞数：互动成功后回写缓存用，避免为此读整行 video。
+     * @param videoId 视频id
+     * @return 最新点赞数；视频不存在返回 null
+     */
+    Long selectLikeCountById(@Param("videoId") Long videoId);
+
+    /**
+     * 只读收藏数：同上。
+     * @param videoId 视频id
+     * @return 最新收藏数；视频不存在返回 null
+     */
+    Long selectFavoriteCountById(@Param("videoId") Long videoId);
+
+    /**
      * 查询最新发布的N条视频，用于首页推荐
      * @param limit 返回条数
      * @return VideoListItemVO列表
@@ -115,6 +130,16 @@ public interface VideoMapper extends BaseMapper<Video> {
      */
     IPage<CreatorVideoListVO> selectCreatorVideoPage(
             Page<CreatorVideoListVO> page,
+            @Param("authorId") Long authorId
+    );
+
+    /**
+     * 创作者主页稿件状态统计：一次聚合查询替代原来的 4 条独立 COUNT。
+     * 过滤条件与创作者列表保持一致（未删除），走 idx_video_author_status。
+     * @param authorId 当前登录作者id
+     * @return 总数 / 待审核 / 已发布 / 驳回
+     */
+    CreatorVideoStatusCountsVO selectCreatorVideoStatusCounts(
             @Param("authorId") Long authorId
     );
 

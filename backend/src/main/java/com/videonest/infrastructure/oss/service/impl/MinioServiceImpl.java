@@ -52,6 +52,9 @@ public class MinioServiceImpl implements MinioService {
     //视频最大尺寸
     private static final long MAX_VIDEO_SIZE = 500 * 1024 * 1024L;
 
+    // 转码产物（processed/、cover/processed/）的浏览器与 CDN 缓存时长：30 天
+    private static final int PROCESSED_OBJECT_MAX_AGE_SECONDS = 30 * 24 * 60 * 60;
+
     // 允许上传的封面图片MIME类型集合
     private static final Set<String> IMAGE_TYPES = Set.of(
             "image/jpeg",
@@ -316,9 +319,7 @@ public class MinioServiceImpl implements MinioService {
     }
 
     private String buildPublicObjectUrl(String objectName) {
-        String endpoint = StringUtils.hasText(minioProperties.getPublicEndpoint())
-                ? minioProperties.getPublicEndpoint()
-                : minioProperties.getEndpoint();
+        String endpoint = resolvePublicReadEndpoint();
         String encodedObjectName = Arrays.stream(objectName.split("/", -1))
                 .map(segment -> URLEncoder.encode(segment, StandardCharsets.UTF_8)
                         .replace("+", "%20"))
@@ -327,6 +328,21 @@ public class MinioServiceImpl implements MinioService {
         return endpoint.replaceAll("/+$", "")
                 + "/" + minioProperties.getBucketName()
                 + "/" + encodedObjectName;
+    }
+
+    /**
+     * 公开读对象（processed/、cover/processed/）对外使用的地址：
+     * CDN 加速域名优先，其次公网地址，最后退回内网地址。
+     * 预签名地址不使用它，所以上行直传不会被带到 CDN 上。
+     */
+    private String resolvePublicReadEndpoint() {
+        if (StringUtils.hasText(minioProperties.getCdnEndpoint())) {
+            return minioProperties.getCdnEndpoint();
+        }
+        if (StringUtils.hasText(minioProperties.getPublicEndpoint())) {
+            return minioProperties.getPublicEndpoint();
+        }
+        return minioProperties.getEndpoint();
     }
 
     /**
@@ -465,6 +481,11 @@ public class MinioServiceImpl implements MinioService {
                             .object(objectName)
                             .filename(localFile.toString())
                             .contentType(contentType)
+                            // 转码产物按 videoId 定名且内容不变，加此头让浏览器与 CDN 都能复用；
+                            // 若将来对同一 videoId 重新转码并覆盖同名对象，最长要等这个 TTL 才会刷新。
+                            .headers(Map.of(
+                                    "Cache-Control",
+                                    "public, max-age=" + PROCESSED_OBJECT_MAX_AGE_SECONDS))
                             .build()
             );
         } catch (IOException e) {

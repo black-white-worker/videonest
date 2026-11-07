@@ -379,6 +379,34 @@
     </select>
 
     <!--
+    创作者主页稿件状态统计：一条 SQL 扫一遍作者的行，替代 4 条独立 COUNT。
+    SUM(status='X') 在 MySQL 里等价于 SUM(1/0)，配合 (author_id, status) 索引可覆盖。
+    -->
+    <select id="selectCreatorVideoStatusCounts"
+            resultType="com.videonest.module.video.vo.CreatorVideoStatusCountsVO">
+        SELECT
+            COUNT(*)                                AS total,
+            COALESCE(SUM(status = 'PENDING'), 0)    AS pending,
+            COALESCE(SUM(status = 'PUBLISHED'), 0)  AS published,
+            COALESCE(SUM(status = 'REJECTED'), 0)   AS rejected
+        FROM video
+        WHERE author_id = #{authorId}
+          AND is_deleted = 0
+    </select>
+
+    <!--
+    互动计数只取单列：点赞/收藏成功后需要拿最新计数回写缓存，
+    原来用 selectById 读整行（含 description 等大字段），这里只读一个 BIGINT。
+    -->
+    <select id="selectLikeCountById" resultType="java.lang.Long">
+        SELECT like_count FROM video WHERE id = #{videoId}
+    </select>
+
+    <select id="selectFavoriteCountById" resultType="java.lang.Long">
+        SELECT favorite_count FROM video WHERE id = #{videoId}
+    </select>
+
+    <!--
     功能：获取单个已发布视频播放量
     场景：简单获取播放数字，不需要完整VO对象
     -->

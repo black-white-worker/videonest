@@ -22,6 +22,10 @@ public class MinioProperties {
     // 浏览器可访问的MinIO服务地址
     private String publicEndpoint;
 
+    // 播放/封面等公开读对象的对外地址（CDN 加速域名）。留空则退回 publicEndpoint。
+    // 只影响拼接出的公开 URL，不参与预签名，因此上行直传仍走 publicEndpoint。
+    private String cdnEndpoint;
+
     // MinIO存储区域
     private String region;
 

@@ -26,7 +26,7 @@ const router = useRouter()
 const loading = ref(true)
 const video = ref<VideoDetail | null>(null)
 const player = ref<HTMLVideoElement | null>(null)
-const selectedQuality = ref<'480p' | '720p' | '1080p'>('720p')
+const selectedQuality = ref<'480p' | '720p' | '1080p'>('480p')
 const playbackMediaInfo = ref<{
   width: number
   height: number
@@ -137,10 +137,11 @@ async function loadVideoDetail() {
   try {
     loading.value = true
     video.value = await getVideoDetail(id)
+    // 默认档取码率最低的一路：实测 720p 单观众需 258KB/s，已超过源站总出口（417KB/s），480p 只需 109KB/s。
     selectedQuality.value =
-      qualityOptions.value.find((option) => option.value === '720p' && option.url)?.value ||
+      qualityOptions.value.find((option) => option.value === '480p' && option.url)?.value ||
       qualityOptions.value.find((option) => option.url)?.value ||
-      '720p'
+      '480p'
   } catch (error) {
     const message = error instanceof Error ? error.message : '获取视频详情失败'
     ElMessage.error(message)
