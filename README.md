@@ -28,11 +28,11 @@ VideoNest 以 **Vue 3 + Spring Boot** 为核心，采用模块化单体架构，
 
 ## 界面预览
 
-![VideoNest 首页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@3559f53/docs/images/home.jpg)
+![VideoNest 首页](docs/images/home.jpg)
 
-![VideoNest 投稿发布页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@3559f53/docs/images/upload.jpg)
+![VideoNest 投稿发布页](docs/images/upload.jpg)
 
-![VideoNest 视频详情页](https://cdn.jsdelivr.net/gh/black-white-build/Learn@3559f53/docs/images/video-detail.jpg)
+![VideoNest 视频详情页](docs/images/video-detail.jpg)
 
 ## 亮点
 
