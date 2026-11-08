@@ -28,12 +28,15 @@ import org.springframework.util.StringUtils;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * C端用户视频浏览、搜索、视频详情、播放上报、热门视频查询
- * 1. Redis缓存视频详情 + 分布式锁解决缓存击穿
+ * 1. Redis缓存视频详情 + 进程内合流与分布式锁双层防击穿
  * 2. 缓存空值（NULL_VIDEO）解决缓存穿透
  * 3. Lua脚本安全释放分布式锁，防止锁误删
  * 4. TTL随机抖动，避免缓存同时过期雪崩
@@ -63,6 +66,12 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
                     return 0
                     """, Long.class);
 
+    /**
+     * 等待同 key 回源结果的上限，需大于数据库连接池的获取超时（默认 2 秒），
+     * 避免健康但较慢的回源被提前放弃。
+     */
+    private static final long REBUILD_WAIT_MILLIS = 3000;
+
     private final VideoMapper videoMapper;
     private final MinioService minioService;
     private final HotRankService hotRankService;
@@ -83,6 +92,22 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
     private final Cache<String, Object> rebuildLocks = Caffeine.newBuilder()
             .maximumSize(512)
             .expireAfterAccess(10, TimeUnit.MINUTES)
+            .build();
+
+    /**
+     * 视频详情回源的进程内合流表，按 videoId 分片：videoId -> 该 key 正在生成的回源结果。
+     *
+     * <p>原实现只有一把 Redis 分布式锁：没抢到锁的线程睡 40 毫秒后再读一次缓存，
+     * 只要那次回源没在 40 毫秒内完成，这些线程就各自去查数据库，防击穿实际退化成
+     * 「1 个线程加锁 + 其余全部打库」。合流后同一个 videoId 在本进程内只有一个线程回源，
+     * 其余线程直接复用它的结果；跨实例仍由 Redis 锁兜底。</p>
+     *
+     * <p>条目由回源线程在结束时按 {@code remove(key, value)} 精确删除，
+     * 过期时间只用于回源线程异常退出时的兜底回收。</p>
+     */
+    private final Cache<Long, CompletableFuture<Object>> detailRebuilds = Caffeine.newBuilder()
+            .maximumSize(512)
+            .expireAfterWrite(30, TimeUnit.SECONDS)
             .build();
 
     public VideoDiscoveryServiceImpl(
@@ -266,9 +291,7 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
      * 获取视频详情
      * 1.先读缓存；命中直接返回
      * 2.命中NULL_VIDEO，抛404
-     * 3.未命中，抢Redis分布式锁
-     * 4.抢到锁：再次查缓存，防止其他线程已经回填；没命中就查库写缓存
-     * 5.没抢到锁：sleep短暂时间，再次尝试读缓存，降级不阻塞
+     * 3.未命中，进入进程内合流：同一个 videoId 只有一个线程回源
      * @param videoId 视频id
      * @param cacheKey 缓存key
      * @return VideoDetailVO
@@ -282,53 +305,113 @@ public class VideoDiscoveryServiceImpl implements VideoDiscoveryService {
         if (NULL_VIDEO.equals(cached)) {
             throw new BusinessException(404, "视频不存在");
         }
+        return rebuildShared(videoId, cacheKey);
+    }
 
+    /**
+     * 进程内合流回源：本线程抢到该 videoId 的回源名额就执行回源，
+     * 其余线程等同一个 future 的结果并复用，不再各自打数据库。
+     * @param videoId 视频id
+     * @param cacheKey 缓存key
+     * @return VideoDetailVO
+     */
+    private VideoDetailVO rebuildShared(Long videoId, String cacheKey) {
+        CompletableFuture<Object> own = new CompletableFuture<>();
+        CompletableFuture<Object> inFlight = detailRebuilds.get(videoId, ignored -> own);
+        if (inFlight != own) {
+            return awaitInFlight(videoId, cacheKey, inFlight);
+        }
+        try {
+            Object result = loadDetailIntoCache(videoId, cacheKey);
+            own.complete(result);
+            return requireVideoDetail(result);
+        } catch (RuntimeException e) {
+            own.completeExceptionally(e);
+            throw e;
+        } finally {
+            // 只删除自己放入的那个 future，避免误删过期后新起一轮回源的条目
+            detailRebuilds.asMap().remove(videoId, own);
+        }
+    }
+
+    /**
+     * 等待同 key 的回源结果；超时或回源本身失败时降级为自行回源，
+     * 保证等待方不会因为持锁线程卡住而一直挂在这里。
+     * @param videoId 视频id
+     * @param cacheKey 缓存key
+     * @param inFlight 正在回源的那个future
+     * @return VideoDetailVO
+     */
+    private VideoDetailVO awaitInFlight(
+            Long videoId, String cacheKey, CompletableFuture<Object> inFlight
+    ) {
+        try {
+            return requireVideoDetail(inFlight.get(REBUILD_WAIT_MILLIS, TimeUnit.MILLISECONDS));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.warn("等待视频详情回源结果被中断，降级自行回源，videoId={}", videoId, e);
+        } catch (TimeoutException | ExecutionException e) {
+            log.warn("等待视频详情回源结果超时或失败，降级自行回源，videoId={}", videoId, e);
+        }
+        return requireVideoDetail(loadDetailIntoCache(videoId, cacheKey));
+    }
+
+    /**
+     * 回源并写缓存：抢 Redis 分布式锁做跨实例去重，锁内二次检查缓存。
+     * 没抢到锁说明另一台实例正在回源，读一次缓存仍没命中就自己查库，不阻塞等待。
+     * @param videoId 视频id
+     * @param cacheKey 缓存key
+     * @return VideoDetailVO 或空值占位 NULL_VIDEO
+     */
+    private Object loadDetailIntoCache(Long videoId, String cacheKey) {
         String lockKey = RedisKeys.videoDetailLock(videoId);
         String lockToken = UUID.randomUUID().toString();
         boolean locked = false;
-        Object afterWait = null;
         try {
-            locked = Boolean.TRUE.equals(stringRedisTemplate.opsForValue()
-                    .setIfAbsent(lockKey, lockToken, 5, TimeUnit.SECONDS));
-            if (locked) {
-                afterWait = getCacheSafely(cacheKey);
-            } else {
-                // 没拿到锁，短暂等待，再读一次缓存；不无限阻塞
-                Thread.sleep(40);
-                afterWait = getCacheSafely(cacheKey);
+            try {
+                locked = Boolean.TRUE.equals(stringRedisTemplate.opsForValue()
+                        .setIfAbsent(lockKey, lockToken, 5, TimeUnit.SECONDS));
+            } catch (RuntimeException e) {
+                log.warn("视频详情缓存不可用，降级查询数据库，videoId={}", videoId, e);
             }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } catch (RuntimeException e) {
-            log.warn("视频详情缓存不可用，降级查询数据库，videoId={}", videoId, e);
-        }
-
-        // 等待后缓存命中，释放锁直接返回
-        if (afterWait instanceof VideoDetailVO detail) {
-            unlockVideoDetail(lockKey, lockToken, videoId, locked);
-            return detail;
-        }
-
-        // 等待后命中空占位，抛404
-        if (NULL_VIDEO.equals(afterWait)) {
-            unlockVideoDetail(lockKey, lockToken, videoId, locked);
-            throw new BusinessException(404, "视频不存在");
-        }
-
-        // 没有命中缓存，查询数据库，写入缓存
-        try {
-            VideoDetailVO detail = videoMapper.selectPublishedDetailById(videoId);
-            // 数据库不存在，写入空值占位
-            if (detail == null) {
-                setCacheSafely(cacheKey, NULL_VIDEO, 2, TimeUnit.MINUTES);
-                throw new BusinessException(404, "视频不存在");
+            Object cached = getCacheSafely(cacheKey);
+            if (cached instanceof VideoDetailVO || NULL_VIDEO.equals(cached)) {
+                return cached;
             }
-            // TTL 加随机抖动，避免同一批缓存同时失效形成雪崩。
-            setCacheSafely(cacheKey, detail, cacheTtlMinutes(), TimeUnit.MINUTES);
-            return detail;
+            return queryAndCacheDetail(videoId, cacheKey);
         } finally {
             unlockVideoDetail(lockKey, lockToken, videoId, locked);
         }
+    }
+
+    /**
+     * 查数据库并回填缓存，不存在则写空值占位防穿透。
+     * @param videoId 视频id
+     * @param cacheKey 缓存key
+     * @return VideoDetailVO 或空值占位 NULL_VIDEO
+     */
+    private Object queryAndCacheDetail(Long videoId, String cacheKey) {
+        VideoDetailVO detail = videoMapper.selectPublishedDetailById(videoId);
+        // 数据库不存在，写入空值占位
+        if (detail == null) {
+            setCacheSafely(cacheKey, NULL_VIDEO, 2, TimeUnit.MINUTES);
+            return NULL_VIDEO;
+        }
+        // TTL 加随机抖动，避免同一批缓存同时失效形成雪崩。
+        setCacheSafely(cacheKey, detail, cacheTtlMinutes(), TimeUnit.MINUTES);
+        return detail;
+    }
+
+    /**
+     * 把回源结果还原成返回值：空值占位转成404。
+     * @param result 回源结果
+     * @return VideoDetailVO
+     */
+    private VideoDetailVO requireVideoDetail(Object result) {
+        if (NULL_VIDEO.equals(result)) {
+            throw new BusinessException(404, "视频不存在");
+        }
+        return (VideoDetailVO) result;
     }
 
     /**
