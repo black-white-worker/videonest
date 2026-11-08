@@ -10,6 +10,7 @@ import org.springframework.amqp.AmqpException;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
@@ -109,6 +110,17 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleDataAccessException(DataAccessException e) {
         log.error("数据库访问失败", e);
         return ApiResponse.fail(503, "数据库服务暂时不可用，请稍后重试");
+    }
+
+    // 事务开启时建连失败（Hikari 超时/网络抖动）不是 DataAccessException 的子类，
+    // 不加这个 handler 会落到兜底 500。返回 503 + Retry-After 让客户端可感知地退避，
+    // 不做服务端重试：过载时重试只会放大连接压力（压测报告 5.1/9）。
+    @ExceptionHandler(CannotCreateTransactionException.class)
+    public ResponseEntity<ApiResponse<Void>> handleCannotCreateTransaction(CannotCreateTransactionException e) {
+        log.error("数据库连接获取失败，事务无法开启", e);
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header("Retry-After", "5")
+                .body(ApiResponse.fail(503, "数据库服务暂时不可用，请稍后重试"));
     }
 
     @ExceptionHandler(StorageOperationException.class)
