@@ -20,8 +20,12 @@
 #   SKIP_DB_BACKUP=1   跳过 mysqldump（只在明知库是空的、或刚还原过的时候用）
 #   BACKUP_DIR         备份目录，默认 /var/backups/videonest/mysql（刻意放在仓库之外，
 #                      免得 dump 落在 git 工作区里被下次上传脚本当成产物带上去）
-#   MIN_FREE_MB        重启前要求的可用内存（默认 220）
+#   MIN_FREE_MB        重启前要求的可用内存（默认 150）
 #   MIN_FREE_DISK_MB   重启前要求的 Docker 数据盘可用空间（默认 1536）
+#
+# 退出码：0 成功 / 1 真的部署失败（中间件没起、镜像构建炸、健康检查不过）
+#         3 资源闸门拒绝动手（机器太挤，先降载或 MIN_FREE_MB=0 再来）
+#         scripts/deploy.ps1 靠 1 和 3 的区分决定给你哪句建议，别把它改回 1。
 # =====================================================================
 set -euo pipefail
 
@@ -82,7 +86,10 @@ latest_backup() {
 # 2G 的机器上三个栈的 mem_limit 加起来是超卖的，靠 zram + swap 兜着。
 # 真正会翻车的是"在内存已经见底时重建容器"：新 JVM 起来那一刻最吃内存，
 # OOM killer 挑中的往往是 MySQL。所以先量一下，不够就别动手。
-MIN_FREE_MB="${MIN_FREE_MB:-220}"
+# 阈值定 150 而不是更高的理由：compose 是先停旧 vn-backend 再起新的，内存不是叠加峰值；
+# 真挤的时候按 mem_reservation 排序先回收 lp/hp 应用层（下限 96M），
+# infra-mysql 拿全机最高的 192M，是被保护的那一个。
+MIN_FREE_MB="${MIN_FREE_MB:-150}"
 MIN_FREE_DISK_MB="${MIN_FREE_DISK_MB:-1536}"
 if [ "$MODE" != "build" ]; then
   AVAIL_MB=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo "")
@@ -97,7 +104,8 @@ if [ "$MODE" != "build" ]; then
       echo "[x] 可用内存只有 ${AVAIL_MB}M，重建 vn-backend 有把邻居（infra-mysql）挤进 OOM 的风险。" >&2
       echo "    先降载再来：docker stop lp-backend hp-backend hp-frontend lp-frontend" >&2
       echo "    或者确认无风险后跳过：MIN_FREE_MB=0 bash $0" >&2
-      exit 1
+      # 3 = 闸门拒绝（不是部署失败）。调用方靠这个码区分"中间件没起"和"机器太挤"。
+      exit 3
     fi
   fi
 
@@ -119,7 +127,7 @@ if [ "$MODE" != "build" ]; then
       echo "      docker builder prune -f   # 只清构建缓存，不动在用的镜像" >&2
       echo "      docker system df          # 看还占多少" >&2
       echo "      du -sh ${DOCKER_ROOT}/volumes  # 找大卷" >&2
-      exit 1
+      exit 3
     fi
   fi
 fi

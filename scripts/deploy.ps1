@@ -232,6 +232,19 @@ if ($EnvOk -ne "YES") {
 
 Write-Host "[5/5] rebuild on the server (COPY only)"
 & ssh @SshArgs $Target "bash '$RemoteDir/deploy/server/redeploy.sh'"
+if ($LASTEXITCODE -eq 3) {
+    # redeploy.sh exit 3 = resource gate refused to touch anything. The middleware is
+    # fine; the box is just too full to recreate a container. NOTE: keep this block ASCII,
+    # PowerShell 5.1 decodes BOM-less UTF-8 as GBK here and mangles the lines.
+    Write-Host ""
+    Write-Host "Deploy aborted by the resource gate - nothing was changed on the server." -ForegroundColor Yellow
+    Write-Host "The shared middleware is running; the box just does not have enough free RAM" -ForegroundColor Yellow
+    Write-Host "to recreate vn-backend safely. Free some memory, then re-run WITHOUT rebuilding:" -ForegroundColor Yellow
+    Write-Host "  ssh $Target 'docker stop lp-backend hp-backend hp-frontend lp-frontend'" -ForegroundColor Yellow
+    Write-Host "  powershell -ExecutionPolicy Bypass -File scripts\deploy.ps1 -SkipBuild -SkipUpload" -ForegroundColor Yellow
+    Write-Host "Already uploaded artifacts are reused, so this costs about 1-2 min, not 5." -ForegroundColor Yellow
+    throw "Remote deploy stopped by resource gate (exit 3)"
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "Server rebuild failed. Most common cause: the shared middleware (lp-infra) is not running," -ForegroundColor Red
