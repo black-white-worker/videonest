@@ -105,3 +105,6 @@ shard_debug*.png
 # ---------- 压测产物 ----------
 benchmark/results/
 *.jtl
+# 压测原始数据和脚本（本地保留，不入库）
+docs/performance-results/*/raw/
+docs/performance-results/*/harness/
