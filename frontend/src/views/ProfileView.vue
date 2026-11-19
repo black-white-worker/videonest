@@ -15,6 +15,7 @@ import {
 import { getCategories, type VideoCategory, type VideoListItem } from '../api/video'
 import { getMyFollowers, getMyFollowing, unfollowUser, type FollowUser } from '../api/follow'
 import { requestPasswordReset } from '../api/admin'
+import { logout as apiLogout } from '../api/auth'
 import SiteHeader from '../components/SiteHeader.vue'
 import { clearSession, hasValidSession } from '../utils/auth'
 
@@ -335,7 +336,12 @@ async function handleDelete(video: CreatorVideo) {
   }
 }
 
-function logout() {
+async function logout() {
+  try {
+    await apiLogout()
+  } catch {
+    // 服务端登出失败也要清本地会话
+  }
   clearSession()
 
   ElMessage.success('已退出登录')

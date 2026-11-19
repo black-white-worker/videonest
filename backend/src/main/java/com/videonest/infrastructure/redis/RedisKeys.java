@@ -237,4 +237,36 @@ public final class RedisKeys {
     public static String resourcePurgeLock(Long videoId) {
         return RESOURCE_PURGE_LOCK_PREFIX + videoId;
     }
+
+    /** 用户令牌版本号：改密 / 封号 / 全端下线时 INCR，在途 access token 立即失效。 */
+    public static final String AUTH_TOKEN_VERSION_PREFIX =
+            "videonest:auth:ver:";
+
+    /** 刷新令牌：videonest:auth:refresh:{token} -> "userId|deviceId"。 */
+    public static final String AUTH_REFRESH_PREFIX =
+            "videonest:auth:refresh:";
+
+    /** 用户设备索引（Hash）：field=deviceId，value=当前 refresh token。 */
+    public static final String AUTH_REFRESH_INDEX_PREFIX =
+            "videonest:auth:refresh:idx:";
+
+    /** 轮换宽限：旧 refresh token -> "userId|deviceId|新token"，避免多标签页互相踢下线。 */
+    public static final String AUTH_REFRESH_REUSE_PREFIX =
+            "videonest:auth:refresh:reuse:";
+
+    public static String authTokenVersion(Long userId) {
+        return AUTH_TOKEN_VERSION_PREFIX + userId;
+    }
+
+    public static String authRefresh(String token) {
+        return AUTH_REFRESH_PREFIX + token;
+    }
+
+    public static String authRefreshIndex(Long userId) {
+        return AUTH_REFRESH_INDEX_PREFIX + userId;
+    }
+
+    public static String authRefreshReuse(String token) {
+        return AUTH_REFRESH_REUSE_PREFIX + token;
+    }
 }

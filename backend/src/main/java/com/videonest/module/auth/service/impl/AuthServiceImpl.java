@@ -9,6 +9,7 @@ import com.videonest.module.user.mapper.SysUserMapper;
 import com.videonest.module.auth.service.AuthService;
 import com.videonest.module.auth.vo.LoginResponse;
 import com.videonest.security.JwtTokenProvider;
+import com.videonest.security.TokenVersionService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import lombok.extern.slf4j.Slf4j;
@@ -31,15 +32,18 @@ public class AuthServiceImpl implements AuthService {
     private final SysUserMapper sysUserMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenVersionService tokenVersionService;
 
     public AuthServiceImpl(
             SysUserMapper sysUserMapper,
             PasswordEncoder passwordEncoder,
-            JwtTokenProvider jwtTokenProvider
+            JwtTokenProvider jwtTokenProvider,
+            TokenVersionService tokenVersionService
     ) {
         this.sysUserMapper = sysUserMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.tokenVersionService = tokenVersionService;
     }
 
     @Override
@@ -91,16 +95,37 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(403, "该账号已被禁用");
         }
 
-        // 使用用户信息组装token内部载体对象，调用工具生成JWT令牌
+        log.info("用户登录成功，userId={}，username={}", user.getId(), user.getUsername());
+
+        return buildSession(user);
+    }
+
+    /**
+     * refresh 接口换取新 access token 时使用。
+     * 重新读一次用户状态，保证封号/禁用账号无法靠 refresh 续命。
+     */
+    @Override
+    public LoginResponse issueSession(Long userId) {
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null) {
+            throw new BusinessException(401, "用户不存在");
+        }
+        if (user.getStatus() == 0) {
+            throw new BusinessException(403, "该账号已被禁用");
+        }
+        return buildSession(user);
+    }
+
+    /** 组装 access token 与对外返回的用户信息。 */
+    private LoginResponse buildSession(SysUser user) {
         String token = jwtTokenProvider.createToken(
                 new JwtTokenProvider.SysUserTokenInfo(
                         user.getId(),
                         user.getUsername(),
-                        user.getRole()
+                        user.getRole(),
+                        tokenVersionService.current(user.getId())
                 )
         );
-        log.info("用户登录成功，userId={}，username={}", user.getId(), user.getUsername());
-
         return new LoginResponse(
                 token,
                 user.getId(),

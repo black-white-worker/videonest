@@ -9,7 +9,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DuplicateKeyException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
@@ -41,7 +43,6 @@ class NotificationMessageConsumerServiceImplTest {
         );
         when(objectMapper.readValue("payload", NotificationEvent.class))
                 .thenReturn(event);
-        when(notificationMapper.selectCount(any())).thenReturn(0L);
 
         new NotificationMessageConsumerServiceImpl(
                 objectMapper,
@@ -98,13 +99,15 @@ class NotificationMessageConsumerServiceImplTest {
         );
         when(objectMapper.readValue("payload", NotificationEvent.class))
                 .thenReturn(event);
-        when(notificationMapper.selectCount(any())).thenReturn(1L);
+        // 幂等最终靠唯一索引兜底：重复投递时 insert 抛 DuplicateKeyException，消费者应吞掉并正常 ACK
+        when(notificationMapper.insert(any(Notification.class)))
+                .thenThrow(new DuplicateKeyException("uk_notification_event_id"));
 
-        new NotificationMessageConsumerServiceImpl(
+        assertDoesNotThrow(() -> new NotificationMessageConsumerServiceImpl(
                 objectMapper,
                 notificationMapper
-        ).consume("payload");
+        ).consume("payload"));
 
-        verify(notificationMapper, never()).insert(any(Notification.class));
+        verify(notificationMapper).insert(any(Notification.class));
     }
 }

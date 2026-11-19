@@ -98,6 +98,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/register",
                                 "/api/auth/login",
+                                "/api/auth/refresh",
+                                // 登出只依赖 refresh Cookie，不要求 access token 仍然有效
+                                "/api/auth/logout",
                                 "/api/health",
                                 "/actuator/health",
                                 "/actuator/prometheus"

@@ -39,15 +39,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtRevocationService jwtRevocationService;
+    private final TokenVersionService tokenVersionService;
+    private final JwtProperties jwtProperties;
     private final SecurityErrorResponseWriter responseWriter;
 
     public JwtAuthenticationFilter(
             JwtTokenProvider jwtTokenProvider,
             JwtRevocationService jwtRevocationService,
+            TokenVersionService tokenVersionService,
+            JwtProperties jwtProperties,
             SecurityErrorResponseWriter responseWriter
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.jwtRevocationService = jwtRevocationService;
+        this.tokenVersionService = tokenVersionService;
+        this.jwtProperties = jwtProperties;
         this.responseWriter = responseWriter;
     }
 
@@ -62,6 +68,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         return path.equals("/api/auth/login")
                 || path.equals("/api/auth/register")
+                || path.equals("/api/auth/refresh")
+                || path.equals("/api/auth/logout")
                 || (request.getMethod().equals("GET")
                     && (path.equals("/api/categories") || PUBLIC_VIDEO_GET_PATH.matcher(path).matches()));
     }
@@ -104,16 +112,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // 调用工具类解析JWT，拿到载荷Claims（存放userId、username、role）
             Claims claims = jwtTokenProvider.parseToken(token);
 
-            // 该Token是否在Redis黑名单（用户主动退出登录）
-            if (jwtRevocationService.isRevoked(claims)) {
-                responseWriter.write(
-                        response,
-                        HttpServletResponse.SC_UNAUTHORIZED,
-                        "Token 已失效"
-                );
-                return;
-            }
-
             Long userId = claims.get("userId", Long.class);
             String username = claims.getSubject();
             String role = claims.get("role", String.class);
@@ -124,6 +122,30 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                         response,
                         HttpServletResponse.SC_UNAUTHORIZED,
                         "Token 信息不完整"
+                );
+                return;
+            }
+
+            // 令牌版本号校验：改密 / 封号 / 全端下线后，该用户所有在途 access token 立即失效。
+            // 版本号在进程内缓存 30 秒，正常请求不会因此多打一次 Redis。
+            String tokenVersion = claims.get("ver", String.class);
+            if (!tokenVersionService.matches(userId, tokenVersion)) {
+                responseWriter.write(
+                        response,
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "登录状态已失效，请重新登录"
+                );
+                return;
+            }
+
+            // 旧的 jti 黑名单默认关闭：access token 只有 15 分钟，撤销由版本号负责。
+            // 需要“单令牌秒级撤销”时打开 jwt.revocation-check-enabled，代价是每请求一次 Redis。
+            if (jwtProperties.isRevocationCheckEnabled()
+                    && jwtRevocationService.isRevoked(claims)) {
+                responseWriter.write(
+                        response,
+                        HttpServletResponse.SC_UNAUTHORIZED,
+                        "Token 已失效"
                 );
                 return;
             }

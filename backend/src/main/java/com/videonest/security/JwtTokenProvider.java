@@ -55,6 +55,8 @@ public class JwtTokenProvider {
                 // claim就是往Payload里塞自定义键值对
                 .claim("userId", user.userId())
                 .claim("role", user.role())
+                // 令牌版本号：改密/封号/全端下线时服务端 INCR，旧令牌立即失效
+                .claim("ver", user.tokenVersion())
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiryTime))
                 .signWith(secretKey)
@@ -95,7 +97,8 @@ public class JwtTokenProvider {
     public record SysUserTokenInfo(
             Long userId,
             String username,
-            String role
+            String role,
+            String tokenVersion
     ) {
     }
 }

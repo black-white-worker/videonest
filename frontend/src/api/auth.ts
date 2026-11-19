@@ -34,3 +34,13 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 
   return response.data.data
 }
+
+/** 本设备登出：服务端删除 refresh token 并清 Cookie。 */
+export async function logout(): Promise<void> {
+  await request.post<ApiResponse<null>>('/auth/logout')
+}
+
+/** 全端下线：版本号递增 + 撤销该用户所有 refresh token。 */
+export async function logoutAll(): Promise<void> {
+  await request.post<ApiResponse<null>>('/auth/logout-all')
+}

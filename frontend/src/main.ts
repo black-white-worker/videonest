@@ -5,6 +5,7 @@ import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
 import { logger } from './utils/logger'
+import { bootstrapSession } from './utils/auth'
 
 const app = createApp(App)
 
@@ -21,4 +22,8 @@ window.addEventListener('unhandledrejection', (event) => {
   })
 })
 
-app.use(router).use(ElementPlus).mount('#app')
+// 先尝试用 refresh Cookie 换回内存 token，再挂载应用：
+// 否则页面刷新后首次进入受保护路由会被守卫误判为未登录。
+bootstrapSession().finally(() => {
+  app.use(router).use(ElementPlus).mount('#app')
+})

@@ -10,6 +10,7 @@ import {
   type VideoListItem
 } from '../api/video'
 import { getUnreadNotificationCount } from '../api/notification'
+import { logout as apiLogout } from '../api/auth'
 import SiteHeader from '../components/SiteHeader.vue'
 import { clearSession, getStoredUser } from '../utils/auth'
 
@@ -155,7 +156,12 @@ function formatNumber(value: number) {
 function formatDate(value: string) {
   return value ? new Date(value).toLocaleDateString('zh-CN') : ''
 }
-function logout() {
+async function logout() {
+  try {
+    await apiLogout()
+  } catch {
+    // 服务端登出失败也要清掉本地会话，避免用户卡在“已登录但不可用”状态
+  }
   clearSession()
   ElMessage.success('已退出登录')
   router.push('/login')

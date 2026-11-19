@@ -65,6 +65,22 @@
 若 MinIO 的公网地址不同，可在 `.env.prod` 设置 `MINIO_PUBLIC_ENDPOINT`，例如
 `http://101.201.208.223:9010`；该值必须与浏览器可访问的主机、端口一致。修改后重建后端。
 
+## 统一入口网关（80 端口，按域名分流）
+
+服务器上多个项目共用一台 ECS，前端分别挂在各自宿主机端口：vn-frontend `8082`、
+hp-frontend `8081`。80 端口由独立网关容器 `edge-nginx` 统一占用，按 `server_name`
+反代到对应前端，配置在 `deploy/edge-gateway/`：
+
+- 目录：服务器 `/opt/apps/edge-gateway/`（`docker-compose.yml` + `nginx.conf`）
+- 分流规则：`vnest.xyz` / `www.vnest.xyz` → `host.docker.internal:8082`；其余 Host 兜底 → `8081`
+- 启动/重载：`cd /opt/apps/edge-gateway && docker compose up -d`；改完 `nginx.conf` 执行
+  `docker exec edge-nginx nginx -s reload`
+- 新增项目：在 `nginx.conf` 加一个 `server` 块，`proxy_pass` 指向该前端的宿主机端口即可。
+
+注意：域名首次指向国内 ECS 时，工信部备案通过后阿里云侧同步需要数小时到 24 小时，
+同步完成前域名访问会被云侧拦截层返回 403 `Non-compliance ICP Filing`；用 IP 或
+`127.0.0.1` 带 Host 头在服务器本机自测不受此限制。
+
 ## 手动操作（服务器上）
 
 ```bash

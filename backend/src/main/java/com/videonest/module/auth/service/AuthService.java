@@ -13,4 +13,10 @@ public interface AuthService {
     void register(RegisterRequest request);
 
     LoginResponse login(LoginRequest request);
+
+    /**
+     * 依据 userId 重新签发一组 access token 会话信息。
+     * refresh 接口用它换新 access token，同时也复用了账号状态校验。
+     */
+    LoginResponse issueSession(Long userId);
 }

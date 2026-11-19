@@ -99,7 +99,15 @@ app:
 
 jwt:
   secret: ${JWT_SECRET}
-  expire-minutes: ${JWT_EXPIRE_MINUTES:120}
+  # access token 短寿命（默认 15 分钟）：撤销能力由 tokenVersion 负责，不再依赖长令牌 + 每请求黑名单
+  expire-minutes: ${JWT_EXPIRE_MINUTES:15}
+  refresh-expire-days: ${JWT_REFRESH_EXPIRE_DAYS:7}
+  refresh-cookie-name: ${JWT_REFRESH_COOKIE_NAME:videonest_refresh}
+  # 线上 HTTPS 必须置 true；本地 http 调试保持 false，否则浏览器不会保存 Cookie
+  cookie-secure: ${JWT_COOKIE_SECURE:false}
+  cookie-same-site: ${JWT_COOKIE_SAME_SITE:Lax}
+  # 默认关闭：正常请求不再逐次查 jti 黑名单；需要“单令牌秒级撤销”时打开，代价是每请求一次 Redis
+  revocation-check-enabled: ${JWT_REVOCATION_CHECK_ENABLED:false}
 
 auth-rate-limit:
   enabled: ${AUTH_RATE_LIMIT_ENABLED:true}
