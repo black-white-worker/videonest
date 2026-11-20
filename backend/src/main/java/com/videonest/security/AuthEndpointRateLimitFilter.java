@@ -1,5 +1,7 @@
 package com.videonest.security;
 
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -18,24 +20,33 @@ import java.util.HexFormat;
 import java.util.List;
 
 /**
- * 认证接口专用限流过滤器
- * 功能：对登录 /api/auth/login、注册 /api/auth/register 两个POST接口做IP维度频率限制
- * 防止暴力破解密码、恶意批量注册、接口刷压
- * 技术方案：Redis + Lua脚本 滑动窗口（固定窗口）限流，原子操作避免并发超计数
- * 继承OncePerRequestFilter：保证一次HTTP请求整个链路只执行一次过滤逻辑，避免重复执行
+ * 认证接口专用限流过滤器。
+ *
+ * <p>覆盖三个“不需要登录态但会消耗凭证或账号”的 POST 接口：
+ * 登录 {@code /api/auth/login}、注册 {@code /api/auth/register}、续期 {@code /api/auth/refresh}。
+ * refresh 是唯一“用凭证换凭证”的入口，不限流等于开放了一个低成本的令牌探测/暴力轮换通道，
+ * 因此它必须和登录、注册同一套策略，只是阈值更宽（正常客户端 15 分钟才续期一次）。
+ *
+ * <p>技术方案：Redis + Lua 固定窗口计数，原子自增避免并发超发；按接口分桶，互不影响。
+ * Redis 故障时限流降级为放行（不能因为限流组件故障阻断全部登录），但每次降级都计入
+ * {@code videonest.auth.rate_limit{result="degraded"}}，避免“静默放行”。
  */
 @Component
 @Slf4j
 public class AuthEndpointRateLimitFilter extends OncePerRequestFilter {
 
+    private static final String LOGIN_PATH = "/api/auth/login";
+    private static final String REGISTER_PATH = "/api/auth/register";
+    private static final String REFRESH_PATH = "/api/auth/refresh";
+
+    private static final String KEY_PREFIX = "videonest:rate-limit:auth:";
+    private static final String METRIC_NAME = "videonest.auth.rate_limit";
+
     /*
-     * 静态常量：Redis Lua限流脚本
-     * 采用固定时间窗口限流算法，存为全局静态只初始化一次，节省内存
-     * 1. KEYS[1]：Redis限流Key
-     * 2. ARGV[1]：窗口过期秒数
-     * 3. redis.call('INCR', KEYS[1]) 对key自增1，首次创建key时值为1
-     * 4. 如果是第一次创建（current==1），给key设置过期时间 EXPIRE
-     * 5. 返回当前计数，供Java代码判断是否超限
+     * Redis Lua 限流脚本（固定窗口）：
+     * 1. KEYS[1]：限流 Key；
+     * 2. ARGV[1]：窗口秒数；
+     * INCR 后若为首次创建则设置 EXPIRE，返回当前计数供 Java 侧比较阈值。
      */
     private static final DefaultRedisScript<Long> RATE_LIMIT_SCRIPT =
             new DefaultRedisScript<>("""
@@ -49,89 +60,93 @@ public class AuthEndpointRateLimitFilter extends OncePerRequestFilter {
     private final StringRedisTemplate redisTemplate;
     private final AuthRateLimitProperties properties;
     private final SecurityErrorResponseWriter responseWriter;
+    private final Counter rejected;
+    private final Counter degraded;
 
     public AuthEndpointRateLimitFilter(
             StringRedisTemplate redisTemplate,
             AuthRateLimitProperties properties,
-            SecurityErrorResponseWriter responseWriter
+            SecurityErrorResponseWriter responseWriter,
+            MeterRegistry meterRegistry
     ) {
         this.redisTemplate = redisTemplate;
         this.properties = properties;
         this.responseWriter = responseWriter;
+        this.rejected = meterRegistry.counter(METRIC_NAME, "result", "rejected");
+        this.degraded = meterRegistry.counter(METRIC_NAME, "result", "degraded");
     }
 
-    /**
-     * 判断当前请求是否需要跳过过滤器
-     * 返回true = 不执行过滤，直接放行；返回false = 执行doFilterInternal限流逻辑
-     */
+    /** 单个接口的限流策略：动作名（用作 Redis 分桶）、窗口内最大次数、窗口秒数。 */
+    private record LimitPolicy(String action, int maxRequests, int windowSeconds) {
+    }
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        // 配置总开关未开启  OR  请求方法不是POST，直接跳过限流
+        // 配置总开关未开启，或不是 POST，直接跳过
         if (!properties.isEnabled() || !"POST".equals(request.getMethod())) {
             return true;
         }
-        String path = request.getServletPath();
-        return !path.equals("/api/auth/login")
-                && !path.equals("/api/auth/register");
+        return policyFor(request.getServletPath()) == null;
     }
 
-    /**
-     * 过滤器核心执行逻辑：真正做限流判断的主方法
-     * @param request 请求对象
-     * @param response 响应对象
-     * @param filterChain 过滤器链，放行调用后续过滤器/Controller
-     */
     @Override
     protected void doFilterInternal(
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain
     ) throws ServletException, IOException {
-        // 判断是登录还是注册
-        boolean login = request.getServletPath().endsWith("/login");
-        // 根据接口类型读取配置的最大允许请求次数
-        int maxRequests = login
-                ? properties.getLoginMaxRequests()
-                : properties.getRegisterMaxRequests();
-        // 根据接口类型读取限流窗口时间
-        int windowSeconds = login
-                ? properties.getLoginWindowSeconds()
-                : properties.getRegisterWindowSeconds();
-        String action = login ? "login" : "register";
-        // 哈希IP目的：避免IP特殊字符导致Redis Key非法、过长泄露真实客户端IP
-        String key = "videonest:rate-limit:auth:" + action + ":"
-                + sha256(request.getRemoteAddr());
+        LimitPolicy policy = policyFor(request.getServletPath());
+        if (policy == null) {
+            // shouldNotFilter 已经过滤过，这里只是兜底，避免配置变更时路径漏判
+            filterChain.doFilter(request, response);
+            return;
+        }
+
+        // 按动作分桶：登录、注册、续期的计数互不影响
+        String key = KEY_PREFIX + policy.action() + ":" + sha256(request.getRemoteAddr());
 
         try {
-            // 执行Redis Lua原子限流脚本
             Long count = redisTemplate.execute(
                     RATE_LIMIT_SCRIPT,
                     List.of(key),
-                    Integer.toString(windowSeconds)
+                    Integer.toString(policy.windowSeconds())
             );
-            if (count != null && count > maxRequests) {
-                // 设置响应头 Retry-After 告诉客户端多少秒后重试
-                response.setHeader("Retry-After", Integer.toString(windowSeconds));
-                responseWriter.write(
-                        response,
-                        429,
-                        "请求过于频繁，请稍后重试"
-                );
+            if (count != null && count > policy.maxRequests()) {
+                rejected.increment();
+                // 告诉客户端多少秒后重试
+                response.setHeader("Retry-After", Integer.toString(policy.windowSeconds()));
+                responseWriter.write(response, 429, "请求过于频繁，请稍后重试");
                 return;
             }
         } catch (RuntimeException e) {
-            // 限流依赖故障时放行，避免 Redis 短暂不可用阻断全部用户登录，同时保留告警便于运维处理。
-            log.error("认证接口限流检查失败，action={}，降级为放行", action, e);
+            // 限流依赖故障时放行，避免 Redis 短暂不可用阻断全部登录；同时计数，便于运维发现降级窗口。
+            degraded.increment();
+            log.error("认证接口限流检查失败，action={}，降级为放行", policy.action(), e);
         }
 
-        // 未触发限流，放行请求进入后续过滤器和控制器
         filterChain.doFilter(request, response);
     }
 
+    /** 路径到限流策略的映射；返回 null 表示该路径不受本过滤器约束。 */
+    private LimitPolicy policyFor(String path) {
+        if (LOGIN_PATH.equals(path)) {
+            return new LimitPolicy("login",
+                    properties.getLoginMaxRequests(), properties.getLoginWindowSeconds());
+        }
+        if (REGISTER_PATH.equals(path)) {
+            return new LimitPolicy("register",
+                    properties.getRegisterMaxRequests(), properties.getRegisterWindowSeconds());
+        }
+        if (REFRESH_PATH.equals(path)) {
+            return new LimitPolicy("refresh",
+                    properties.getRefreshMaxRequests(), properties.getRefreshWindowSeconds());
+        }
+        return null;
+    }
+
     /**
-     * 私有工具方法：对IP字符串做SHA256哈希，并截取前12位十六进制字符
-     * @param value 原始IP字符串
-     * @return 缩短后的哈希字符串
+     * 对 IP 做 SHA-256 并截取前 12 位十六进制：
+     * 避免 IP 特殊字符导致 Redis Key 非法、过长泄露真实客户端 IP。
      */
     private String sha256(String value) {
         try {

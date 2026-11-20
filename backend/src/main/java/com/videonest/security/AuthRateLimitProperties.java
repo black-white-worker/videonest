@@ -20,4 +20,12 @@ public class AuthRateLimitProperties {
     private int loginWindowSeconds = 60;
     private int registerMaxRequests = 5;
     private int registerWindowSeconds = 3600;
+
+    /**
+     * 续期接口阈值：refresh 是唯一“用凭证换凭证”的接口，必须纳入限流。
+     * 正常客户端 15 分钟才续期一次，阈值给宽一些以兼容同一出口 IP 下的多人（校园网/公司 NAT），
+     * 但仍然挡得住暴力轮换与凭证探测。
+     */
+    private int refreshMaxRequests = 120;
+    private int refreshWindowSeconds = 60;
 }

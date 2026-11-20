@@ -15,6 +15,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -149,6 +150,23 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleAccessDenied(AccessDeniedException e) {
         log.warn("用户访问无权限资源，message={}", e.getMessage());
         return ApiResponse.fail(403, "没有权限执行该操作");
+    }
+
+    /**
+     * 路由未匹配：请求穿过了安全白名单，但 MVC 没有任何 handler 能处理它。
+     *
+     * <p>Spring 6 起，未匹配的请求抛 NoResourceFoundException（这个异常原本用于静态资源找不到）。
+     * 不单独处理就会落到下面的 Exception 兜底，把“接口不存在”报成 500“服务器内部异常”，
+     * 监控和前端都会被误导成服务端崩溃。
+     *
+     * <p>这里返回 404，并用 warn 而不是 error：真正该关注的是“白名单里挂了没实现的路径”这件事，
+     * 不是这一次请求本身，压成 error 只会污染告警。
+     */
+    @ExceptionHandler(NoResourceFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiResponse<Void> handleNoResourceFound(NoResourceFoundException e) {
+        log.warn("请求的接口不存在，method={}，path={}", e.getHttpMethod(), e.getResourcePath());
+        return ApiResponse.fail(404, "接口不存在");
     }
 
     /**捕获所有其他未单独定义的异常*/

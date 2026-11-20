@@ -115,6 +115,10 @@ auth-rate-limit:
   login-window-seconds: ${LOGIN_RATE_LIMIT_WINDOW_SECONDS:60}
   register-max-requests: ${REGISTER_MAX_REQUESTS_PER_HOUR:5}
   register-window-seconds: ${REGISTER_RATE_LIMIT_WINDOW_SECONDS:3600}
+  # 续期接口是唯一“用凭证换凭证”的入口，必须限流；正常客户端 15 分钟才续期一次，
+  # 阈值放宽到兼容同一出口 IP 下的多人，但仍能挡住暴力轮换与凭证探测。
+  refresh-max-requests: ${REFRESH_MAX_REQUESTS_PER_MINUTE:120}
+  refresh-window-seconds: ${REFRESH_RATE_LIMIT_WINDOW_SECONDS:60}
 
 outbox:
   # 开启Outbox可靠消息机制

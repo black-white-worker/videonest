@@ -11,7 +11,9 @@ import com.videonest.module.user.mapper.SysUserMapper;
 import com.videonest.module.user.service.AdminUserService;
 import com.videonest.module.user.vo.AdminUserVO;
 import com.videonest.module.user.vo.PasswordResetRequestVO;
+import com.videonest.security.RefreshTokenService;
 import com.videonest.security.SecurityUtils;
+import com.videonest.security.TokenVersionService;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -31,13 +33,18 @@ public class AdminUserServiceImpl implements AdminUserService {
     private final PasswordResetRequestMapper requestMapper;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final TokenVersionService tokenVersionService;
+    private final RefreshTokenService refreshTokenService;
 
     public AdminUserServiceImpl(SysUserMapper userMapper, PasswordResetRequestMapper requestMapper,
-                                PasswordEncoder passwordEncoder, ApplicationEventPublisher eventPublisher) {
+                                PasswordEncoder passwordEncoder, ApplicationEventPublisher eventPublisher,
+                                TokenVersionService tokenVersionService, RefreshTokenService refreshTokenService) {
         this.userMapper = userMapper;
         this.requestMapper = requestMapper;
         this.passwordEncoder = passwordEncoder;
         this.eventPublisher = eventPublisher;
+        this.tokenVersionService = tokenVersionService;
+        this.refreshTokenService = refreshTokenService;
     }
 
     @Override
@@ -89,6 +96,16 @@ public class AdminUserServiceImpl implements AdminUserService {
         if (requestMapper.complete(requestId, adminId) != 1) {
             throw new BusinessException(409, "申请状态已变化，请刷新后重试");
         }
+
+        // 改密必须让旧会话立刻失效：管理员重置密码通常发生在账号疑似泄露的场景，
+        // 只改 password 不动凭证，等于把攻击者已有的 refresh token 又续了 7 天。
+        // 版本号 +1 作用在在途 access token（受本地缓存影响，最多 30 秒收敛），
+        // revokeAll 删除该用户所有设备的 refresh token，切断续期。
+        // Redis 故障时这里会抛异常并回滚整笔事务——宁可“密码没改成功”，
+        // 也不接受“密码改了但旧会话还活着”的中间态。
+        tokenVersionService.bump(userId);
+        refreshTokenService.revokeAll(userId);
+
         eventPublisher.publishEvent(new NotificationDomainEvent(new NotificationEvent(
                 UUID.randomUUID().toString(), userId, adminId, "PASSWORD_RESET", null, null,
                 "管理员已初始化你的登录密码，请通过安全渠道获取临时密码，并登录后立即修改。")));
